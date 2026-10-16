@@ -20,7 +20,8 @@
 //! the app.
 //!
 //! The same file holds the [`journal`] of clean/delete operations (Activity log,
-//! restore, quarantine purge), and [`audit`] writes a plain-text copy of it.
+//! restore, quarantine purge), and [`audit`] writes a plain-text copy of it, and the
+//! duplicate finder's content-hash cache ([`hashes`]).
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -35,8 +36,10 @@ use serde::Serialize;
 use thiserror::Error;
 
 pub mod audit;
+pub mod hashes;
 pub mod journal;
 
+pub use hashes::{HashKey, HashRow};
 pub use journal::{ItemRow, OperationRow, RestoreResult};
 
 /// Application identifier: the desktop app keeps its data in a folder of this name.
@@ -376,6 +379,7 @@ impl History {
                 journal::SCHEMA
             ))?;
         }
+        conn.execute_batch(hashes::SCHEMA)?;
         Ok(Self { conn })
     }
 
@@ -577,12 +581,14 @@ impl History {
         Ok(to_u64(n))
     }
 
-    /// Delete every snapshot and shrink the file.
+    /// Delete every snapshot and the duplicate finder's hash cache, and shrink the
+    /// file. The undo journal is kept.
     ///
     /// # Errors
     /// SQLite write failure.
     pub fn clear(&mut self) -> Result<()> {
-        self.conn.execute_batch("DELETE FROM scans; VACUUM;")?;
+        self.conn
+            .execute_batch("DELETE FROM scans; DELETE FROM file_hashes; VACUUM;")?;
         Ok(())
     }
 

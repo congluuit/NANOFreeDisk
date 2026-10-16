@@ -1,13 +1,15 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores` (Phase 4), `rules list` / `rules validate`, and the Hardware
-//! Monitor's `hw` / `sensors` / `ps`. Dedupe, watch and health commands arrive with
-//! their phases (see `docs/PLAN.md` §4.7).
+//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores` (Phase 4),
+//! `dupes` (Phase 5), `rules list` / `rules validate`, and the Hardware Monitor's
+//! `hw` / `sensors` / `ps`. Watch and health commands arrive with their phases (see
+//! `docs/PLAN.md` §4.7).
 
 mod clean;
 mod devcache;
 mod diff;
+mod dupes;
 mod hw;
 mod ps;
 mod quarantine;
@@ -62,6 +64,8 @@ enum Command {
     /// Package managers' own cache cleanup commands (`npm cache clean`, `pnpm store
     /// prune`, …): list, or run one after confirming the exact command.
     Stores(stores::StoresArgs),
+    /// Files with identical contents (size, then partial and full BLAKE3 hashes).
+    Dupes(dupes::DupesArgs),
     /// Clean / delete operations: list, restore, purge the quarantine.
     Quarantine {
         #[command(subcommand)]
@@ -134,6 +138,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Toolchains(args) => repos::toolchains(&args),
         Command::Repos(args) => repos::repos(args),
         Command::Stores(args) => stores::run(args),
+        Command::Dupes(args) => dupes::run(args),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {
             action: PlanAction::Explain { path, rules },

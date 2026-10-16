@@ -46,6 +46,14 @@ pub fn list() -> Vec<Volume> {
     imp::list()
 }
 
+/// `Some(true)` when the drive holding `path` is a spinning disk (it incurs a seek
+/// penalty), `Some(false)` for SSD / NVMe, `None` when unknown (network drives,
+/// other platforms). Used to read one file at a time from hard disks.
+#[must_use]
+pub fn seek_penalty(path: &std::path::Path) -> Option<bool> {
+    imp::seek_penalty(path)
+}
+
 #[cfg(windows)]
 mod imp {
     use std::env;
@@ -131,6 +139,70 @@ mod imp {
         }
     }
 
+    pub(super) fn seek_penalty(path: &std::path::Path) -> Option<bool> {
+        use std::ffi::c_void;
+
+        use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+        use windows_sys::Win32::Storage::FileSystem::{
+            CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING,
+        };
+        use windows_sys::Win32::System::IO::DeviceIoControl;
+        use windows_sys::Win32::System::Ioctl::{
+            IOCTL_STORAGE_QUERY_PROPERTY, PropertyStandardQuery, STORAGE_PROPERTY_QUERY,
+            StorageDeviceSeekPenaltyProperty,
+        };
+
+        let text = path.to_string_lossy();
+        let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
+        let letter = text.chars().next().filter(char::is_ascii_alphabetic)?;
+        if text.chars().nth(1) != Some(':') {
+            return None;
+        }
+        let device: Vec<u16> = format!(r"\\.\{letter}:")
+            .encode_utf16()
+            .chain(Some(0))
+            .collect();
+        // SAFETY: NUL-terminated path; no access rights requested (queries only).
+        let h = unsafe {
+            CreateFileW(
+                device.as_ptr(),
+                0,
+                FILE_SHARE_READ | FILE_SHARE_WRITE,
+                ptr::null(),
+                OPEN_EXISTING,
+                0,
+                ptr::null_mut(),
+            )
+        };
+        if h == INVALID_HANDLE_VALUE || h.is_null() {
+            return None;
+        }
+        let q = STORAGE_PROPERTY_QUERY {
+            PropertyId: StorageDeviceSeekPenaltyProperty,
+            QueryType: PropertyStandardQuery,
+            AdditionalParameters: [0],
+        };
+        // DEVICE_SEEK_PENALTY_DESCRIPTOR: Version, Size (u32 each), IncursSeekPenalty (BOOLEAN)
+        let mut out = [0u8; 12];
+        let mut got = 0u32;
+        // SAFETY: input and output buffers are valid for their lengths; synchronous.
+        let ok = unsafe {
+            DeviceIoControl(
+                h,
+                IOCTL_STORAGE_QUERY_PROPERTY,
+                (&raw const q).cast::<c_void>(),
+                size_of::<STORAGE_PROPERTY_QUERY>() as u32,
+                out.as_mut_ptr().cast(),
+                out.len() as u32,
+                &mut got,
+                ptr::null_mut(),
+            )
+        };
+        // SAFETY: `h` is a handle this function opened.
+        unsafe { CloseHandle(h) };
+        (ok != 0 && got >= 9).then(|| out[8] != 0)
+    }
+
     fn from_wide(buf: &[u16]) -> String {
         let len = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
         String::from_utf16_lossy(&buf[..len])
@@ -156,6 +228,10 @@ mod imp {
             system: true,
         }]
     }
+
+    pub(super) fn seek_penalty(_path: &std::path::Path) -> Option<bool> {
+        None
+    }
 }
 
 #[cfg(test)]
@@ -171,6 +247,9 @@ mod tests {
             let sys = vols.iter().find(|v| v.system).expect("system volume");
             assert!(sys.total > 0 && sys.free <= sys.total);
             assert!(!sys.fs.is_empty());
+            // answered for local drives (SSD or HDD), never for nonsense
+            let _ = seek_penalty(&sys.root);
+            assert_eq!(seek_penalty(std::path::Path::new(r"\\nas\share")), None);
         }
     }
 }

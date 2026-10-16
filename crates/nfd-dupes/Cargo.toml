@@ -1,0 +1,31 @@
+[package]
+name = "nfd-dupes"
+description = "NANOFreeDisk Duplicates: byte-identical files by size, partial and full BLAKE3, hash cache, keeper selection, duplicate folders"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+nfd-core = { workspace = true }
+nfd-history = { workspace = true }
+nfd-platform = { workspace = true }
+blake3 = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "dupes"
+harness = false
