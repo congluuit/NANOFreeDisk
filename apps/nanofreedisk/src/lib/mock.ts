@@ -511,6 +511,9 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   },
   take_startup_path: () => null,
   shell_menu_status: () => shellMenu,
+  update_check: () => ({ current: "0.1.0-mock", available: null, notes: null, date: null, kind: "installer", releases: "https://github.com/congluuit/NANOFreeDisk/releases/latest" }),
+  update_install: () => undefined,
+  update_open_releases: () => undefined,
   shell_menu_set: ({ enabled }) => (shellMenu = Boolean(enabled)),
   owner: ({ id }) => (path(id).toLowerCase().startsWith("c:\\windows") ? "NT SERVICE\\TrustedInstaller" : path(id).toLowerCase().startsWith("c:\\users\\nano") ? "NANO-PC\\nano" : "BUILTIN\\Administrators"),
   broken_links: ({ id, limit }) => {

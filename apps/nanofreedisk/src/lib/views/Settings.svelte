@@ -1,6 +1,6 @@
 <script lang="ts">
   import { api, inTauri, pickOpenFile, pickSaveFile } from "../api";
-  import type { HistoryInfo } from "../types";
+  import type { HistoryInfo, UpdateInfo } from "../types";
   import { LOCALES, t } from "../i18n.svelte";
   import { DEFAULT_SETTINGS, app, fail, toast } from "../state.svelte";
   import {
@@ -105,6 +105,29 @@
       toast(t("settings-history-cleared"), "ok");
     } catch (e) {
       fail(e);
+    }
+  }
+
+  let update = $state<UpdateInfo | null>(null);
+  let updateBusy = $state(false);
+  async function checkUpdate() {
+    updateBusy = true;
+    try {
+      update = await api.updateCheck();
+      if (!update.available) toast(t("update-latest", { version: update.current }), "ok");
+    } catch (e) {
+      fail(e);
+    } finally {
+      updateBusy = false;
+    }
+  }
+  async function installUpdate() {
+    updateBusy = true;
+    try {
+      await api.updateInstall();
+    } catch (e) {
+      fail(e);
+      updateBusy = false;
     }
   }
 
@@ -314,6 +337,29 @@
     </div>
   </div>
 
+  <div class="block card" data-settings="update">
+    <h2>{t("update-title")}</h2>
+    <p class="muted small">{t("update-hint")}</p>
+    <div class="row">
+      {#if update?.available}
+        <span>{t("update-available", { version: update.available })}</span>
+      {:else if update}
+        <span class="muted small">{t("update-latest", { version: update.current })}</span>
+      {/if}
+      <span class="grow"></span>
+      <button class="btn" onclick={checkUpdate} disabled={updateBusy || !inTauri} data-effect title={t("hint-update-check")}>{t("update-check")}</button>
+      {#if update?.available && update.kind === "installer"}
+        <button class="btn primary" onclick={installUpdate} disabled={updateBusy} data-effect title={t("hint-update-install")}>{t("update-install")}</button>
+      {:else if update?.available}
+        <button class="btn primary" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
+      {/if}
+    </div>
+    {#if update?.available && update.kind !== "installer"}
+      <p class="muted small">{t(update.kind === "portable" ? "update-portable" : "update-setup")}</p>
+    {/if}
+    {#if update?.notes}<pre class="notes small">{update.notes}</pre>{/if}
+  </div>
+
   <div class="block card about">
     <img src="/icon.png" alt="" width="56" height="56" />
     <div>
@@ -325,6 +371,15 @@
 </section>
 
 <style>
+  .notes {
+    max-height: 160px;
+    overflow: auto;
+    white-space: pre-wrap;
+    margin: 8px 0 0;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: var(--surface-2, rgba(127, 127, 127, 0.08));
+  }
   .page {
     height: 100%;
     overflow: auto;

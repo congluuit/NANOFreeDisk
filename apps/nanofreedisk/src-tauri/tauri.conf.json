@@ -28,6 +28,13 @@
       "csp": "default-src 'self'; img-src 'self' data: asset:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
     }
   },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNBQzUwQTRCQTYzODQ3M0QKUldROVJ6aW1Td3JGT2lkU3FCbTJJZzJvSUJSc09qT01FK1JyUktsL2xpS045SXAvVVRIS2U5aEYK",
+      "endpoints": ["https://github.com/congluuit/NANOFreeDisk/releases/latest/download/latest.json"],
+      "windows": { "installMode": "passive" }
+    }
+  },
   "bundle": {
     "active": true,
     "targets": ["msi", "nsis"],

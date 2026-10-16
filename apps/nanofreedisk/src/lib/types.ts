@@ -343,3 +343,15 @@ export const ATTR = {
   offline: 1 << 5,
   readonly: 1 << 6,
 } as const;
+
+/** Settings → Updates (`update_check`). */
+export interface UpdateInfo {
+  current: string;
+  /** Newer version, if any. */
+  available: string | null;
+  notes: string | null;
+  date: string | null;
+  /** installer = NSIS/MSI (updates in place); setup / portable = release page. */
+  kind: "installer" | "setup" | "portable";
+  releases: string;
+}

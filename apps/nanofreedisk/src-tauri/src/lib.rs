@@ -85,6 +85,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         // the main window comes from tauri.conf.json ("create": false) so portable
         // mode can keep the WebView2 profile next to the exe
         .setup(|app| {
@@ -184,6 +185,9 @@ pub fn run() {
             commands::hwmon::pawnio_open_site,
             commands::hwmon::thermal_set,
             commands::hwmon::thermal_status,
+            commands::update::update_check,
+            commands::update::update_install,
+            commands::update::update_open_releases,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

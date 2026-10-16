@@ -3,6 +3,7 @@
 // native build.
 
 import type {
+  UpdateInfo,
   AppInfo,
   AgeMatrix,
   Article,
@@ -94,6 +95,9 @@ export const api = {
   owner: (id: number) => call<string | null>("owner", { id }),
   takeStartupPath: () => call<string | null>("take_startup_path"),
   shellMenuStatus: () => call<boolean>("shell_menu_status"),
+  updateCheck: () => call<UpdateInfo>("update_check"),
+  updateInstall: () => call<void>("update_install"),
+  updateOpenReleases: () => call<void>("update_open_releases"),
   shellMenuSet: (enabled: boolean, caption: string, dupesCaption: string) =>
     call<boolean>("shell_menu_set", { enabled, caption, dupesCaption }),
   brokenLinks: (id: number, limit: number) => call<ShortcutRows>("broken_links", { id, limit }),
