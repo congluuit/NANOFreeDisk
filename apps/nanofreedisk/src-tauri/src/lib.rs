@@ -44,7 +44,7 @@ pub fn run() {
         let _ = nfd_platform::shell_menu::unregister();
         return;
     }
-    // elevated helper for Advanced sensors: no window, only the pipe protocol
+    // elevated helper (Advanced sensors, Monitor detail): no window, only the pipe protocol
     #[cfg(windows)]
     if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
         std::process::exit(nfd_helper::run_helper(&args));
@@ -83,6 +83,7 @@ pub fn run() {
         .manage(commands::devcache::DevState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
+        .manage(commands::monitor::MonitorState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -171,12 +172,21 @@ pub fn run() {
             commands::hwmon::pawnio_open_site,
             commands::hwmon::thermal_set,
             commands::hwmon::thermal_status,
+            commands::monitor::monitor_snapshot,
+            commands::monitor::monitor_chart,
+            commands::monitor::monitor_pause,
+            commands::monitor::monitor_detail,
+            commands::monitor::monitor_watch,
+            commands::monitor::monitor_configure,
+            commands::monitor::monitor_history,
+            commands::monitor::monitor_reveal,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 commands::hwmon::thermal_flush(app);
+                commands::monitor::monitor_flush(app);
             }
         });
 }

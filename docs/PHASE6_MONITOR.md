@@ -1,6 +1,6 @@
 # Phase 6 — Monitor (Disk Activity): kế hoạch chi tiết
 
-> Trạng thái: **đang làm** (2026-10-16) — lát 1 ✅ (lõi `nfd-monitor`, Counters, PDH, `nfd monitor`), lát 2 ✅ (ETW, `--source`, `--watch`, job CI `etw`). Bản chi tiết của hàng "6 – Monitor" trong `docs/PLAN.md` §8, theo thiết kế §4.5, mục C8 ① *Log-spam detector*, F7 ② *"Who touched this?"* (lát tùy chọn) và G5 ① *Tray "pause monitor"* (§13.2). Monitor **chỉ đọc**: không bao giờ kết thúc tiến trình, không đổi gì trên máy; "Kết thúc tác vụ" chỉ đi qua luồng có bảo vệ đã có của Hardware → Tasks (`nfd_tasks::end_task`, dialog `EndTaskDialog`).
+> Trạng thái: **đang làm** (2026-10-16) — lát 1 ✅ (lõi `nfd-monitor`, Counters, PDH, `nfd monitor`), lát 2 ✅ (ETW, `--source`, `--watch`, job CI `etw`), lát 3 ✅ (helper protocol 2, backend app, lịch sử 24 h, cảnh báo). Bản chi tiết của hàng "6 – Monitor" trong `docs/PLAN.md` §8, theo thiết kế §4.5, mục C8 ① *Log-spam detector*, F7 ② *"Who touched this?"* (lát tùy chọn) và G5 ① *Tray "pause monitor"* (§13.2). Monitor **chỉ đọc**: không bao giờ kết thúc tiến trình, không đổi gì trên máy; "Kết thúc tác vụ" chỉ đi qua luồng có bảo vệ đã có của Hardware → Tasks (`nfd_tasks::end_task`, dialog `EndTaskDialog`).
 
 ## 1. Mục tiêu & DoD
 
@@ -18,7 +18,7 @@
 
 ### 2.1 Crate mới `nfd-monitor` (§3.1)
 
-Phụ thuộc `nfd-tasks` (danh sách tiến trình một lần gọi kernel) và `nfd-sensors::win::pdh` (PDH). Không phụ thuộc `nfd-history` (app/CLI ghi lịch sử) và không có API nào thay đổi trạng thái máy.
+Phụ thuộc `nfd-tasks` (danh sách tiến trình một lần gọi kernel) và `nfd-sensors::win::pdh` (PDH). Không phụ thuộc `nfd-history` (app ghi lịch sử, CLI đọc) và không có API nào thay đổi trạng thái máy.
 
 **Ba nguồn dữ liệu** (`Source`), chọn theo thứ tự:
 

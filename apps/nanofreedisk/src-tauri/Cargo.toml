@@ -24,6 +24,7 @@ nfd-dupes = { workspace = true }
 nfd-history = { workspace = true }
 nfd-hwinfo = { workspace = true }
 nfd-helper = { workspace = true }
+nfd-monitor = { workspace = true }
 nfd-sensors = { workspace = true }
 nfd-tasks = { workspace = true }
 nfd-platform = { workspace = true }

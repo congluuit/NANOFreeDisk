@@ -37,6 +37,86 @@ pub struct MonitorArgs {
     /// ("Who touched this?"; needs ETW).
     #[arg(long)]
     watch: Option<std::path::PathBuf>,
+    /// Print the last 24 hours the desktop app recorded (per minute) instead of
+    /// sampling.
+    #[arg(long)]
+    history: bool,
+    /// History database [default: the desktop app's].
+    #[arg(long)]
+    db: Option<std::path::PathBuf>,
+}
+
+/// `--history`: the minutes the app saved, summed per hour, and the top writers.
+fn history(args: &MonitorArgs) -> anyhow::Result<ExitCode> {
+    let h = crate::diff::open_history(args.db.clone())?;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs());
+    let rows = h.monitor_minutes(now.saturating_sub(nfd_history::monitor::KEEP_SECS))?;
+    let minutes: Vec<nfd_monitor::Minute> = rows
+        .into_iter()
+        .map(|r| nfd_monitor::Minute {
+            ts: r.ts,
+            read: r.read,
+            write: r.write,
+            peak_read: r.peak_read,
+            peak_write: r.peak_write,
+            seconds: r.seconds,
+            top: serde_json::from_str(&r.top).unwrap_or_default(),
+        })
+        .collect();
+    let top = nfd_monitor::minute::top_writers(&minutes, args.top.max(1));
+    if args.json {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&serde_json::json!({
+                "schema": "nanofreedisk.monitor-history.v1",
+                "minutes": minutes,
+                "topWriters": top,
+            }))?
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    if minutes.is_empty() {
+        println!(
+            "No disk activity recorded in the last 24 hours (the app records while its Monitor runs)."
+        );
+        return Ok(ExitCode::SUCCESS);
+    }
+    let gb = |b: u64| b as f64 / f64::from(1u32 << 30);
+    let mut hour = u64::MAX;
+    let (mut r, mut w, mut n) = (0u64, 0u64, 0u32);
+    let flush = |hour: u64, r: u64, w: u64, n: u32| {
+        if hour != u64::MAX {
+            println!(
+                "{:02}:00 UTC  read {:>8.2} GB  write {:>8.2} GB  ({n} min sampled)",
+                hour / 3600 % 24,
+                gb(r),
+                gb(w)
+            );
+        }
+    };
+    for m in &minutes {
+        let hh = m.ts / 3600 * 3600;
+        if hh != hour {
+            flush(hour, r, w, n);
+            (hour, r, w, n) = (hh, 0, 0, 0);
+        }
+        r += m.read;
+        w += m.write;
+        n += 1;
+    }
+    flush(hour, r, w, n);
+    println!("Top writers:");
+    for t in &top {
+        println!(
+            "  {:<32} write {:>8.2} GB  read {:>8.2} GB",
+            t.name,
+            gb(t.write),
+            gb(t.read)
+        );
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 pub(crate) fn rate(b: f64) -> String {
@@ -137,6 +217,9 @@ pub(crate) fn print_snapshot(s: &nfd_monitor::Snapshot, top: usize) {
 
 #[cfg(windows)]
 pub fn run(args: MonitorArgs) -> anyhow::Result<ExitCode> {
+    if args.history {
+        return history(&args);
+    }
     use nfd_monitor::Source;
     use nfd_monitor::win::etw::EtwSession;
     let elevated = nfd_monitor::win::is_elevated();
@@ -198,8 +281,12 @@ pub fn run(args: MonitorArgs) -> anyhow::Result<ExitCode> {
 }
 
 #[cfg(not(windows))]
-pub fn run(_args: MonitorArgs) -> anyhow::Result<ExitCode> {
+pub fn run(args: MonitorArgs) -> anyhow::Result<ExitCode> {
     let _ = Duration::ZERO;
+    if args.history {
+        return history(&args);
+    }
+    let _ = (args.source, args.watch, args.interval, args.seconds);
     anyhow::bail!("nfd monitor is Windows-only for now")
 }
 

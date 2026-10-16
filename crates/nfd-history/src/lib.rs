@@ -38,6 +38,7 @@ use thiserror::Error;
 pub mod audit;
 pub mod hashes;
 pub mod journal;
+pub mod monitor;
 
 pub use hashes::{HashKey, HashRow};
 pub use journal::{ItemRow, OperationRow, RestoreResult};
@@ -380,6 +381,7 @@ impl History {
             ))?;
         }
         conn.execute_batch(hashes::SCHEMA)?;
+        conn.execute_batch(monitor::SCHEMA)?;
         Ok(Self { conn })
     }
 
@@ -587,8 +589,9 @@ impl History {
     /// # Errors
     /// SQLite write failure.
     pub fn clear(&mut self) -> Result<()> {
-        self.conn
-            .execute_batch("DELETE FROM scans; DELETE FROM file_hashes; VACUUM;")?;
+        self.conn.execute_batch(
+            "DELETE FROM scans; DELETE FROM file_hashes; DELETE FROM monitor_minutes; VACUUM;",
+        )?;
         Ok(())
     }
 

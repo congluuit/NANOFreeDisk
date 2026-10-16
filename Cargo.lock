@@ -2256,6 +2256,7 @@ dependencies = [
  "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",
+ "nfd-monitor",
  "nfd-platform",
  "nfd-rules",
  "nfd-sensors",
@@ -2367,6 +2368,7 @@ dependencies = [
 name = "nfd-helper"
 version = "0.1.0"
 dependencies = [
+ "nfd-monitor",
  "nfd-sensors",
  "serde",
  "serde_json",

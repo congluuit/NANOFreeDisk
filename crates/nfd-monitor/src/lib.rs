@@ -143,6 +143,18 @@ pub struct Tick {
     pub undecoded: u64,
 }
 
+impl Tick {
+    /// Keep the `n` busiest files (bytes read + written). Process totals are not
+    /// affected: they were summed before.
+    pub fn trim_files(&mut self, n: usize) {
+        if self.files.len() > n {
+            self.files
+                .sort_by_key(|f| std::cmp::Reverse(f.counts.read.saturating_add(f.counts.write)));
+            self.files.truncate(n);
+        }
+    }
+}
+
 /// What the app knows about a live process.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcInfo {
