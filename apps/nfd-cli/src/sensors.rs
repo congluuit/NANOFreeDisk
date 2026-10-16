@@ -17,6 +17,10 @@ pub struct SensorsArgs {
     /// Only the main sensors (CPU / GPU / disks / battery).
     #[arg(long)]
     simple: bool,
+    /// Add Advanced sensors through PawnIO (CPU temperatures, power, VID, clocks).
+    /// Needs an elevated prompt and the PawnIO driver; read-only.
+    #[arg(long)]
+    advanced: bool,
 }
 
 /// "1.5 GB", "12.3 MB/s"
@@ -94,8 +98,33 @@ fn print(snap: &Snapshot, simple: bool) {
     );
 }
 
+#[cfg(windows)]
+fn add_advanced(hub: &mut SensorHub) -> anyhow::Result<()> {
+    let st = nfd_sensors::win::pawnio::status();
+    if !st.installed {
+        anyhow::bail!("PawnIO is not installed (https://pawnio.eu)");
+    }
+    match nfd_sensors::win::pawnio_providers() {
+        Ok(list) => {
+            for p in list {
+                hub.add_provider(p);
+            }
+            Ok(())
+        }
+        Err(e) => anyhow::bail!("Advanced sensors unavailable: {e:?} ({st:?})"),
+    }
+}
+
+#[cfg(not(windows))]
+fn add_advanced(_hub: &mut SensorHub) -> anyhow::Result<()> {
+    anyhow::bail!("Advanced sensors are Windows-only")
+}
+
 pub fn run(args: SensorsArgs) -> anyhow::Result<ExitCode> {
     let mut hub = SensorHub::native();
+    if args.advanced {
+        add_advanced(&mut hub)?;
+    }
     hub.sample();
     // rates and loads need two samples
     std::thread::sleep(Duration::from_millis(1000));

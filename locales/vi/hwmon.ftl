@@ -271,3 +271,37 @@ task-outcome-changed = Tiến trình đã kết thúc hoặc PID nay thuộc v�
 task-outcome-access-denied = Tiến trình thuộc người dùng khác hoặc chạy với quyền quản trị. Cần quyền quản trị để kết thúc.
 task-outcome-no-window = Tiến trình không có cửa sổ để đóng. Hãy dùng Kết thúc tiến trình.
 task-outcome-needs-confirm = Cần xác nhận lần hai.
+
+## Cảm biến nâng cao (PawnIO, ADR 0002)
+
+hw-adv-on = Đã bật Cảm biến nâng cao (PawnIO, chỉ đọc)
+hw-adv-not-installed = Nhiệt độ, công suất và điện áp CPU cần PawnIO — driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng.
+hw-adv-not-running = Đã cài PawnIO nhưng driver chưa chạy. Nếu Memory Integrity chặn, Windows Security sẽ nêu lý do.
+hw-adv-no-module = Đã cài PawnIO nhưng không tìm thấy module chính thức IntelMSR.
+hw-adv-get = Tải PawnIO (pawnio.eu)
+hw-adv-start = Bật Cảm biến nâng cao
+hw-adv-start-hint = Windows hỏi quyền quản trị một lần; một helper nhỏ sẽ đọc cảm biến CPU qua PawnIO. Không bao giờ ghi gì vào phần cứng.
+hw-adv-starting = Đang chờ Windows…
+hw-adv-declined = Cảm biến nâng cao vẫn tắt: chưa được cấp quyền quản trị.
+hw-adv-failed = Không bật được Cảm biến nâng cao: { $message }
+hw-adv-unavailable = Máy này không dùng được Cảm biến nâng cao ({ $reason }).
+hw-note-helper-stopped = Helper Cảm biến nâng cao đã dừng; hãy bật lại ở tab này.
+home-temp-why-helper-stopped = Cảm biến nâng cao đã dừng
+
+hw-s-cpu-package = Toàn CPU (package)
+hw-s-cpu-core-max = Nhân nóng nhất
+hw-s-cpu-core-avg = Trung bình các nhân
+hw-s-cpu-core-temp = Nhân #{ $n }
+hw-s-cpu-tjmax = TjMax
+hw-s-cpu-power-package = Toàn CPU (package)
+hw-s-cpu-power-cores = Các nhân CPU
+hw-s-cpu-power-gt = Đồ họa tích hợp
+hw-s-cpu-power-dram = Bộ nhớ (DRAM)
+hw-s-cpu-power-psys = Toàn nền tảng (PSys)
+hw-s-cpu-pl1 = Giới hạn công suất PL1 (dài hạn)
+hw-s-cpu-pl2 = Giới hạn công suất PL2 (ngắn hạn)
+hw-s-cpu-vid-max = Nhân CPU (VID cao nhất)
+hw-s-cpu-vid = VID nhân #{ $n }
+hw-s-cpu-clock-eff = Xung hiệu dụng (trung bình)
+hw-s-cpu-clock-core = Nhân #{ $n }
+hw-s-cpu-bus = Xung bus

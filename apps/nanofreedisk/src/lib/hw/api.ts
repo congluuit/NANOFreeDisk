@@ -1,7 +1,7 @@
 // Typed bridge to the Hardware view's Rust commands (src-tauri/src/commands/hwmon.rs).
 
 import { call } from "../api";
-import type { EndMode, EndResult, HwInventory, SensorSnapshot, TaskDetails, TaskSnapshot, TaskVerdict } from "./types";
+import type { AdvancedStatus, EndMode, EndResult, HwInventory, SensorSnapshot, TaskDetails, TaskSnapshot, TaskVerdict } from "./types";
 
 export const hwApi = {
   inventory: () => call<HwInventory>("hw_inventory"),
@@ -17,4 +17,8 @@ export const hwApi = {
     call<EndResult[]>("task_end", { pid, createTime, mode, confirmed }),
   reveal: (pid: number, createTime: string) => call<void>("task_reveal", { pid, createTime }),
   openTaskManager: () => call<void>("open_task_manager"),
+  advancedStatus: () => call<AdvancedStatus>("pawnio_status"),
+  /** Shows UAC; adds PawnIO sensors from the elevated helper. */
+  advancedStart: () => call<AdvancedStatus>("advanced_sensors_start"),
+  pawnioSite: () => call<void>("pawnio_open_site"),
 };

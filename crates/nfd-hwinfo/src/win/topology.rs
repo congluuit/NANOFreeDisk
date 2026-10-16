@@ -20,6 +20,8 @@ pub struct Topology {
     /// Efficiency class of each logical processor, indexed by its number in group 0
     /// (used to label per-thread sensors "P" / "E").
     pub thread_class: Vec<u8>,
+    /// Per physical core (group 0): its first logical processor and efficiency class.
+    pub core_threads: Vec<(u32, u8)>,
 }
 
 /// Parse the variable-length records the API returns (x86-64 layout).
@@ -49,6 +51,7 @@ pub fn parse(buf: &[u8]) -> Topology {
                     .map(|x| u16::from_le_bytes([x[0], x[1]]))
                     .unwrap_or(0) as usize;
                 let mut threads = 0;
+                let mut first: Option<u32> = None;
                 for g in 0..groups {
                     let off = 32 + g * 16;
                     let Some(m) = r.get(off..off + 8) else { break };
@@ -59,6 +62,9 @@ pub fn parse(buf: &[u8]) -> Topology {
                         .unwrap_or(0);
                     threads += mask.count_ones();
                     if group == 0 {
+                        if mask != 0 && first.is_none() {
+                            first = Some(mask.trailing_zeros());
+                        }
                         for bit in 0..64 {
                             if mask & (1 << bit) != 0 {
                                 if t.thread_class.len() <= bit {
@@ -71,6 +77,9 @@ pub fn parse(buf: &[u8]) -> Topology {
                 }
                 t.threads += threads;
                 classes.push((class, threads));
+                if let Some(f) = first {
+                    t.core_threads.push((f, class));
+                }
             }
             2 => {
                 // RelationCache: Level, Associativity, LineSize, CacheSize, Type
@@ -157,6 +166,10 @@ mod tests {
         assert_eq!((t.p_cores, t.e_cores), (Some(2), Some(4)));
         assert_eq!((t.l2, t.l3), (2 << 20, 36 << 20));
         assert_eq!(t.thread_class, vec![1, 1, 1, 1, 0, 0, 0, 0]);
+        assert_eq!(
+            t.core_threads,
+            vec![(0, 1), (2, 1), (4, 0), (5, 0), (6, 0), (7, 0)]
+        );
     }
 
     #[test]

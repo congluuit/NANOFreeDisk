@@ -354,11 +354,50 @@ impl SensorHub {
         h.iter().skip(h.len().saturating_sub(n)).copied().collect()
     }
 
+    /// Add a provider later (Advanced sensors from the elevated helper).
+    pub fn add_provider(&mut self, mut p: Box<dyn SensorProvider>) {
+        let d = p.discover();
+        let mut map = Vec::with_capacity(d.sensors.len());
+        for s in d.sensors {
+            if self.by_id.contains_key(&s.id) {
+                map.push(None);
+                continue;
+            }
+            map.push(Some(self.sensors.len()));
+            self.by_id.insert(s.id.clone(), self.sensors.len());
+            self.sensors.push(s);
+            self.stats.push(Stat::default());
+        }
+        for dev in d.devices {
+            if !self.devices.iter().any(|x| x.id == dev.id) {
+                self.devices.push(dev);
+            }
+        }
+        self.notes.extend(d.notes);
+        self.slots.push(Slot {
+            provider: p,
+            map,
+            next: None,
+        });
+    }
+
+    /// Whether a provider with this id is running.
+    pub fn has_provider(&self, id: &str) -> bool {
+        self.slots.iter().any(|s| s.provider.id() == id)
+    }
+
     pub fn snapshot(&self) -> Snapshot {
         let mut notes = self.notes.clone();
         for s in &self.slots {
             notes.extend(s.provider.live_notes());
         }
+        // a note about a missing group goes away once some provider fills it
+        notes.retain(|n| {
+            !self
+                .sensors
+                .iter()
+                .any(|s| s.device == n.device && s.kind == n.kind)
+        });
         Snapshot {
             devices: self.devices.clone(),
             sensors: self

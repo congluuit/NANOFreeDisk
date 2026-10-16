@@ -156,6 +156,19 @@ export interface SensorSnapshot {
   sample_ms: number;
 }
 
+export interface AdvancedStatus {
+  pawnio?: {
+    installed: boolean;
+    running: boolean;
+    version: string | null;
+    memory_integrity: boolean;
+    intel_module: boolean;
+    accessible: boolean;
+  };
+  active: boolean;
+  unavailable: string | null;
+}
+
 export type TaskGroup = "app" | "background" | "windows";
 
 export interface Task {

@@ -305,6 +305,8 @@ try {
   check("sensors: memory load", sens.sensors?.some((x) => x.id === "memory/mem-load" && x.value > 0));
   check("sensors: CPU temperature explains PawnIO", sens.notes?.some((n) => n.device === "cpu" && n.reason === "needs-pawnio") || sens.sensors?.some((x) => x.device === "cpu" && x.kind === "temperature"));
   check("sensors: reset min/max", (await invoke("sensors_reset_minmax"))?.__error === undefined);
+  const adv = await invoke("pawnio_status");
+  check("Advanced sensors status needs no admin", typeof adv.active === "boolean" && !adv.__error, JSON.stringify(adv.pawnio ?? adv));
   await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
   check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));

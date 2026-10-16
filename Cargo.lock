@@ -2181,6 +2181,7 @@ name = "nanofreedisk"
 version = "0.1.0"
 dependencies = [
  "nfd-core",
+ "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",
  "nfd-platform",
@@ -2254,6 +2255,16 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "nfd-helper"
+version = "0.1.0"
+dependencies = [
+ "nfd-sensors",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

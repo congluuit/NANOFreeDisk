@@ -271,3 +271,37 @@ task-outcome-changed = The process has already ended or its PID now belongs to a
 task-outcome-access-denied = The process belongs to another user or runs as administrator. Ending it needs administrator rights.
 task-outcome-no-window = The process has no window to close. Use End process instead.
 task-outcome-needs-confirm = It needs the second confirmation.
+
+## Advanced sensors (PawnIO, ADR 0002)
+
+hw-adv-on = Advanced sensors on (PawnIO, read-only)
+hw-adv-not-installed = CPU temperatures, power and voltages need PawnIO, the free signed driver also used by LibreHardwareMonitor and Fan Control.
+hw-adv-not-running = PawnIO is installed but its driver is not running. If Memory Integrity blocks it, Windows Security shows why.
+hw-adv-no-module = PawnIO is installed, but the official IntelMSR module was not found.
+hw-adv-get = Get PawnIO (pawnio.eu)
+hw-adv-start = Turn on Advanced sensors
+hw-adv-start-hint = Windows asks for administrator rights once; a small helper then reads CPU sensors through PawnIO. Nothing is ever written to the hardware.
+hw-adv-starting = Waiting for Windows…
+hw-adv-declined = Advanced sensors stay off: administrator rights were not granted.
+hw-adv-failed = Advanced sensors could not start: { $message }
+hw-adv-unavailable = Advanced sensors are not available on this PC ({ $reason }).
+hw-note-helper-stopped = The Advanced sensors helper stopped; turn it on again from this tab.
+home-temp-why-helper-stopped = Advanced sensors stopped
+
+hw-s-cpu-package = CPU Package
+hw-s-cpu-core-max = Core Max
+hw-s-cpu-core-avg = Core Average
+hw-s-cpu-core-temp = Core #{ $n }
+hw-s-cpu-tjmax = TjMax
+hw-s-cpu-power-package = CPU Package
+hw-s-cpu-power-cores = CPU Cores
+hw-s-cpu-power-gt = CPU Graphics
+hw-s-cpu-power-dram = CPU Memory
+hw-s-cpu-power-psys = Platform (PSys)
+hw-s-cpu-pl1 = Power limit PL1 (long)
+hw-s-cpu-pl2 = Power limit PL2 (short)
+hw-s-cpu-vid-max = CPU Core (max VID)
+hw-s-cpu-vid = Core #{ $n } VID
+hw-s-cpu-clock-eff = Effective clock (average)
+hw-s-cpu-clock-core = Core #{ $n }
+hw-s-cpu-bus = Bus speed

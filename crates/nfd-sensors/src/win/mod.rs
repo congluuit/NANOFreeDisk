@@ -2,7 +2,9 @@
 
 pub mod devices;
 pub mod gpu;
+pub mod intel;
 pub mod nvml;
+pub mod pawnio;
 pub mod pdh;
 pub mod system;
 
@@ -19,4 +21,15 @@ pub fn providers() -> Vec<Box<dyn SensorProvider>> {
         Box::new(devices::NetworkProvider::new()),
         Box::new(system::AcpiProvider::new()),
     ]
+}
+
+/// Advanced sensors through PawnIO (elevated helper only). `Err` says why not.
+pub fn pawnio_providers() -> Result<Vec<Box<dyn SensorProvider>>, pawnio::PawnError> {
+    let vendor = nfd_hwinfo::cpu::native().vendor;
+    if vendor != "Intel" {
+        // AMD (AMDFamily17) and Super I/O (LpcIO) are the next slice
+        return Ok(Vec::new());
+    }
+    let io = pawnio::PawnIo::intel_msr()?;
+    Ok(vec![Box::new(intel::IntelMsrProvider::new(io))])
 }

@@ -134,7 +134,8 @@ function hottest(snap: SensorSnapshot, pred: (s: Sensor, d: SensorDevice | undef
 export function homeTemps(snap: SensorSnapshot): HomeTemp[] {
   const dev = (id: string) => snap.devices.find((d) => d.id === id);
   const cpuLoad = snap.sensors.find((s) => s.id === "cpu/cpu-total")?.value ?? null;
-  const cpu = hottest(snap, (s, d) => d?.kind === "cpu" && (s.label === "cpu-package" || s.primary));
+  const pkg = snap.sensors.find((s) => s.label === "cpu-package" && s.value != null);
+  const cpu = pkg ? { s: pkg, d: dev(pkg.device) } : hottest(snap, (s, d) => d?.kind === "cpu" && s.primary);
   const acpi = hottest(snap, (_, d) => d?.kind === "board");
   const cpuTemp: HomeTemp = cpu
     ? { kind: "cpu", value: cpu.s.value, name: cpu.d?.name, load: cpuLoad }

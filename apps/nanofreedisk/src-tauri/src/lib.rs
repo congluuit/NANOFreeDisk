@@ -36,6 +36,11 @@ pub fn run() {
         let _ = nfd_platform::shell_menu::unregister();
         return;
     }
+    // elevated helper for Advanced sensors: no window, only the pipe protocol
+    #[cfg(windows)]
+    if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
+        std::process::exit(nfd_helper::run_helper(&args));
+    }
     let cwd = std::env::current_dir()
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
@@ -108,6 +113,9 @@ pub fn run() {
             commands::hwmon::task_end,
             commands::hwmon::task_reveal,
             commands::hwmon::open_task_manager,
+            commands::hwmon::pawnio_status,
+            commands::hwmon::advanced_sensors_start,
+            commands::hwmon::pawnio_open_site,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NANOFreeDisk");

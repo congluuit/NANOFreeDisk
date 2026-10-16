@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nfd_sensors::{SensorHub, Snapshot};
+use serde::Serialize;
 use tauri::{AppHandle, Manager, State};
 
 use super::{CmdResult, err};
@@ -21,6 +22,8 @@ pub struct HwState {
     hub: Arc<Mutex<Option<SensorHub>>>,
     #[cfg(windows)]
     tasks: Arc<Mutex<Option<nfd_tasks::TaskMonitor>>>,
+    /// Why Advanced sensors could not start, for the UI.
+    advanced_error: Arc<Mutex<Option<String>>>,
 }
 
 /// Static hardware inventory (`nanofreedisk.hwinfo.v1`).
@@ -107,6 +110,124 @@ pub async fn sensors_history(
         hub.history(&id, n.min(nfd_sensors::HISTORY))
     })
     .await
+}
+
+/// Advanced sensors (PawnIO) state for the Sensors tab. Never needs admin.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AdvancedStatus {
+    #[cfg(windows)]
+    pawnio: nfd_sensors::win::pawnio::PawnStatus,
+    /// The elevated helper is connected and feeding the hub.
+    active: bool,
+    /// Why the helper has no sensors (module missing / rejected…).
+    unavailable: Option<String>,
+}
+
+#[tauri::command]
+pub async fn pawnio_status(state: State<'_, HwState>) -> CmdResult<AdvancedStatus> {
+    let active = state
+        .hub
+        .lock()
+        .map_err(|e| err("internal", e))?
+        .as_ref()
+        .is_some_and(|h| h.has_provider("helper"));
+    let unavailable = state
+        .advanced_error
+        .lock()
+        .map_err(|e| err("internal", e))?
+        .clone();
+    #[cfg(windows)]
+    let pawnio = tauri::async_runtime::spawn_blocking(nfd_sensors::win::pawnio::status)
+        .await
+        .map_err(|e| err("internal", e))?;
+    Ok(AdvancedStatus {
+        #[cfg(windows)]
+        pawnio,
+        active,
+        unavailable,
+    })
+}
+
+/// Start the elevated helper (UAC prompt) and add its sensors to the hub.
+#[tauri::command]
+pub async fn advanced_sensors_start(state: State<'_, HwState>) -> CmdResult<AdvancedStatus> {
+    #[cfg(windows)]
+    {
+        let hub = state.hub.clone();
+        let error = state.advanced_error.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if hub
+                .lock()
+                .map_err(|e| err("internal", e))?
+                .as_ref()
+                .is_some_and(|h| h.has_provider("helper"))
+            {
+                return Ok(());
+            }
+            let remote = nfd_helper::start().map_err(|e| {
+                let code = match e {
+                    nfd_helper::StartError::Declined => "uac-declined",
+                    _ => "helper-failed",
+                };
+                err(code, format!("{e:?}"))
+            })?;
+            let mut guard = hub.lock().map_err(|e| err("internal", e))?;
+            let h = guard.get_or_insert_with(SensorHub::native);
+            let mut remote = Box::new(remote);
+            // discover through the hub so ids are merged with the driver-free sensors
+            let probe = nfd_sensors::SensorProvider::discover(remote.as_mut());
+            let missing = probe.sensors.is_empty().then(|| {
+                remote
+                    .unavailable
+                    .clone()
+                    .unwrap_or_else(|| "no-sensors".into())
+            });
+            *error.lock().map_err(|e| err("internal", e))? = missing.clone();
+            if missing.is_none() {
+                h.add_provider(Box::new(Rediscovered {
+                    inner: remote,
+                    first: Some(probe),
+                }));
+            }
+            Ok(())
+        })
+        .await
+        .map_err(|e| err("internal", e))??;
+    }
+    pawnio_status(state).await
+}
+
+/// Hands the hub the discovery already done (a second Discover would reload the
+/// PawnIO module in the helper).
+#[cfg(windows)]
+struct Rediscovered {
+    inner: Box<nfd_helper::RemoteProvider>,
+    first: Option<nfd_sensors::Discovery>,
+}
+
+#[cfg(windows)]
+impl nfd_sensors::SensorProvider for Rediscovered {
+    fn id(&self) -> &'static str {
+        "helper"
+    }
+    fn discover(&mut self) -> nfd_sensors::Discovery {
+        self.first.take().unwrap_or_default()
+    }
+    fn sample(&mut self, out: &mut Vec<(usize, f64)>) {
+        self.inner.sample(out);
+    }
+    fn live_notes(&self) -> Vec<nfd_sensors::Note> {
+        if self.inner.connected() {
+            Vec::new()
+        } else {
+            vec![nfd_sensors::Note {
+                device: "cpu".into(),
+                kind: nfd_sensors::Kind::Temperature,
+                reason: "helper-stopped".into(),
+            }]
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -229,6 +350,15 @@ fn append_log(path: &Path, mode: nfd_tasks::EndMode, results: &[nfd_tasks::EndRe
         let line = serde_json::json!({ "time": now, "action": "end-task", "mode": mode, "pid": r.pid, "name": r.name, "outcome": r.outcome });
         let _ = writeln!(f, "{line}");
     }
+}
+
+/// The official PawnIO site (download page), in the default browser.
+#[tauri::command]
+pub fn pawnio_open_site(app: AppHandle) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    app.opener()
+        .open_url("https://pawnio.eu/", None::<&str>)
+        .map_err(|e| err("os", e))
 }
 
 /// Task Manager, for what this view does not do (startup apps, services…).
