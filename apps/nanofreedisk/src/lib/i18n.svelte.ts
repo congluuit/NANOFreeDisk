@@ -1,9 +1,23 @@
 // Fluent-based i18n (PLAN §11: EN + VI mandatory). Message files live in the repo's
-// top-level `locales/` so the CLI and installer can share them later.
+// top-level `locales/<lang>/*.ftl` (one file per feature area: app.ftl, hwmon.ftl…)
+// so the CLI and installer can share them later.
 
 import { FluentBundle, FluentResource, type FluentVariable } from "@fluent/bundle";
-import en from "$locales/en/app.ftl?raw";
-import vi from "$locales/vi/app.ftl?raw";
+
+const SOURCES = import.meta.glob("../../../../locales/*/*.ftl", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+}) as Record<string, string>;
+
+/** Every `.ftl` file of `locale`, app.ftl first. */
+function sources(locale: string): string {
+  return Object.entries(SOURCES)
+    .filter(([path]) => path.includes(`/locales/${locale}/`))
+    .sort(([a], [b]) => (a.endsWith("/app.ftl") ? -1 : b.endsWith("/app.ftl") ? 1 : a.localeCompare(b)))
+    .map(([, text]) => text)
+    .join("\n");
+}
 
 export type Locale = "en" | "vi";
 export const LOCALES: { id: Locale; label: string }[] = [
@@ -18,7 +32,7 @@ function bundle(locale: Locale, source: string): FluentBundle {
   return b;
 }
 
-const bundles: Record<Locale, FluentBundle> = { en: bundle("en", en), vi: bundle("vi", vi) };
+const bundles: Record<Locale, FluentBundle> = { en: bundle("en", sources("en")), vi: bundle("vi", sources("vi")) };
 
 export function systemLocale(): Locale {
   const langs = typeof navigator !== "undefined" ? navigator.languages ?? [navigator.language] : [];

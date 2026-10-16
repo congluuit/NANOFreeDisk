@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
@@ -65,6 +65,9 @@ export const app = $state({
   version: 0,
   search: null as null | { filter: Filter; result: SearchRows },
   deleting: null as null | number[],
+  /** How the delete dialog removes `deleting`: Recycle Bin (Analyze, Old & Large) or
+   * quarantine (Tidy up), and which Activity log label it gets. */
+  deleteMode: { mode: "recycle-bin", kind: "manual" } as { mode: "recycle-bin" | "quarantine"; kind: "manual" | "tidy" },
   /** Command palette (Ctrl+K) open. */
   palette: false,
   toasts: [] as Toast[],
@@ -222,9 +225,11 @@ export function select(id: number, additive = false): void {
   app.focus = id;
 }
 
-export function askDelete(ids: number[]): void {
+export function askDelete(ids: number[], mode: "recycle-bin" | "quarantine" = "recycle-bin", kind: "manual" | "tidy" = "manual"): void {
   const list = ids.filter((id) => id !== (app.summary?.rootId ?? 0));
-  if (list.length) app.deleting = list;
+  if (!list.length) return;
+  app.deleteMode = { mode, kind };
+  app.deleting = list;
 }
 
 /** After a deletion: refresh totals, drop removed ids, let views refetch. */

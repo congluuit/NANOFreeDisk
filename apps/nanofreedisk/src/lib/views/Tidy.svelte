@@ -1,12 +1,13 @@
 <script lang="ts">
   // Tidy up (PLAN §13 A3): empty folder trees and shortcuts whose target is gone.
-  // Read-only for now — removing them arrives with the Phase 3 safety engine
-  // (Quarantine + Undo), so the menus only offer Show / Open / Copy path.
+  // Picked items go to the quarantine through the SafetyGate (restorable from the
+  // Activity log for 7 days); broken junctions are listed only — links are removed
+  // in Explorer.
   import { api } from "../api";
   import { itemMenu } from "../actions";
   import { formatCount } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
-  import { app, fail } from "../state.svelte";
+  import { app, askDelete, fail } from "../state.svelte";
   import ContextMenu, { type MenuItem } from "../components/ContextMenu.svelte";
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
@@ -71,8 +72,19 @@
     <header>
       <h1>{t("tidy-title")}</h1>
       <p class="muted">{t("tidy-intro")}</p>
-      <p class="note"><Icon name="shield" size={16} />{t("tidy-readonly")}</p>
+      <p class="note"><Icon name="shield" size={16} />{t("tidy-quarantine-note")}</p>
     </header>
+
+    <div class="actbar card">
+      <span class="muted">{selected.length ? t("tidy-selected", { count: selected.length }) : t("action-select-hint")}</span>
+      <span class="grow"></span>
+      {#if selected.length}
+        <button class="btn ghost" onclick={() => (selected = [])}>{t("filter-clear")}</button>
+      {/if}
+      <button class="btn danger-outline" disabled={!selected.length} data-effect title={t("tidy-quarantine-hint")} onclick={() => askDelete(selected, "quarantine", "tidy")}>
+        <Icon name="clean" size={16} />{t("tidy-quarantine", { count: selected.length })}
+      </button>
+    </div>
 
     <div class="card block">
       <h2>
@@ -166,6 +178,23 @@
     align-items: center;
     color: var(--risk-safe);
     font-size: 0.9em;
+  }
+  .actbar {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 8px 12px;
+  }
+  .grow {
+    flex: 1;
+  }
+  .btn.danger-outline {
+    color: var(--danger);
+    border-color: var(--danger);
+    background: transparent;
+  }
+  .btn.danger-outline:hover:not(:disabled) {
+    background: var(--danger-soft);
   }
   .block {
     flex: 1;

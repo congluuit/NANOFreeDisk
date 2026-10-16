@@ -1,10 +1,12 @@
 //! Rule packs: declarative TOML files (`rules/*.toml`) describing which folders are junk
 //! or developer caches, how risky deleting them is, and what the user loses.
 //!
-//! This crate owns the schema, the loader and the validator. Matching against a real
-//! filesystem (glob expansion, age filters, process checks) arrives in Phase 3.
+//! This crate owns the schema, the loader and the validator, the packs shipped inside
+//! the binary ([`builtin_packs`]) and the [`matcher`] that finds what a rule would
+//! clean on this machine.
 
 pub mod encyclopedia;
+pub mod matcher;
 
 use std::collections::HashSet;
 use std::fs;
@@ -59,6 +61,9 @@ pub struct Rule {
     #[serde(default)]
     pub requires_closed: Vec<String>,
     pub impact: String,
+    /// Vietnamese translation of `impact`.
+    #[serde(default)]
+    pub impact_vi: Option<String>,
     #[serde(default)]
     pub docs: Option<String>,
     pub verified_on: toml::value::Datetime,
@@ -153,6 +158,37 @@ pub fn load_dir(dir: &Path) -> Result<Vec<Pack>, Error> {
     files.iter().map(|p| load_pack(p)).collect()
 }
 
+/// The packs shipped in `rules/`, compiled into the binary (file name, TOML text).
+pub const BUILTIN_PACK_FILES: &[(&str, &str)] = &[
+    (
+        "ai-tools.toml",
+        include_str!("../../../rules/ai-tools.toml"),
+    ),
+    (
+        "browsers.toml",
+        include_str!("../../../rules/browsers.toml"),
+    ),
+    (
+        "gpu-shader-cache.toml",
+        include_str!("../../../rules/gpu-shader-cache.toml"),
+    ),
+    (
+        "windows-system.toml",
+        include_str!("../../../rules/windows-system.toml"),
+    ),
+];
+
+/// Parse the [`BUILTIN_PACK_FILES`].
+///
+/// # Errors
+/// A shipped pack does not parse (caught by the tests before release).
+pub fn builtin_packs() -> Result<Vec<Pack>, Error> {
+    BUILTIN_PACK_FILES
+        .iter()
+        .map(|(name, text)| parse_pack(text, Some(Path::new(name))))
+        .collect()
+}
+
 /// Validate a set of packs. Returns all findings; use [`has_errors`] to decide pass/fail.
 #[must_use]
 pub fn validate(packs: &[Pack]) -> Vec<Finding> {
@@ -202,6 +238,13 @@ pub fn validate(packs: &[Pack]) -> Vec<Finding> {
             }
             if rule.impact.trim().len() < 15 {
                 push(true, "impact text is too short to be useful".into());
+            }
+            match &rule.impact_vi {
+                None => push(false, "impact_vi (Vietnamese) is missing".into()),
+                Some(vi) if vi.trim().len() < 15 => {
+                    push(true, "impact_vi text is too short to be useful".into());
+                }
+                Some(_) => {}
             }
             for p in &rule.platform {
                 if !matches!(p.as_str(), "windows" | "macos" | "linux") {
@@ -373,6 +416,111 @@ verified_on = 2026-10-16
             Some("C:/Users/x/.claude/**")
         );
         assert_eq!(expand("${NOPE}/x", r), None);
+    }
+
+    #[test]
+    fn builtin_packs_match_the_rules_folder() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../rules");
+        let on_disk = load_dir(&dir).expect("load rules/");
+        let builtin = builtin_packs().expect("builtin");
+        let ids = |p: &[Pack]| p.iter().map(|p| p.pack.id.clone()).collect::<Vec<_>>();
+        assert_eq!(
+            ids(&on_disk),
+            ids(&builtin),
+            "add new packs to BUILTIN_PACK_FILES"
+        );
+    }
+
+    #[test]
+    fn shipped_rules_are_translated() {
+        for pack in builtin_packs().expect("builtin") {
+            for rule in &pack.rules {
+                assert!(
+                    rule.impact_vi
+                        .as_deref()
+                        .is_some_and(|v| v.trim().len() >= 15),
+                    "{} has no Vietnamese impact text",
+                    rule.id
+                );
+            }
+        }
+    }
+
+    /// The browser pack must never reach what users care about in a profile.
+    #[test]
+    fn browser_pack_spares_profile_data() {
+        const NEVER: &[&str] = &[
+            "cookies",
+            "history",
+            "login data",
+            "bookmarks",
+            "local storage",
+            "indexeddb",
+            "sessions",
+            "extensions",
+            "web data",
+            "preferences",
+            "places.sqlite",
+            "key4.db",
+            "logins.json",
+        ];
+        let packs = builtin_packs().expect("builtin");
+        let browsers = packs
+            .iter()
+            .find(|p| p.pack.id == "browsers")
+            .expect("browsers pack");
+        for rule in &browsers.rules {
+            assert_eq!(rule.level, RiskLevel::Safe);
+            assert!(!rule.requires_closed.is_empty(), "{}", rule.id);
+            for path in &rule.paths {
+                let lower = path.to_lowercase();
+                assert!(
+                    lower.ends_with("/**"),
+                    "{path} must clean inside a cache folder"
+                );
+                assert!(
+                    !NEVER.iter().any(|n| lower.contains(n)),
+                    "{path} touches profile data"
+                );
+                // never a whole profile: the cache folder name follows the profile
+                let parts = lower
+                    .trim_end_matches("/**")
+                    .rsplit('/')
+                    .next()
+                    .unwrap_or("");
+                assert!(
+                    [
+                        "cache",
+                        "code cache",
+                        "gpucache",
+                        "cachestorage",
+                        "shadercache",
+                        "grshadercache",
+                        "cache2",
+                        "startupcache",
+                        "shader-cache",
+                        "jumplistcache"
+                    ]
+                    .contains(&parts),
+                    "{path}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn gpu_pack_is_all_safe_and_regenerating() {
+        let packs = builtin_packs().expect("builtin");
+        let gpu = packs
+            .iter()
+            .find(|p| p.pack.id == "gpu-shader-cache")
+            .expect("gpu pack");
+        assert!(gpu.rules.len() >= 5);
+        assert!(
+            gpu.rules
+                .iter()
+                .all(|r| r.level == RiskLevel::Safe && r.regenerates)
+        );
     }
 
     /// The real rule packs shipped in `rules/` must always validate.

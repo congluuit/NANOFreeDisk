@@ -1,5 +1,5 @@
-//! Tauri commands: thin wrappers around [`Session`] plus scanning, the Recycle Bin and
-//! settings. Errors cross the bridge as `{ code, message }` so the UI can localize them.
+//! Tauri commands: thin wrappers around [`Session`] plus scanning, deleting (see
+//! [`clean`]) and settings. Errors cross the bridge as `{ code, message }` so the UI can localize them.
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
@@ -7,13 +7,14 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
-use nfd_core::health::{self, HealthScore, ScanFacts, VolumeFacts};
+pub mod clean;
+
+use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
 use nfd_core::insights::OldLargeOptions;
 use nfd_core::query::Filter;
 use nfd_core::scanner::{self, ScanEvent, ScanOptions, ScanStats};
 use nfd_history::{Diff, DiffOptions, History, RecordOptions, Snapshot, VolumeState};
 use nfd_platform::Platform;
-use nfd_platform::trash::{self, Recycled};
 use nfd_platform::volumes::{self, VolumeKind};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
@@ -684,7 +685,14 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
             }
         })
     };
-    Ok(health::score(&facts, scan.as_ref()))
+    let junk = app
+        .state::<clean::CleanState>()
+        .safe_bytes()
+        .map(|bytes| JunkFacts {
+            bytes,
+            volume_total: facts.iter().find(|v| v.system).map_or(0, |v| v.total),
+        });
+    Ok(health::score_with(&facts, scan.as_ref(), junk.as_ref()))
 }
 
 #[tauri::command]
@@ -710,63 +718,25 @@ pub fn plan_delete(state: State<'_, AppState>, ids: Vec<u32>) -> CmdResult<Delet
     with_session(&state, |s| s.plan_delete(&ids, &resolve))
 }
 
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RecycleOutcome {
-    id: u32,
-    /// `done`, `declined`, `blocked` or `failed`.
-    status: &'static str,
-    reason: Option<&'static str>,
-    message: Option<String>,
-    on_disk: u64,
-}
-
-/// Move the given entries to the Recycle Bin, one by one. Every item is re-checked
-/// against the live filesystem first; the scan is updated for each success.
+/// Move the given entries to the Recycle Bin (Planner → SafetyGate → Executor, with
+/// an entry in the Activity log). Kept for the Phase 2 UI and scripts; same as
+/// `delete_entries` with the default mode.
 #[tauri::command]
 pub async fn recycle(
+    app: AppHandle,
     window: WebviewWindow,
     state: State<'_, AppState>,
     ids: Vec<u32>,
-) -> CmdResult<Vec<RecycleOutcome>> {
-    let owner = owner_handle(&window);
-    let platform = nfd_platform::Native;
-    let resolve = platform.resolver();
-    let plan = with_session(&state, |s| s.plan_delete(&ids, &resolve))?;
-    let mut out = Vec::new();
-    for item in plan.items {
-        let mut outcome = RecycleOutcome {
-            id: item.id,
-            status: "blocked",
-            reason: item.reason,
-            message: None,
-            on_disk: item.on_disk,
-        };
-        if item.allowed {
-            match with_session(&state, |s| s.recheck_live(item.id, &resolve))? {
-                Err(blocked) => {
-                    outcome.reason = Some(blocked.code());
-                    outcome.message = Some(blocked.to_string());
-                }
-                Ok(path) => match trash::recycle(&path, owner) {
-                    Ok(Recycled::Done) => {
-                        outcome.status = "done";
-                        let mut guard = state.session.write().map_err(|e| err("internal", e))?;
-                        if let Some(s) = guard.as_mut() {
-                            s.mark_removed(item.id);
-                        }
-                    }
-                    Ok(Recycled::Declined) => outcome.status = "declined",
-                    Err(e) => {
-                        outcome.status = "failed";
-                        outcome.message = Some(e.to_string());
-                    }
-                },
-            }
-        }
-        out.push(outcome);
-    }
-    Ok(out)
+) -> CmdResult<Vec<clean::DeleteOutcome>> {
+    clean::delete_entries_impl(
+        &app,
+        &window,
+        &state,
+        &ids,
+        nfd_core::plan::DeleteMode::RecycleBin,
+        "manual",
+    )
+    .await
 }
 
 #[cfg(windows)]

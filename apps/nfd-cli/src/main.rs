@@ -1,10 +1,12 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
-//! Ships `scan` (Phase 1), `diff` (scan history, Phase 2) and `rules list` /
-//! `rules validate`. Cleaning, dedupe, watch
-//! and health commands arrive with their phases (see `docs/PLAN.md` §4.7).
+//! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
+//! `plan explain` (Phase 3) and `rules list` / `rules validate`. Dedupe, watch and
+//! health commands arrive with their phases (see `docs/PLAN.md` §4.7).
 
+mod clean;
 mod diff;
+mod quarantine;
 mod scan;
 
 use std::path::PathBuf;
@@ -38,6 +40,18 @@ enum Command {
     Scan(scan::ScanArgs),
     /// What changed between two saved scans of a folder (`nfd scan --save`, or the app).
     Diff(diff::DiffArgs),
+    /// Find junk with the rule packs and clean it (dry run unless --apply).
+    Clean(clean::CleanArgs),
+    /// Clean / delete operations: list, restore, purge the quarantine.
+    Quarantine {
+        #[command(subcommand)]
+        action: quarantine::QuarantineAction,
+    },
+    /// Explain the cleaning plan for a path.
+    Plan {
+        #[command(subcommand)]
+        action: PlanAction,
+    },
     /// What is this folder, and what happens if it is deleted? (Folder Encyclopedia)
     Explain {
         /// File or folder to look up (its nearest described parent is used).
@@ -45,6 +59,17 @@ enum Command {
         /// Language of the text: en or vi.
         #[arg(long, default_value = "en")]
         lang: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum PlanAction {
+    /// Why a path may or may not be deleted, by hand and by each rule that covers it.
+    Explain {
+        path: PathBuf,
+        /// Rule packs folder [default: built-in].
+        #[arg(long)]
+        rules: Option<PathBuf>,
     },
 }
 
@@ -78,6 +103,11 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Rules { action } => rules(action),
         Command::Scan(args) => scan::run(args),
         Command::Diff(args) => diff::run(args),
+        Command::Clean(args) => clean::run(args),
+        Command::Quarantine { action } => quarantine::run(action),
+        Command::Plan {
+            action: PlanAction::Explain { path, rules },
+        } => clean::explain(&path, rules.as_deref()),
         Command::Explain { path, lang } => explain(&path, &lang),
     }
 }

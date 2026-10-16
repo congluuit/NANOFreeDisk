@@ -5,6 +5,7 @@
   import { formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, startScan } from "../state.svelte";
+  import { clean } from "../clean/state.svelte";
   import Icon from "./Icon.svelte";
   import type { Finding, HealthScore } from "../types";
 
@@ -20,6 +21,8 @@
     void app.version;
     void app.volumes.length;
     void app.summary;
+    // the rule scan adds the "junk" finding
+    void clean.scan;
     let cancelled = false;
     api
       .health()

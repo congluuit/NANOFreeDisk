@@ -1,8 +1,8 @@
 //! NANOFreeDisk desktop app (Tauri 2). The UI lives in `../src` (Svelte 5); this
-//! crate exposes the scanner and the safe Recycle Bin action as commands.
+//! crate exposes the scanner, the Clean view and the Activity log as commands.
 //!
-//! Nothing here deletes directly: [`commands::recycle`] re-runs the checks of
-//! `nfd_core::safety` against the live filesystem for every item first.
+//! Nothing here deletes directly: every delete goes through
+//! `Planner → SafetyGate → Executor → UndoJournal` ([`commands::clean`]).
 
 mod commands;
 mod session;
@@ -56,6 +56,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .manage(commands::clean::CleanState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -96,6 +97,16 @@ pub fn run() {
             commands::save_settings,
             commands::read_text_file,
             commands::write_text_file,
+            commands::clean::clean_scan,
+            commands::clean::clean_items,
+            commands::clean::clean_run,
+            commands::clean::clean_cancel,
+            commands::clean::delete_entries,
+            commands::clean::activity_list,
+            commands::clean::activity_items,
+            commands::clean::activity_restore,
+            commands::clean::activity_purge,
+            commands::clean::activity_forget,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NANOFreeDisk");

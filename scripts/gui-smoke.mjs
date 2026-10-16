@@ -10,13 +10,16 @@
 // the HTML report writer, the delete plan refusing a folder inside %SystemRoot% and
 // accepting a fixture file, an actual move of one fixture file to the Recycle Bin,
 // the new views / Ctrl+K palette, the scan history (two snapshots of the fixture,
-// "What changed?", find_path) and the Health Score. Nothing outside the fixture is
-// ever deleted; the fixture's history snapshots are forgotten at the end.
+// "What changed?", find_path) and the Health Score; Phase 3: the Activity log and
+// Restore of the Recycle Bin move, Tidy up moving the empty folder to the quarantine
+// and back, and Clean with a rule pack that only matches the fixture (scan, clean,
+// restore, the Clean / Activity views). Nothing outside the fixture is ever deleted;
+// the fixture's history snapshots and journal entries are forgotten at the end.
 
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -70,6 +73,33 @@ mkdirSync(join(fixture, "junction-target"));
 execFileSync("cmd", ["/C", "mklink", "/J", join(fixture, "old-link"), join(fixture, "junction-target")], { stdio: "ignore" });
 rmSync(join(fixture, "junction-target"), { recursive: true });
 const FILES = 8;
+// Phase 3: junk for a test rule pack that matches nothing but the fixture
+mkdirSync(join(fixture, "junk", "cache"), { recursive: true });
+writeFileSync(join(fixture, "junk", "cache", "a.bin"), Buffer.alloc(64 * 1024, 6));
+writeFileSync(join(fixture, "junk", "old.log"), "log line\n");
+const JUNK_FILES = 2;
+const rulesDir = mkdtempSync(join(tmpdir(), "nfd-smoke-rules-"));
+writeFileSync(
+  join(rulesDir, "smoke.toml"),
+  `[pack]
+id = "smoke"
+name = "Smoke test"
+version = "0.0.1"
+
+[[rule]]
+id = "smoke.junk"
+vendor = "NANO"
+app = "Smoke fixture"
+category = "test"
+paths = ["\${TEMP}/${basename(fixture)}/junk/**"]
+level = "safe"
+regenerates = true
+impact = "Files of the GUI smoke test fixture."
+impact_vi = "Tệp của fixture kiểm thử GUI."
+verified_on = 2026-10-16
+`,
+);
+const operations = [];
 
 const failures = [];
 const check = (name, ok, detail = "") => {
@@ -131,6 +161,8 @@ async function scan(path, record = true) {
   throw new Error(`scan ${id} of ${path} did not finish`);
 }
 
+const nav = (i) => evaluate(`document.querySelectorAll('.side .nav')[${i}].click()`);
+
 try {
   const page = await target();
   ws = new WebSocket(page.webSocketDebuggerUrl);
@@ -157,7 +189,7 @@ try {
   check("list_volumes has the system drive", vols.some((v) => v.system && v.total > 0), vols.map((v) => v.root).join(" "));
 
   const s = await scan(fixture);
-  check("scan totals", s.stats.files === FILES && s.stats.on_disk >= 6 * 1024 * 1024, `${s.stats.files} files, ${s.stats.on_disk} B`);
+  check("scan totals", s.stats.files === FILES + JUNK_FILES && s.stats.on_disk >= 6 * 1024 * 1024, `${s.stats.files} files, ${s.stats.on_disk} B`);
   const kids = await invoke("children", { id: 0 });
   check("children sorted by size", kids[0]?.name === "projects", kids.map((k) => k.name).join(", "));
   const slice = await invoke("slice", { id: 0, maxDepth: 8, minBytes: 0, maxNodes: 1000 });
@@ -185,6 +217,20 @@ try {
     links.checked === 2 && links.rows?.length === 1 && links.rows[0].name === "broken.lnk" && links.rows[0].status === "missing",
     JSON.stringify(links),
   );
+  // Tidy up: the empty folder tree goes to the quarantine and comes back
+  if (empty.rows?.length) {
+    const emptyDir = join(fixture, "empty");
+    const tidy = await invoke("delete_entries", { ids: [empty.rows[0].id], mode: "quarantine", kind: "tidy" });
+    check("tidy: empty folder moved to the quarantine", tidy[0]?.status === "done" && !existsSync(emptyDir), JSON.stringify(tidy));
+    const ops = await invoke("activity_list", { limit: 5 });
+    const op = ops.find?.((o) => o.kind === "tidy");
+    if (op) operations.push(op.id);
+    check("activity lists the tidy operation", op?.restorable === 1, JSON.stringify(ops[0]));
+    if (op) {
+      const back = await invoke("activity_restore", { id: op.id });
+      check("tidy: restore brings the folder back", back[0]?.status === "restored" && existsSync(join(emptyDir, "inner")), JSON.stringify(back));
+    }
+  }
   // A6 report writer: only *.html files
   const reportPath = join(fixture, "report.html");
   await invoke("save_html_report", { path: reportPath, html: "<!doctype html><p>ok</p>" });
@@ -205,7 +251,53 @@ try {
   const out = await invoke("recycle", { ids: [isoId] });
   check("recycle moved the file", out[0]?.status === "done" && !existsSync(victim), JSON.stringify(out[0]));
   const after = await invoke("summary");
-  check("totals updated after recycle", after.stats.files === FILES - 1);
+  check("totals updated after recycle", after.stats.files === FILES + JUNK_FILES - 1);
+  const manual = (await invoke("activity_list", { limit: 5 })).find?.((o) => o.kind === "manual");
+  if (manual) operations.push(manual.id);
+  check("activity lists the Recycle Bin move", manual?.done === 1 && manual?.restorable === 1, JSON.stringify(manual));
+  if (manual) {
+    const back = await invoke("activity_restore", { id: manual.id });
+    check("restore takes the file back out of the Recycle Bin", back[0]?.status === "restored" && existsSync(victim) && readFileSync(victim).length === 1024 * 1024, JSON.stringify(back));
+  }
+
+  // Clean with a rule pack that only matches the fixture's junk folder: the Clean
+  // view scans with it (window.__nfdRulesDir), then the commands are driven directly
+  await evaluate(`window.__nfdRulesDir = ${JSON.stringify(rulesDir)}`);
+  await nav(4);
+  for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('Smoke fixture')")); i++) {
+    await evaluate("(() => { const b = document.querySelectorAll('main header .actions-top .btn')[1]; if (b && !b.disabled) b.click(); })()");
+    await sleep(250);
+  }
+  check("Clean view shows the rule", await evaluate("document.querySelector('main').innerText.includes('Smoke fixture')"));
+  await shot("9-clean");
+  const cs = await invoke("clean_scan", { rulesDir });
+  const rule = cs.rules?.find((r) => r.ruleId === "smoke.junk");
+  check("clean scan finds the fixture junk", rule?.candidates === 2 && rule.files === JUNK_FILES && cs.safe === rule.bytes, JSON.stringify(rule ?? cs));
+  const preview = await invoke("clean_items", { ruleId: "smoke.junk", limit: 10 });
+  check("clean preview lists the junk", preview.length === 2 && preview.every((p) => p.path.startsWith(join(fixture, "junk"))), JSON.stringify(preview));
+  const cleaned = await invoke("clean_run", { ruleIds: ["smoke.junk"], expert: false, permanent: false });
+  if (cleaned.id) operations.push(cleaned.id);
+  check(
+    "clean moves the junk to the quarantine",
+    cleaned.done === 2 && cleaned.failed === 0 && !existsSync(join(fixture, "junk", "old.log")) && !existsSync(join(fixture, "junk", "cache")),
+    JSON.stringify(cleaned),
+  );
+  check("clean keeps the folder the rule cleans inside", existsSync(join(fixture, "junk")));
+  await nav(5);
+  for (let i = 0; i < 30 && !(await evaluate("document.querySelectorAll('.op').length > 0")); i++) await sleep(150);
+  check("Activity view lists operations", await evaluate("document.querySelectorAll('.op').length >= 3"));
+  await shot("10-activity");
+  if (cleaned.id) {
+    const back = await invoke("activity_restore", { id: cleaned.id });
+    check(
+      "restore puts the junk back byte for byte",
+      back.length === 2 && back.every((r) => r.status === "restored") && readFileSync(join(fixture, "junk", "old.log"), "utf8") === "log line\n" && readFileSync(join(fixture, "junk", "cache", "a.bin")).length === 64 * 1024,
+      JSON.stringify(back),
+    );
+  }
+  const refusedRules = await invoke("clean_scan", { rulesDir: fixture });
+  check("clean scan of a folder without packs finds nothing", !!refusedRules.__error || refusedRules.rules?.length === 0, JSON.stringify(refusedRules).slice(0, 120));
+  await evaluate("delete window.__nfdRulesDir");
 
   // protected locations are refused (plan only — nothing is deleted)
   const sysHelp = join(process.env.SystemRoot ?? "C:\\Windows", "Help");
@@ -288,7 +380,6 @@ try {
   await sleep(300);
 
   // new views and the command palette
-  const nav = (i) => evaluate(`document.querySelectorAll('.side .nav')[${i}].click()`);
   await nav(2);
   await sleep(800);
   await evaluate("document.querySelectorAll('.tabs .tab')[2].click()");
@@ -323,7 +414,7 @@ try {
 
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"]]) {
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");
@@ -351,6 +442,11 @@ try {
   check("smoke run", false, e.message);
 } finally {
   try {
+    for (const id of operations) await invoke("activity_forget", { id });
+  } catch {
+    /* app already gone */
+  }
+  try {
     const removed = await invoke("history_forget", { root: fixture });
     if (removed !== 2) console.log(`note: forgot ${JSON.stringify(removed)} fixture snapshot(s)`);
   } catch {
@@ -364,6 +460,7 @@ try {
   child.kill();
   await sleep(500);
   rmSync(fixture, { recursive: true, force: true });
+  rmSync(rulesDir, { recursive: true, force: true });
 }
 
 if (failures.length) {

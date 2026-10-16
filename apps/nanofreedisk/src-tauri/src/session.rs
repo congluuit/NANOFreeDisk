@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use nfd_core::insights::{self, OldLargeOptions};
 use nfd_core::model::{ChildIndex, Entry, EntryId, EntryKind, subtree_ends};
+use nfd_core::plan::{DeleteMode, PlanItem};
 use nfd_core::query::{self, Filter, SearchResult};
 use nfd_core::safety::{self, Blocked};
 use nfd_core::scanner::ScanTree;
@@ -694,40 +695,23 @@ impl Session {
         safety::check_manual_delete(path, resolve)
     }
 
-    /// Re-check one item against the live filesystem right before deleting it: it
-    /// must still exist, still not be a link, and its real path must pass the checks.
-    ///
-    /// # Errors
-    /// Why the item must not be deleted now.
-    pub fn recheck_live(
-        &self,
-        id: u32,
-        resolve: &impl Fn(&str) -> Option<String>,
-    ) -> Result<PathBuf, Blocked> {
-        let plan = self.check_item(id, resolve);
-        if !plan.allowed {
-            let e = self.tree.entry(EntryId(id));
-            let path = self.tree.path(e.id);
-            return Err(self
-                .verdict(e, &path, resolve)
-                .err()
-                .unwrap_or_else(|| Blocked::Unresolvable(plan.path.clone())));
-        }
-        let path = PathBuf::from(&plan.path);
-        let info = nfd_platform::fsinfo::file_info(&path)
-            .map_err(|err| Blocked::Unresolvable(err.to_string()))?;
-        if info.link != nfd_platform::fsinfo::LinkKind::None {
-            return Err(Blocked::Link);
-        }
-        // Resolve the parent for real (links among the ancestors, 8.3 names, case).
-        let parent = path
-            .parent()
-            .ok_or(Blocked::VolumeRoot)?
-            .canonicalize()
-            .map_err(|err| Blocked::Unresolvable(err.to_string()))?;
-        let name = path.file_name().ok_or(Blocked::VolumeRoot)?;
-        safety::check_manual_delete(&strip_verbatim(&parent).join(name), resolve)?;
-        Ok(path)
+    /// Planner input for an entry picked by hand, to be deleted with `mode`. The
+    /// SafetyGate checks it again on disk (links, final path, changes since the scan)
+    /// right before the executor acts.
+    #[must_use]
+    pub fn plan_item(&self, id: u32, mode: DeleteMode) -> Option<PlanItem> {
+        let e = self.get(id)?;
+        let is_dir = e.kind == EntryKind::Dir;
+        let mut item = PlanItem::manual(
+            self.tree.path(e.id),
+            is_dir,
+            e.counted().1,
+            self.tree.file_counts[e.id.index()],
+            e.mtime,
+        );
+        item.size = if is_dir { 0 } else { e.logical };
+        item.mode = mode;
+        Some(item)
     }
 
     /// Forget a deleted entry (sizes leave every ancestor).
@@ -1048,8 +1032,26 @@ mod tests {
         assert_eq!(plan.files, 2);
         assert!(!plan.extra_confirm);
 
-        let path = s.recheck_live(a, &resolve).expect("still deletable");
-        assert!(path.ends_with("a"));
+        let item = s
+            .plan_item(a, DeleteMode::RecycleBin)
+            .expect("planner input");
+        assert!(item.path.ends_with("a") && item.is_dir);
+        let gate = safety::SafetyGate::new(&resolve);
+        gate.check_live(
+            &item.path,
+            item.origin,
+            Some(item.expected()),
+            &safety::LiveProbe,
+        )
+        .expect("still deletable");
+        let file = s.plan_item(big, DeleteMode::RecycleBin).expect("file");
+        gate.check_live(
+            &file.path,
+            file.origin,
+            Some(file.expected()),
+            &safety::LiveProbe,
+        )
+        .expect("the scan's size and date match the disk");
         let before = s.tree.entries[0].on_disk;
         s.mark_removed(a);
         assert!(s.tree.entries[0].on_disk < before);

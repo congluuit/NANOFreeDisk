@@ -5,11 +5,13 @@
 //! Phase 0 provides known-folder resolution for rule-pack variables; Phase 1 adds
 //! [`fsinfo`], the per-entry metadata query used by the scanner; Phase 2 adds
 //! [`volumes`] (drive overview), [`trash`] (Recycle Bin) and [`appearance`] (accent
-//! color). Restart-Manager lock detection and elevation follow in Phase 3.
+//! color); Phase 3 adds [`locks`] (Restart Manager: which process holds a file).
 
 pub mod appearance;
 pub mod fsinfo;
+pub mod locks;
 pub mod owner;
+pub mod private_dir;
 pub mod shell_menu;
 pub mod trash;
 pub mod volumes;

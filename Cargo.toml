@@ -29,8 +29,10 @@ anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
 serde_json = "1"
 rayon = "1"
+globset = { version = "0.4", default-features = false }
 indicatif = "0.18"
 tempfile = "3"
+proptest = { version = "1", default-features = false, features = ["std"] }
 # SQLite compiled in (no system library); 0.40 is the newest that builds on MSRV 1.85
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
 windows-sys = { version = "0.61", features = [
@@ -38,9 +40,11 @@ windows-sys = { version = "0.61", features = [
   "Win32_Security",
   "Win32_Security_Authorization",
   "Win32_Storage_FileSystem",
+  "Win32_System_Diagnostics_ToolHelp",
   "Win32_System_IO",
   "Win32_System_Ioctl",
   "Win32_System_Registry",
+  "Win32_System_RestartManager",
   "Win32_System_SystemServices",
   "Win32_UI_Shell",
 ] }

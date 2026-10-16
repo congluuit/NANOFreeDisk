@@ -20,6 +20,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.claude.json", "${HOME}/.claude/settings.json", "${HOME}/.claude/settings.local.json"]
 level           = "protected"
 impact          = "Global config, OAuth state and permissions. Deleting forces re-login and loses all settings."
+impact_vi       = "Cấu hình chung, trạng thái OAuth và quyền. Xóa sẽ phải đăng nhập lại và mất mọi thiết lập."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -35,6 +36,7 @@ regenerates     = false
 min_age_days    = 7
 requires_closed = ["claude.exe", "claude", "node.exe"]
 impact          = "Session transcripts used by `claude --resume` / `--continue`. Your code is untouched; you only lose the ability to resume old conversations."
+impact_vi       = "Bản ghi phiên dùng cho `claude --resume` / `--continue`. Mã nguồn không bị ảnh hưởng; bạn chỉ mất khả năng tiếp tục các cuộc hội thoại cũ."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -46,6 +48,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.claude/projects/*/memory/**"]
 level           = "protected"
 impact          = "Per-project auto-memory. Deleting loses everything Claude Code learned about the project."
+impact_vi       = "Bộ nhớ tự động theo dự án. Xóa sẽ mất mọi điều Claude Code đã học về dự án."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -60,6 +63,7 @@ regenerates     = true
 min_age_days    = 1
 requires_closed = ["claude.exe", "claude"]
 impact          = "Temporary per-session todo lists."
+impact_vi       = "Danh sách việc cần làm tạm thời của từng phiên."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -74,6 +78,7 @@ regenerates     = true
 min_age_days    = 1
 requires_closed = ["claude.exe", "claude"]
 impact          = "Shell environment snapshots; recreated on next session."
+impact_vi       = "Ảnh chụp môi trường shell; được tạo lại ở phiên sau."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -86,6 +91,7 @@ paths           = ["${HOME}/.claude/debug/**", "${HOME}/.claude/logs/**", "${HOM
 level           = "safe"
 regenerates     = true
 impact          = "Debug logs and feature-flag cache. You lose logs that could help report a bug."
+impact_vi       = "Nhật ký gỡ lỗi và bộ đệm feature flag. Bạn mất nhật ký có thể giúp báo lỗi."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -100,6 +106,7 @@ regenerates     = false
 min_age_days    = 30
 requires_closed = ["claude.exe", "claude"]
 impact          = "Pre-edit copies of files used to revert Claude Code edits. Old entries are rarely needed."
+impact_vi       = "Bản sao tệp trước khi sửa, dùng để hoàn tác thay đổi của Claude Code. Mục cũ hiếm khi cần."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -111,6 +118,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.claude/plugins/**", "${HOME}/.claude/skills/**", "${HOME}/.claude/commands/**", "${HOME}/.claude/agents/**"]
 level           = "protected"
 impact          = "User-installed plugins, skills, commands and agents."
+impact_vi       = "Plugin, skill, lệnh và agent do người dùng cài."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -129,6 +137,7 @@ level           = "safe"
 regenerates     = true
 requires_closed = ["Claude.exe"]
 impact          = "Chromium/Electron caches and logs; the app rebuilds them and may open slightly slower once."
+impact_vi       = "Bộ đệm và nhật ký Chromium/Electron; ứng dụng tự tạo lại và có thể mở chậm hơn một lần."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -140,6 +149,7 @@ platform        = ["windows"]
 paths           = ["${APPDATA}/Claude/claude_desktop_config.json", "${APPDATA}/Claude/Local Storage/**", "${APPDATA}/Claude/IndexedDB/**"]
 level           = "protected"
 impact          = "MCP configuration and login state."
+impact_vi       = "Cấu hình MCP và trạng thái đăng nhập."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── OpenAI ─────────────────────────────
@@ -153,6 +163,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.codex/auth.json", "${HOME}/.codex/config.toml", "${HOME}/.codex/instructions.md", "${HOME}/.codex/AGENTS.md"]
 level           = "protected"
 impact          = "Credentials and configuration."
+impact_vi       = "Thông tin đăng nhập và cấu hình."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -167,6 +178,7 @@ regenerates     = false
 min_age_days    = 7
 requires_closed = ["codex.exe", "codex", "node.exe"]
 impact          = "Session transcripts and prompt history (used by `codex resume`). Code is untouched."
+impact_vi       = "Bản ghi phiên và lịch sử prompt (dùng cho `codex resume`). Mã nguồn không bị ảnh hưởng."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -179,6 +191,7 @@ paths           = ["${HOME}/.codex/log/**", "${HOME}/.codex/*.log"]
 level           = "safe"
 regenerates     = true
 impact          = "Log files only."
+impact_vi       = "Chỉ là tệp nhật ký."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -192,6 +205,7 @@ level           = "safe"
 regenerates     = true
 requires_closed = ["ChatGPT.exe"]
 impact          = "MSIX app cache; rebuilt on next launch."
+impact_vi       = "Bộ đệm của ứng dụng MSIX; được tạo lại ở lần mở sau."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Google ─────────────────────────────
@@ -205,6 +219,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.gemini/oauth_creds.json", "${HOME}/.gemini/settings.json", "${HOME}/.gemini/GEMINI.md", "${HOME}/.gemini/installation_id"]
 level           = "protected"
 impact          = "Credentials and configuration."
+impact_vi       = "Thông tin đăng nhập và cấu hình."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -218,6 +233,7 @@ level           = "safe"
 regenerates     = true
 requires_closed = ["gemini.exe", "gemini", "node.exe"]
 impact          = "Temporary checkpoints."
+impact_vi       = "Các checkpoint tạm thời."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -231,6 +247,7 @@ level           = "caution"
 min_age_days    = 7
 requires_closed = ["gemini.exe", "gemini"]
 impact          = "Conversation history."
+impact_vi       = "Lịch sử hội thoại."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── GitHub Copilot ─────────────────────────────
@@ -244,6 +261,7 @@ platform        = ["windows"]
 paths           = ["${LOCALAPPDATA}/github-copilot/**", "${HOME}/.copilot/config.json"]
 level           = "protected"
 impact          = "Tokens and host configuration; deleting forces re-login."
+impact_vi       = "Token và cấu hình máy chủ; xóa sẽ phải đăng nhập lại."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -257,6 +275,7 @@ level           = "caution"
 min_age_days    = 14
 requires_closed = ["Code.exe", "copilot.exe"]
 impact          = "Chat history inside VS Code / Copilot CLI."
+impact_vi       = "Lịch sử chat trong VS Code / Copilot CLI."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Cursor ─────────────────────────────
@@ -273,6 +292,7 @@ paths           = [
 ]
 level           = "protected"
 impact          = "Settings, extensions, MCP config and the state DB that holds Cursor chat history."
+impact_vi       = "Thiết lập, extension, cấu hình MCP và DB trạng thái chứa lịch sử chat của Cursor."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -292,6 +312,7 @@ level           = "safe"
 regenerates     = true
 requires_closed = ["Cursor.exe"]
 impact          = "Caches, logs and downloaded updates; rebuilt automatically."
+impact_vi       = "Bộ đệm, nhật ký và bản cập nhật đã tải; được tạo lại tự động."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -305,6 +326,7 @@ level           = "caution"
 min_age_days    = 30
 requires_closed = ["Cursor.exe"]
 impact          = "Per-workspace UI state, per-project chats and Local History. Entries for workspaces that no longer exist on disk are safe."
+impact_vi       = "Trạng thái giao diện theo workspace, chat theo dự án và Local History. Mục của workspace không còn trên đĩa thì an toàn."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Windsurf ─────────────────────────────
@@ -320,6 +342,7 @@ level           = "caution"
 min_age_days    = 14
 requires_closed = ["Windsurf.exe"]
 impact          = "Cascade (agent) conversation history."
+impact_vi       = "Lịch sử hội thoại Cascade (agent)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -331,6 +354,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.codeium/config.json", "${HOME}/.codeium/windsurf/mcp_config.json", "${HOME}/.codeium/windsurf/memories/**"]
 level           = "protected"
 impact          = "Config, MCP and memories."
+impact_vi       = "Cấu hình, MCP và bộ nhớ."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Local LLM runtimes ─────────────────────────────
@@ -346,6 +370,7 @@ level           = "caution"
 regenerates     = false
 requires_closed = ["ollama.exe", "ollama app.exe", "ollama"]
 impact          = "Downloaded models (often tens of GB). You must `ollama pull` again. Prefer removing single models with `ollama rm <name>`."
+impact_vi       = "Model đã tải (thường hàng chục GB). Phải `ollama pull` lại. Nên gỡ từng model bằng `ollama rm <tên>`."
 docs            = "https://github.com/ollama/ollama"
 verified_on     = 2026-10-16
 
@@ -358,6 +383,7 @@ platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.ollama/id_ed25519", "${HOME}/.ollama/id_ed25519.pub"]
 level           = "protected"
 impact          = "Ollama identity key pair used to push/pull from registries; deleting it breaks authenticated access."
+impact_vi       = "Cặp khóa định danh Ollama dùng để push/pull với registry; xóa sẽ hỏng truy cập có xác thực."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -371,6 +397,7 @@ exclude         = ["${HOME}/.cache/huggingface/token"]
 level           = "caution"
 regenerates     = false
 impact          = "Downloaded models and datasets; re-downloaded on next use."
+impact_vi       = "Model và dataset đã tải; được tải lại ở lần dùng sau."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -384,4 +411,5 @@ level           = "caution"
 regenerates     = false
 requires_closed = ["LM Studio.exe"]
 impact          = "Downloaded GGUF models; re-download required. Conversations are NOT touched."
+impact_vi       = "Model GGUF đã tải; phải tải lại. Cuộc hội thoại KHÔNG bị đụng tới."
 verified_on     = 2026-10-16

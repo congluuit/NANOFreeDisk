@@ -4,8 +4,9 @@
 //! Pure scoring over facts the caller gathers (volume sizes, the free-space forecast
 //! from the scan history, the Old & Large total of the current scan), so the rules
 //! are unit-tested and the same in the GUI and a future CLI. Phase 2 only has disk
-//! space signals; SMART (Phase 7), junk (Phase 3) and startup items (E2) add their
-//! own [`Finding`]s later.
+//! space signals; Phase 3 adds junk the rule packs would clean safely
+//! ([`JunkFacts`], fixed in the Clean view); SMART (Phase 7) and startup items (E2)
+//! add their own [`Finding`]s later.
 
 use serde::Serialize;
 
@@ -33,6 +34,18 @@ pub struct ScanFacts {
     /// Old & Large total, each file once.
     pub reclaimable: u64,
 }
+
+/// What the last rule scan found (🟢 Safe junk only).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct JunkFacts {
+    pub bytes: u64,
+    /// Size of the system volume (0 = unknown).
+    pub volume_total: u64,
+}
+
+/// (bytes at least, share of the system volume at least, penalty): the first row
+/// either threshold reaches applies.
+const JUNK: [(u64, f64, u32); 3] = [(10 << 30, 0.05, 8), (2 << 30, 0.02, 4), (500 << 20, 1.0, 2)];
 
 /// How bad a finding is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
@@ -88,7 +101,38 @@ fn pick<T: Copy>(table: &[(f64, T, T)], v: f64, system: bool) -> Option<T> {
 /// Score the machine from what is known.
 #[must_use]
 pub fn score(volumes: &[VolumeFacts], scan: Option<&ScanFacts>) -> HealthScore {
+    score_with(volumes, scan, None)
+}
+
+/// [`score`] plus the junk found by the rule packs.
+#[must_use]
+pub fn score_with(
+    volumes: &[VolumeFacts],
+    scan: Option<&ScanFacts>,
+    junk: Option<&JunkFacts>,
+) -> HealthScore {
     let mut findings = Vec::new();
+    if let Some(j) = junk {
+        let share = if j.volume_total > 0 {
+            j.bytes as f64 / j.volume_total as f64
+        } else {
+            0.0
+        };
+        if let Some(&(_, _, penalty)) = JUNK
+            .iter()
+            .find(|(min, ratio, _)| j.bytes >= *min || share >= *ratio)
+        {
+            findings.push(Finding {
+                kind: "junk",
+                severity: Severity::Warn,
+                penalty,
+                subject: String::new(),
+                value: share * 100.0,
+                bytes: j.bytes,
+                fix: "clean",
+            });
+        }
+    }
     for v in volumes.iter().filter(|v| v.total > 0) {
         let ratio = v.free as f64 / v.total as f64;
         if let Some(penalty) = pick(&LOW_SPACE, ratio, v.system) {
@@ -199,6 +243,27 @@ mod tests {
 
     fn kinds(h: &HealthScore) -> Vec<(&str, u32)> {
         h.findings.iter().map(|f| (f.kind, f.penalty)).collect()
+    }
+
+    #[test]
+    fn junk_costs_points_by_size_or_share() {
+        let c = [vol(r"C:\", 500 * GB, 200 * GB, true)];
+        let junk = |bytes| JunkFacts {
+            bytes,
+            volume_total: 500 * GB,
+        };
+        let penalty = |bytes| {
+            score_with(&c, None, Some(&junk(bytes)))
+                .findings
+                .iter()
+                .find(|f| f.kind == "junk")
+                .map(|f| (f.penalty, f.fix))
+        };
+        assert_eq!(penalty(100 << 20), None);
+        assert_eq!(penalty(600 << 20), Some((2, "clean")));
+        assert_eq!(penalty(3 * GB), Some((4, "clean")));
+        assert_eq!(penalty(30 * GB), Some((8, "clean")));
+        assert_eq!(score_with(&c, None, None), score(&c, None));
     }
 
     #[test]

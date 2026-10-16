@@ -6,7 +6,7 @@
 [pack]
 id          = "windows-system"
 name        = "Windows system junk"
-version     = "0.1.0"
+version     = "0.2.0"
 description = "Temp folders, crash dumps, thumbnail caches, old logs and update leftovers on Windows 10/11."
 
 [[rule]]
@@ -20,6 +20,7 @@ level           = "safe"
 regenerates     = true
 min_age_days    = 1
 impact          = "Per-user temporary files. Files newer than 24 hours and files locked by a running program are skipped automatically."
+impact_vi       = "Tệp tạm của người dùng. Tệp mới hơn 24 giờ và tệp đang bị chương trình khóa được tự động bỏ qua."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -33,6 +34,7 @@ level           = "safe"
 regenerates     = true
 min_age_days    = 1
 impact          = "System-wide temporary files (requires administrator). Locked files are skipped."
+impact_vi       = "Tệp tạm của toàn hệ thống (cần quyền quản trị). Tệp đang bị khóa được bỏ qua."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -46,6 +48,7 @@ level           = "safe"
 regenerates     = true
 requires_closed = ["explorer.exe"]
 impact          = "Thumbnail and icon caches. Explorer rebuilds them; folders with many pictures show thumbnails slightly slower the first time."
+impact_vi       = "Bộ nhớ đệm ảnh thu nhỏ và biểu tượng. Explorer tự tạo lại; thư mục nhiều ảnh sẽ hiện ảnh thu nhỏ chậm hơn một chút ở lần đầu."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -58,6 +61,7 @@ paths           = ["${LOCALAPPDATA}/Microsoft/Windows/INetCache/**", "${LOCALAPP
 level           = "safe"
 regenerates     = true
 impact          = "Legacy internet cache used by some Windows components and apps."
+impact_vi       = "Bộ nhớ đệm Internet cũ mà một số thành phần Windows và ứng dụng vẫn dùng."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -70,6 +74,7 @@ paths           = ["${LOCALAPPDATA}/CrashDumps/**", "${LOCALAPPDATA}/Microsoft/W
 level           = "safe"
 regenerates     = true
 impact          = "Application crash dumps and error reports. You lose data useful for debugging a crash you have not reported yet."
+impact_vi       = "Tệp dump khi ứng dụng bị crash và báo cáo lỗi. Bạn mất dữ liệu hữu ích để gỡ lỗi một sự cố chưa gửi báo cáo."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -82,6 +87,7 @@ paths           = ["${SYSTEMROOT}/Minidump/**", "${SYSTEMROOT}/MEMORY.DMP", "${S
 level           = "safe"
 regenerates     = true
 impact          = "Blue-screen memory dumps (requires administrator). Keep them if you still want to analyse a recent BSOD."
+impact_vi       = "Tệp dump bộ nhớ khi màn hình xanh (cần quyền quản trị). Giữ lại nếu bạn còn muốn phân tích lỗi BSOD gần đây."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -95,6 +101,7 @@ level           = "safe"
 regenerates     = true
 min_age_days    = 7
 impact          = "Component-servicing logs; they can grow to many GB. Current-day logs are kept for troubleshooting."
+impact_vi       = "Nhật ký Component Servicing; có thể phình tới nhiều GB. Nhật ký trong ngày được giữ lại để xử lý sự cố."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -108,6 +115,7 @@ level           = "advanced"
 regenerates     = true
 requires_closed = ["wuauserv"]
 impact          = "Downloaded update packages. Windows Update service must be stopped first; pending updates are downloaded again. Use only when updates are stuck or the folder is huge."
+impact_vi       = "Gói cập nhật đã tải. Phải dừng dịch vụ Windows Update trước; bản cập nhật đang chờ sẽ được tải lại. Chỉ dùng khi cập nhật bị kẹt hoặc thư mục quá lớn."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -119,6 +127,7 @@ platform        = ["windows"]
 paths           = ["${PROGRAMDATA}/Microsoft/Windows/DeliveryOptimization/Cache/**"]
 level           = "protected"
 impact          = "Peer-to-peer update cache. Clear it through Settings → System → Storage → Temporary files → Delivery Optimization Files, which stops the service correctly."
+impact_vi       = "Bộ đệm cập nhật ngang hàng. Hãy xóa trong Settings → System → Storage → Temporary files → Delivery Optimization Files để dịch vụ được dừng đúng cách."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -130,6 +139,7 @@ platform        = ["windows"]
 paths           = ["${PROGRAMDATA}/Microsoft/Windows Defender/Scans/History/**"]
 level           = "protected"
 impact          = "Defender scan history and quarantine metadata. Managed by Defender itself; clear it from Windows Security → Protection history."
+impact_vi       = "Lịch sử quét và siêu dữ liệu cách ly của Defender, do chính Defender quản lý; xóa trong Windows Security → Protection history."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -141,6 +151,7 @@ platform        = ["windows"]
 paths           = ["${PROGRAMDATA}/Package Cache/**"]
 level           = "protected"
 impact          = "Installer cache used to repair or uninstall Visual Studio, VC++ runtimes and .NET. Deleting it breaks repair/uninstall for those products; this app will not touch it."
+impact_vi       = "Bộ đệm trình cài dùng để sửa hoặc gỡ Visual Studio, VC++ runtime và .NET. Xóa sẽ làm hỏng việc sửa/gỡ các sản phẩm đó; ứng dụng này không đụng tới."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -152,6 +163,7 @@ platform        = ["windows"]
 paths           = ["${SYSTEMROOT}/WinSxS/**", "${SYSTEMROOT}/Installer/**", "${SYSTEMROOT}/servicing/**"]
 level           = "protected"
 impact          = "Component store and installer database. Never delete directly. Reclaim space with: DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase"
+impact_vi       = "Kho thành phần và cơ sở dữ liệu trình cài. Không bao giờ xóa trực tiếp. Thu hồi dung lượng bằng: DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase"
 docs            = "https://learn.microsoft.com/windows-hardware/manufacture/desktop/clean-up-the-winsxs-folder"
 verified_on     = 2026-10-16
 
@@ -164,6 +176,7 @@ platform        = ["windows"]
 paths           = ["${SYSTEMDRIVE}/pagefile.sys", "${SYSTEMDRIVE}/hiberfil.sys", "${SYSTEMDRIVE}/swapfile.sys"]
 level           = "protected"
 impact          = "Virtual memory and hibernation files. Disable hibernation with `powercfg /h off` (frees hiberfil.sys) or resize the page file in System → Advanced → Performance."
+impact_vi       = "Tệp bộ nhớ ảo và ngủ đông. Tắt ngủ đông bằng `powercfg /h off` (giải phóng hiberfil.sys) hoặc đổi kích thước page file trong System → Advanced → Performance."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -175,6 +188,7 @@ platform        = ["windows"]
 paths           = ["${SYSTEMDRIVE}/Windows.old/**", "${SYSTEMDRIVE}/$WINDOWS.~BT/**", "${SYSTEMDRIVE}/$WINDOWS.~WS/**"]
 level           = "protected"
 impact          = "Previous Windows installation (needed to roll back an upgrade for 10 days). Remove it with Settings → System → Storage → Temporary files → Previous Windows installation(s)."
+impact_vi       = "Bản cài Windows trước (cần để quay lại trong 10 ngày sau khi nâng cấp). Xóa trong Settings → System → Storage → Temporary files → Previous Windows installation(s)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -186,6 +200,7 @@ platform        = ["windows"]
 paths           = ["${SYSTEMDRIVE}/System Volume Information/**"]
 level           = "protected"
 impact          = "Restore points and shadow copies. Manage them in System Protection or with `vssadmin list shadows`."
+impact_vi       = "Điểm khôi phục và shadow copy. Quản lý trong System Protection hoặc bằng `vssadmin list shadows`."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -197,64 +212,5 @@ platform        = ["windows"]
 paths           = ["${SYSTEMROOT}/Prefetch/**"]
 level           = "protected"
 impact          = "Prefetch data makes apps start faster and is tiny. Deleting it only slows the next launches; this app never offers it."
-verified_on     = 2026-10-16
-
-[[rule]]
-id              = "gpu.nvidia.shader-cache"
-vendor          = "NVIDIA"
-app             = "GPU driver"
-category        = "gpu"
-platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/NVIDIA/DXCache/**", "${LOCALAPPDATA}/NVIDIA/GLCache/**", "${LOCALAPPDATA}/NVIDIA Corporation/NV_Cache/**", "${LOCALAPPDATA}/NVIDIA/OptixCache/**"]
-level           = "safe"
-regenerates     = true
-impact          = "Compiled shader caches. Games and apps recompile shaders on first launch (short stutter once)."
-verified_on     = 2026-10-16
-
-[[rule]]
-id              = "gpu.amd.shader-cache"
-vendor          = "AMD"
-app             = "GPU driver"
-category        = "gpu"
-platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/AMD/DxCache/**", "${LOCALAPPDATA}/AMD/DxcCache/**", "${LOCALAPPDATA}/AMD/GLCache/**", "${LOCALAPPDATA}/AMD/VkCache/**"]
-level           = "safe"
-regenerates     = true
-impact          = "Compiled shader caches; rebuilt on first launch."
-verified_on     = 2026-10-16
-
-[[rule]]
-id              = "gpu.intel.shader-cache"
-vendor          = "Intel"
-app             = "GPU driver"
-category        = "gpu"
-platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/Intel/ShaderCache/**"]
-level           = "safe"
-regenerates     = true
-impact          = "Compiled shader caches; rebuilt on first launch."
-verified_on     = 2026-10-16
-
-[[rule]]
-id              = "gpu.d3d.shader-cache"
-vendor          = "Microsoft"
-app             = "Direct3D"
-category        = "gpu"
-platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/D3DSCache/**"]
-level           = "safe"
-regenerates     = true
-impact          = "Direct3D shader cache; rebuilt automatically."
-verified_on     = 2026-10-16
-
-[[rule]]
-id              = "nvidia.driver-downloads"
-vendor          = "NVIDIA"
-app             = "NVIDIA App / GeForce Experience"
-category        = "system"
-platform        = ["windows"]
-paths           = ["${PROGRAMDATA}/NVIDIA Corporation/Downloader/**", "${PROGRAMDATA}/NVIDIA Corporation/NV_Cache/**"]
-level           = "safe"
-regenerates     = true
-impact          = "Downloaded driver packages that were already installed."
+impact_vi       = "Dữ liệu Prefetch giúp ứng dụng mở nhanh hơn và rất nhỏ. Xóa chỉ làm các lần mở sau chậm hơn; ứng dụng này không bao giờ đề xuất."
 verified_on     = 2026-10-16

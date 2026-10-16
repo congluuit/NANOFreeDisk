@@ -10,8 +10,12 @@
 //! them with a real path. The full SafetyGate (Restart Manager, Authenticode, rule
 //! levels) is added in Phase 3 on top of both.
 
+pub mod gate;
+
 use std::fmt;
 use std::path::{Component, Path, Prefix};
+
+pub use gate::{GateReport, LiveProbe, Origin, Probe, SafetyGate, Verdict, Warning};
 
 /// Locations that must never be deleted through the application, in template form.
 ///
@@ -104,7 +108,7 @@ pub const CONTAINER_TEMPLATES: &[&str] = &[
 
 /// Names protected (with everything below them) directly under the root of *any*
 /// volume, not only the system drive.
-const VOLUME_ROOT_PROTECTED: &[&str] = &[
+pub(crate) const VOLUME_ROOT_PROTECTED: &[&str] = &[
     "$recycle.bin",
     "system volume information",
     "$extend",
@@ -141,6 +145,24 @@ pub enum Blocked {
     ContainsMountPoint,
     /// The path no longer exists or cannot be resolved.
     Unresolvable(String),
+    /// Names an NTFS alternate data stream (`file.txt:stream`).
+    Stream,
+    /// A device path (`\.\PhysicalDrive0`) or a reserved DOS device name (`NUL`, `COM1`).
+    Device,
+    /// A link among the parent folders leads onto another volume.
+    CrossVolume,
+    /// Carries the SYSTEM attribute where Windows or programs keep their files.
+    SystemFile,
+    /// A program image (`.exe`, `.dll`, `.sys`…) inside the Windows folder.
+    SystemBinary,
+    /// A cloud placeholder: deleting it here deletes it in the cloud as well.
+    CloudFile,
+    /// The item changed (type, size or date) since the plan was made.
+    Changed,
+    /// The rule marks this location as protected: the app only explains it.
+    ProtectedLevel,
+    /// Another item of the same plan already contains this one.
+    Nested,
 }
 
 impl Blocked {
@@ -155,6 +177,15 @@ impl Blocked {
             Self::Link => "link",
             Self::ContainsMountPoint => "contains-mount-point",
             Self::Unresolvable(_) => "unresolvable",
+            Self::Stream => "stream",
+            Self::Device => "device",
+            Self::CrossVolume => "cross-volume",
+            Self::SystemFile => "system-file",
+            Self::SystemBinary => "system-binary",
+            Self::CloudFile => "cloud-file",
+            Self::Changed => "changed",
+            Self::ProtectedLevel => "protected-level",
+            Self::Nested => "nested",
         }
     }
 
@@ -182,6 +213,17 @@ impl fmt::Display for Blocked {
             Self::Link => f.write_str("links, junctions and mount points are not deleted here"),
             Self::ContainsMountPoint => f.write_str("contains a volume mount point"),
             Self::Unresolvable(why) => write!(f, "cannot resolve path: {why}"),
+            Self::Stream => f.write_str("alternate data streams are not deleted"),
+            Self::Device => f.write_str("device paths and reserved device names are refused"),
+            Self::CrossVolume => f.write_str("a link in the path leads onto another drive"),
+            Self::SystemFile => f.write_str("system file in a Windows or program folder"),
+            Self::SystemBinary => f.write_str("program file inside the Windows folder"),
+            Self::CloudFile => {
+                f.write_str("cloud placeholder: deleting it would delete the cloud copy too")
+            }
+            Self::Changed => f.write_str("the item changed since it was planned"),
+            Self::ProtectedLevel => f.write_str("the rule marks this location as protected"),
+            Self::Nested => f.write_str("already included through a containing folder"),
         }
     }
 }
@@ -200,61 +242,7 @@ pub fn check_manual_delete(
     path: &Path,
     resolve: &impl Fn(&str) -> Option<String>,
 ) -> Result<(), Blocked> {
-    let Some(cand) = comparable(path) else {
-        return Err(Blocked::Unresolvable(path.display().to_string()));
-    };
-    let parts: Vec<&str> = cand.split('/').filter(|p| !p.is_empty()).collect();
-    // `c:` is one component, `//server/share` two.
-    let volume_depth = if cand.starts_with("//") { 2 } else { 1 };
-    if parts.len() <= volume_depth {
-        return Err(Blocked::VolumeRoot);
-    }
-    if let Some(root) = expand_template("${SYSTEMROOT}", resolve) {
-        if is_within(&cand, &root) {
-            return Err(Blocked::SystemDir);
-        }
-    }
-    let top = parts[volume_depth];
-    if VOLUME_ROOT_PROTECTED.contains(&top) {
-        return Err(Blocked::Protected {
-            template: format!("<volume>/{top}"),
-        });
-    }
-    if top == "users" && parts.len() == volume_depth + 1 {
-        return Err(Blocked::ContainsProtected {
-            template: "<volume>/Users".to_owned(),
-        });
-    }
-
-    let subtree = PROTECTED_TEMPLATES
-        .iter()
-        .filter(|t| !USER_DATA_TEMPLATES.contains(t));
-    for template in subtree {
-        let Some(root) = expand_template(template, resolve) else {
-            continue;
-        };
-        if is_within(&cand, &root) {
-            return Err(Blocked::Protected {
-                template: (*template).to_owned(),
-            });
-        }
-        if is_within(&root, &cand) {
-            return Err(Blocked::ContainsProtected {
-                template: (*template).to_owned(),
-            });
-        }
-    }
-    for template in USER_DATA_TEMPLATES.iter().chain(CONTAINER_TEMPLATES) {
-        let Some(root) = expand_template(template, resolve) else {
-            continue;
-        };
-        if is_within(&root, &cand) {
-            return Err(Blocked::ContainsProtected {
-                template: (*template).to_owned(),
-            });
-        }
-    }
-    Ok(())
+    SafetyGate::new(resolve).check_path(path, Origin::Manual)
 }
 
 /// `true` when deleting `bytes` deserves an extra, louder confirmation: more than
@@ -265,7 +253,7 @@ pub const fn needs_extra_confirmation(bytes: u64, volume_size: u64) -> bool {
 }
 
 /// `true` when `inner` equals `outer` or lies below it (both [`comparable`] forms).
-fn is_within(inner: &str, outer: &str) -> bool {
+pub(crate) fn is_within(inner: &str, outer: &str) -> bool {
     inner == outer
         || (inner.len() > outer.len()
             && inner.starts_with(outer)
@@ -273,7 +261,10 @@ fn is_within(inner: &str, outer: &str) -> bool {
 }
 
 /// Expand a `${VAR}/rest` template into its [`comparable`] form.
-fn expand_template(template: &str, resolve: &impl Fn(&str) -> Option<String>) -> Option<String> {
+pub(crate) fn expand_template(
+    template: &str,
+    resolve: &impl Fn(&str) -> Option<String>,
+) -> Option<String> {
     let rest = template.strip_prefix("${")?;
     let (var, tail) = rest.split_once('}')?;
     let base = resolve(var)?;
@@ -287,7 +278,11 @@ fn expand_template(template: &str, resolve: &impl Fn(&str) -> Option<String>) ->
 /// (`\\?\C:\x` → `c:/x`, `\\?\UNC\srv\share` → `//srv/share`), `.` / `..` resolved
 /// lexically and, on Windows, trailing dots and spaces trimmed from every name (the
 /// Win32 layer ignores them). `None` for relative paths.
-fn comparable(path: &Path) -> Option<String> {
+pub(crate) fn comparable(path: &Path) -> Option<String> {
+    // On Windows `\Windows` is relative to the current drive: not absolute.
+    if !path.is_absolute() {
+        return None;
+    }
     let mut prefix = String::new();
     let mut parts: Vec<String> = Vec::new();
     let mut absolute = false;

@@ -1,8 +1,11 @@
 <script lang="ts">
-  // Confirmation for "Move to Recycle Bin". The backend decides what is allowed
-  // (`plan_delete`) and re-checks every item against the live filesystem when the
-  // user confirms (`recycle`).
+  // Confirmation for deleting hand-picked items (Recycle Bin from Analyze / Old &
+  // Large, quarantine from Tidy up). The backend decides what is allowed
+  // (`plan_delete`); on confirm every item goes Planner → SafetyGate (live re-check)
+  // → Executor → Activity log (`delete_entries`).
   import { api } from "../api";
+  import { cleanApi } from "../clean/api";
+  import { reasonText } from "../clean/state.svelte";
   import { formatCount, formatPercent, formatSize, templateLabel } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { afterDelete, app, fail, toast } from "../state.svelte";
@@ -33,6 +36,7 @@
   const allowed = $derived(plan?.items.filter((i) => i.allowed) ?? []);
   const blocked = $derived(plan?.items.filter((i) => !i.allowed) ?? []);
   const canGo = $derived(!!plan && allowed.length > 0 && (!plan.extraConfirm || ack) && !busy);
+  const quarantine = $derived(app.deleteMode.mode === "quarantine");
 
   function close() {
     if (!busy) app.deleting = null;
@@ -46,7 +50,7 @@
     if (!canGo) return;
     busy = true;
     try {
-      const out = await api.recycle(allowed.map((i) => i.id));
+      const out = await cleanApi.deleteEntries(allowed.map((i) => i.id), app.deleteMode.mode, app.deleteMode.kind);
       const done = out.filter((o) => o.status === "done");
       const bytes = done.reduce((s, o) => s + o.onDisk, 0);
       const failed = out.length - done.length;
@@ -57,7 +61,7 @@
       for (const o of out) {
         if (o.status === "failed" && o.message) toast(o.message, "error");
         if (o.status === "declined") toast(t("delete-declined"));
-        if (o.status === "blocked" && o.reason) toast(t(`reason-${o.reason}`, { template: templateLabel(null) }), "error");
+        if ((o.status === "blocked" || o.status === "partial") && o.reason) toast(reasonText(o.reason), "error");
       }
       await afterDelete(done.map((o) => o.id));
     } catch (e) {
@@ -78,14 +82,14 @@
   <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="del-title" bind:this={dialog}>
     <header>
       <span class="ic"><Icon name="trash" size={22} /></span>
-      <h2 id="del-title">{t("delete-title")}</h2>
+      <h2 id="del-title">{quarantine ? t("delete-title-quarantine") : t("delete-title")}</h2>
     </header>
 
     {#if !plan}
       <p class="muted">…</p>
     {:else}
       {#if allowed.length}
-        <p>{t("delete-intro")}</p>
+        <p>{quarantine ? t("delete-intro-quarantine") : t("delete-intro")}</p>
         <ul class="items">
           {#each allowed as i (i.id)}
             <li>
@@ -125,14 +129,14 @@
           </span>
         </label>
       {/if}
-      <p class="note muted">{t("delete-nuke-note")}</p>
+      <p class="note muted">{quarantine ? t("delete-quarantine-note") : t("delete-nuke-note")}</p>
     {/if}
 
     <footer>
       <button class="btn cancel" onclick={close} disabled={busy}>{t("delete-cancel")}</button>
       <button class="btn danger" onclick={go} disabled={!canGo} data-effect title={t("action-recycle-hint")}>
         <Icon name="trash" size={16} />
-        {busy ? t("delete-working") : t("delete-confirm")}
+        {busy ? t("delete-working") : quarantine ? t("delete-confirm-quarantine") : t("delete-confirm")}
       </button>
     </footer>
   </div>

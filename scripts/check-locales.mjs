@@ -89,7 +89,28 @@ for (const file of files) {
 // Every literal key the desktop UI asks for — t("key") or a menu/nav `label: "key"` —
 // must exist (dynamic keys such as `cat-${c}` are covered by the parity check above).
 const ui = join(dirname(fileURLToPath(import.meta.url)), "..", "apps", "nanofreedisk", "src");
-const en = existsSync(join(root, "en", "app.ftl")) ? parse(readFileSync(join(root, "en", "app.ftl"), "utf8")) : null;
+// The UI loads every en/*.ftl into one bundle, so a key may live in any of them —
+// but only in one (Fluent refuses to redefine a message).
+let en = null;
+if (existsSync(join(root, "en"))) {
+  en = new Map();
+  for (const f of [...files].sort()) {
+    const path = join(root, "en", f);
+    if (!existsSync(path)) continue;
+    let parsed;
+    try {
+      parsed = parse(readFileSync(path, "utf8"));
+    } catch {
+      continue; // already reported above
+    }
+    for (const [key, vars] of parsed) {
+      if (en.has(key)) {
+        console.error(`en/${f}: "${key}" is already defined in en/${en.get(key).file}`);
+        errors++;
+      } else en.set(key, { vars, file: f });
+    }
+  }
+}
 if (en && existsSync(ui)) {
   const used = new Map();
   const walk = (dir) => {
@@ -108,7 +129,7 @@ if (en && existsSync(ui)) {
   walk(ui);
   for (const [key, path] of used) {
     if (!en.has(key)) {
-      console.error(`${path}: uses "${key}", which is not in en/app.ftl`);
+      console.error(`${path}: uses "${key}", which is not in any en/*.ftl`);
       errors++;
     }
   }

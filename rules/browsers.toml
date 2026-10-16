@@ -1,0 +1,138 @@
+# NANOFreeDisk rule pack: web browser caches
+# Only caches that every browser rebuilds by itself: the HTTP cache, compiled JavaScript
+# (Code Cache), GPU/shader caches and Service Worker CacheStorage. Never cookies,
+# history, saved passwords (Login Data), bookmarks, Local Storage, IndexedDB, sessions
+# or extensions — and never a whole profile. A running browser keeps its cache locked:
+# close it first or the locked files are skipped.
+
+[pack]
+id          = "browsers"
+name        = "Web browser caches"
+version     = "0.1.0"
+description = "HTTP, code, GPU and Service Worker caches of Chrome, Edge, Brave, Vivaldi, Opera and Firefox on Windows."
+
+[[rule]]
+id              = "browser.chrome.cache"
+vendor          = "Google"
+app             = "Chrome"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Google/Chrome/User Data/*/Cache/**",
+  "${LOCALAPPDATA}/Google/Chrome/User Data/*/Code Cache/**",
+  "${LOCALAPPDATA}/Google/Chrome/User Data/*/GPUCache/**",
+  "${LOCALAPPDATA}/Google/Chrome/User Data/*/Service Worker/CacheStorage/**",
+  "${LOCALAPPDATA}/Google/Chrome/User Data/ShaderCache/**",
+  "${LOCALAPPDATA}/Google/Chrome/User Data/GrShaderCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["chrome.exe"]
+impact          = "Cached web pages, scripts and images. Sites load a little slower the first time; you stay signed in and keep history, passwords and bookmarks."
+impact_vi       = "Bộ đệm trang web, script và hình ảnh. Trang web tải chậm hơn một chút ở lần đầu; bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, dấu trang."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "browser.edge.cache"
+vendor          = "Microsoft"
+app             = "Edge"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/*/Cache/**",
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/*/Code Cache/**",
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/*/GPUCache/**",
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/*/Service Worker/CacheStorage/**",
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/ShaderCache/**",
+  "${LOCALAPPDATA}/Microsoft/Edge/User Data/GrShaderCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["msedge.exe"]
+impact          = "Cached web pages, scripts and images. Sites load a little slower the first time; you stay signed in and keep history, passwords and favorites."
+impact_vi       = "Bộ đệm trang web, script và hình ảnh. Trang web tải chậm hơn một chút ở lần đầu; bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, mục yêu thích."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "browser.brave.cache"
+vendor          = "Brave Software"
+app             = "Brave"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/*/Cache/**",
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/*/Code Cache/**",
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/*/GPUCache/**",
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/*/Service Worker/CacheStorage/**",
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/ShaderCache/**",
+  "${LOCALAPPDATA}/BraveSoftware/Brave-Browser/User Data/GrShaderCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["brave.exe"]
+impact          = "Cached web pages, scripts and images. Sites load a little slower the first time; you stay signed in and keep history, passwords and bookmarks."
+impact_vi       = "Bộ đệm trang web, script và hình ảnh. Trang web tải chậm hơn một chút ở lần đầu; bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, dấu trang."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "browser.vivaldi.cache"
+vendor          = "Vivaldi Technologies"
+app             = "Vivaldi"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Vivaldi/User Data/*/Cache/**",
+  "${LOCALAPPDATA}/Vivaldi/User Data/*/Code Cache/**",
+  "${LOCALAPPDATA}/Vivaldi/User Data/*/GPUCache/**",
+  "${LOCALAPPDATA}/Vivaldi/User Data/*/Service Worker/CacheStorage/**",
+  "${LOCALAPPDATA}/Vivaldi/User Data/ShaderCache/**",
+  "${LOCALAPPDATA}/Vivaldi/User Data/GrShaderCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["vivaldi.exe"]
+impact          = "Cached web pages, scripts and images. Sites load a little slower the first time; you stay signed in and keep history, passwords and bookmarks."
+impact_vi       = "Bộ đệm trang web, script và hình ảnh. Trang web tải chậm hơn một chút ở lần đầu; bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, dấu trang."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "browser.opera.cache"
+vendor          = "Opera"
+app             = "Opera / Opera GX"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Opera Software/Opera Stable/Cache/**",
+  "${LOCALAPPDATA}/Opera Software/Opera GX Stable/Cache/**",
+  "${APPDATA}/Opera Software/Opera Stable/Code Cache/**",
+  "${APPDATA}/Opera Software/Opera Stable/GPUCache/**",
+  "${APPDATA}/Opera Software/Opera Stable/Service Worker/CacheStorage/**",
+  "${APPDATA}/Opera Software/Opera GX Stable/Code Cache/**",
+  "${APPDATA}/Opera Software/Opera GX Stable/GPUCache/**",
+  "${APPDATA}/Opera Software/Opera GX Stable/Service Worker/CacheStorage/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["opera.exe"]
+impact          = "Cached web pages, scripts and images. Sites load a little slower the first time; you stay signed in and keep history, passwords and bookmarks."
+impact_vi       = "Bộ đệm trang web, script và hình ảnh. Trang web tải chậm hơn một chút ở lần đầu; bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, dấu trang."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "browser.firefox.cache"
+vendor          = "Mozilla"
+app             = "Firefox"
+category        = "browser"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Mozilla/Firefox/Profiles/*/cache2/**",
+  "${LOCALAPPDATA}/Mozilla/Firefox/Profiles/*/startupCache/**",
+  "${LOCALAPPDATA}/Mozilla/Firefox/Profiles/*/shader-cache/**",
+  "${LOCALAPPDATA}/Mozilla/Firefox/Profiles/*/jumpListCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["firefox.exe"]
+impact          = "Cached web pages and the startup cache, kept outside the Firefox profile. You stay signed in and keep history, passwords and bookmarks."
+impact_vi       = "Bộ đệm trang web và bộ đệm khởi động, nằm ngoài profile Firefox. Bạn vẫn đăng nhập và giữ nguyên lịch sử, mật khẩu, dấu trang."
+verified_on     = 2026-10-16

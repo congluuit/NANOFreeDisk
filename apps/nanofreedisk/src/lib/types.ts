@@ -290,7 +290,16 @@ export type BlockReason =
   | "contains-protected"
   | "link"
   | "contains-mount-point"
-  | "unresolvable";
+  | "unresolvable"
+  | "stream"
+  | "device"
+  | "cross-volume"
+  | "system-file"
+  | "system-binary"
+  | "cloud-file"
+  | "changed"
+  | "protected-level"
+  | "nested";
 
 export interface DeleteItem {
   id: number;

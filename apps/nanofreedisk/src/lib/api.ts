@@ -52,7 +52,7 @@ async function backend(): Promise<void> {
   }
 }
 
-async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
+export async function call<T>(cmd: string, args?: Record<string, unknown>): Promise<T> {
   await backend();
   return invokeImpl!<T>(cmd, args);
 }
