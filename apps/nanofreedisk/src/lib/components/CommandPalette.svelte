@@ -42,6 +42,7 @@
       ["tidy", "nav-tidy", "folder"],
       ["devcache", "nav-devcache", "devcache"],
       ["duplicates", "nav-duplicates", "duplicates"],
+      ["monitor", "nav-monitor", "monitor"],
       ["settings", "nav-settings", "settings"],
     ];
     for (const [view, id, icon] of nav) {

@@ -257,6 +257,23 @@
     </div>
   </div>
 
+  <div class="block card" data-settings="monitor">
+    <h2>{t("settings-monitor")}</h2>
+    <label class="toggle" title={t("hint-mon-alerts")}>
+      <input type="checkbox" bind:checked={app.settings.monitorAlerts} data-effect title={t("hint-mon-alerts")} />
+      <span>{t("settings-mon-alerts")}</span>
+    </label>
+    <div class="row">
+      <label>{t("settings-mon-mbps")}
+        <input type="number" min="0.5" max="10000" step="0.5" bind:value={app.settings.monitorMbps} data-effect title={t("hint-mon-threshold")} />
+      </label>
+      <label>{t("settings-mon-minutes")}
+        <input type="number" min="1" max="120" step="1" bind:value={app.settings.monitorMinutes} data-effect title={t("hint-mon-threshold")} />
+      </label>
+    </div>
+    <p class="muted small">{t("settings-mon-hint")}</p>
+  </div>
+
   <div class="block card" data-settings="devcache">
     <h2>{t("settings-devcache")}</h2>
     <label class="toggle" title={t("hint-dev-alerts")}>

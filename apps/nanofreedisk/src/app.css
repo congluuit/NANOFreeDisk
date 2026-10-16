@@ -17,6 +17,8 @@
   --temp-ok: #22c55e;
   --temp-warm: #eab308;
   --temp-hot: #ef4444;
+  --io-read: #60a5fa;
+  --io-write: #f97316;
   --shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
   --radius: 10px;
   --radius-sm: 6px;

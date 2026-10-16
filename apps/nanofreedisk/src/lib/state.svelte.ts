@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
@@ -40,6 +40,11 @@ export interface Settings {
   dupeMinMb: number;
   /** Duplicates: how the copy to keep is chosen (auto, oldest, newest, shortest). */
   dupeKeep: string;
+  /** Monitor: notify when a process keeps writing faster than `monitorMbps` MB/s
+   * for `monitorMinutes` minutes (log-spam detector, C8). */
+  monitorAlerts: boolean;
+  monitorMbps: number;
+  monitorMinutes: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +66,9 @@ export const DEFAULT_SETTINGS: Settings = {
   staleDays: 90,
   dupeMinMb: 1,
   dupeKeep: "auto",
+  monitorAlerts: false,
+  monitorMbps: 5,
+  monitorMinutes: 5,
 };
 
 interface Toast {

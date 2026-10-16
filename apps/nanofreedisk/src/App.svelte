@@ -28,6 +28,8 @@
   import Hardware from "./lib/views/Hardware.svelte";
   import DevCache from "./lib/views/DevCache.svelte";
   import Duplicates from "./lib/views/Duplicates.svelte";
+  import Monitor from "./lib/views/Monitor.svelte";
+  import { startMonitorSync } from "./lib/monitor/sync.svelte";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
 
@@ -41,7 +43,7 @@
     { id: "hardware", icon: "cpu", label: "nav-hardware" },
     { id: "devcache", icon: "devcache", label: "nav-devcache" },
     { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
-    { id: null, icon: "monitor", label: "nav-monitor", phase: "Phase 6" },
+    { id: "monitor", icon: "monitor", label: "nav-monitor" },
     { id: null, icon: "health", label: "nav-health", phase: "Phase 7" },
   ];
 
@@ -58,6 +60,7 @@
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
       startThermalSync();
+      startMonitorSync();
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
@@ -175,6 +178,8 @@
       <DevCache />
     {:else if app.view === "duplicates"}
       <Duplicates />
+    {:else if app.view === "monitor"}
+      <Monitor />
     {:else}
       <Settings />
     {/if}
