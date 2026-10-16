@@ -3,6 +3,7 @@
   import { hw, type HwTab } from "../hw/state.svelte";
   import Icon from "../components/Icon.svelte";
   import HardwareOverview from "./HardwareOverview.svelte";
+  import HardwareSensors from "./HardwareSensors.svelte";
 
   const TABS: { id: HwTab; icon: string; label: string }[] = [
     { id: "overview", icon: "cpu", label: "hw-tab-overview" },
@@ -35,6 +36,8 @@
   <div class="body">
     {#if hw.tab === "overview"}
       <HardwareOverview />
+    {:else if hw.tab === "sensors"}
+      <HardwareSensors />
     {/if}
   </div>
 </section>

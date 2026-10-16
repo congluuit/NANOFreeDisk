@@ -17,7 +17,7 @@ use super::{Handle, wide};
 use crate::Disk;
 
 /// Open `\\.\PhysicalDrive{index}` for queries only.
-pub(crate) fn open(index: u32) -> Option<Handle> {
+pub fn open(index: u32) -> Option<Handle> {
     let path = wide(&format!(r"\\.\PhysicalDrive{index}"));
     // SAFETY: valid path; zero access rights.
     let h = unsafe {
@@ -147,7 +147,7 @@ fn disk(index: u32, h: &Handle) -> Option<Disk> {
     })
 }
 
-fn temperature_of(h: &Handle) -> Option<f32> {
+pub fn temperature_of(h: &Handle) -> Option<f32> {
     let mut buf = [0u8; 256];
     let got = query(h, StorageDeviceTemperatureProperty, &mut buf)?;
     // header: Version, Size, Critical i16, Warning i16, InfoCount u16, Reserved, Reserved1[2]

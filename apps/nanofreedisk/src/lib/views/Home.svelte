@@ -4,6 +4,7 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, refreshVolumes, startScan } from "../state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
+  import TempCard from "../components/TempCard.svelte";
   import Icon from "../components/Icon.svelte";
   import type { Volume } from "../types";
 
@@ -47,6 +48,7 @@
   </header>
 
   <HealthCard />
+  <TempCard />
 
   <div class="big">
     <button class="action card" disabled title={t("home-action-free-hint")}>

@@ -1,7 +1,7 @@
 // Browser-only stand-in for the Hardware commands (`pnpm dev` without Tauri), shaped
 // like the reference machine (i9-13900HX laptop) so the views can be designed.
 
-import type { HwInventory } from "./types";
+import type { HwInventory, Sensor, SensorSnapshot } from "./types";
 
 const GB = 2 ** 30;
 
@@ -86,7 +86,79 @@ const inventory: HwInventory = {
   batteries: [{ name: "BAT", manufacturer: "Notebook", chemistry: "LION", design_mwh: 70840, full_mwh: 59968, cycles: 163, charge_percent: 87 }],
 };
 
+type Def = Omit<Sensor, "value" | "min" | "max" | "id"> & { gen: (t: number) => number };
+const def = (device: string, kind: Sensor["kind"], label: string, gen: (t: number) => number, extra: Partial<Def> = {}): Def => ({
+  device, kind, label, index: null, detail: null, primary: false, estimated: false, source: "mock", gen, ...extra,
+});
+const wave = (base: number, amp: number, period: number, phase = 0) => (t: number) => base + amp * Math.sin(t / period + phase);
+const DEFS: Def[] = [
+  def("cpu", "load", "cpu-total", wave(14, 9, 7), { primary: true }),
+  def("cpu", "load", "cpu-thread-max", wave(48, 30, 5)),
+  ...Array.from({ length: 32 }, (_, i) =>
+    def("cpu", "load", "cpu-thread", wave(12 + (i % 5) * 4, 10, 3 + (i % 7), i), { index: i + 1, detail: i < 16 ? "P" : "E" }),
+  ),
+  def("cpu", "clock", "cpu-clock-avg", wave(3900, 500, 6), { primary: true, estimated: true }),
+  def("memory", "load", "mem-load", wave(64, 3, 30), { primary: true }),
+  def("memory", "data", "mem-used", wave(20.5 * GB, GB, 30), { primary: true }),
+  def("memory", "data", "mem-available", wave(11 * GB, GB, 30, Math.PI)),
+  def("gpu1", "temperature", "gpu-temp", wave(56, 6, 20), { primary: true, source: "NVML" }),
+  def("gpu1", "clock", "gpu-clock-core", wave(1400, 900, 9), { primary: true }),
+  def("gpu1", "power", "gpu-power", wave(22, 18, 9), { primary: true }),
+  def("gpu1", "load", "gpu-load", wave(25, 20, 9), { primary: true }),
+  def("gpu1", "load", "gpu-load-3d", wave(25, 20, 9)),
+  def("gpu1", "data", "gpu-mem-used", wave(1.2 * GB, 0.3 * GB, 15), { primary: true }),
+  def("gpu0", "load", "gpu-load", wave(6, 4, 4), { primary: true }),
+  def("disk0", "temperature", "disk-temp", wave(47, 2, 40), { primary: true }),
+  def("disk0", "throughput", "disk-read", (t) => Math.max(0, 40e6 * Math.sin(t / 3))),
+  def("disk1", "temperature", "disk-temp", wave(63, 4, 40), { primary: true }),
+  def("battery0", "level", "bat-charge", wave(87, 0.5, 60), { primary: true }),
+  def("battery0", "power", "bat-rate", wave(-14, 4, 10), { primary: true }),
+  def("battery0", "level", "bat-wear", () => 15.3),
+  def("net0", "throughput", "net-down", (t) => Math.max(0, 2e6 * Math.sin(t / 2)), { primary: true }),
+  def("net0", "throughput", "net-up", (t) => Math.max(0, 3e5 * Math.cos(t / 2)), { primary: true }),
+];
+const stats = new Map<string, { min: number; max: number }>();
+let samples = 0;
+
+function snapshot(): SensorSnapshot {
+  samples++;
+  const t = Date.now() / 1000;
+  const sensors = DEFS.map((d) => {
+    const id = `${d.device}/${d.label}${d.index != null ? `/${d.index}` : ""}`;
+    const value = d.gen(t);
+    const st = stats.get(id) ?? { min: value, max: value };
+    st.min = Math.min(st.min, value);
+    st.max = Math.max(st.max, value);
+    stats.set(id, st);
+    const { gen: _gen, ...info } = d;
+    return { ...info, id, value, min: st.min, max: st.max };
+  });
+  return {
+    devices: [
+      { id: "cpu", kind: "cpu", name: inventory.cpu.name },
+      { id: "memory", kind: "memory", name: "Memory" },
+      { id: "gpu0", kind: "gpu", name: "Intel(R) UHD Graphics" },
+      { id: "gpu1", kind: "gpu", name: "NVIDIA GeForce RTX 4050 Laptop GPU" },
+      { id: "disk0", kind: "storage", name: "Samsung SSD 980 PRO 1TB" },
+      { id: "disk1", kind: "storage", name: "SAMSUNG MZVLB512HAJQ-000L7" },
+      { id: "battery0", kind: "battery", name: "BAT" },
+      { id: "net0", kind: "network", name: "Intel(R) Wi-Fi 6E AX211 160MHz" },
+    ],
+    sensors,
+    notes: ["temperature", "power", "voltage"].map((kind) => ({ device: "cpu", kind: kind as Sensor["kind"], reason: "needs-pawnio" })),
+    samples,
+    sample_ms: 14.2,
+  };
+}
+
 export const hwHandlers: Record<string, (a: Record<string, any>) => unknown> = {
   hw_inventory: () => ({ ...inventory, collected_at: Math.floor(Date.now() / 1000) }),
   hw_export: () => undefined,
+  sensors_snapshot: () => snapshot(),
+  sensors_reset_minmax: () => stats.clear(),
+  sensors_history: ({ id, n }) => {
+    const d = DEFS.find((x) => id === `${x.device}/${x.label}${x.index != null ? `/${x.index}` : ""}`);
+    const now = Date.now() / 1000;
+    return d ? Array.from({ length: n }, (_, i) => d.gen(now - (n - 1 - i))) : [];
+  },
 };

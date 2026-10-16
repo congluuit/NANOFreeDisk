@@ -1,9 +1,24 @@
-//! Hardware view commands (docs/HARDWARE_MONITOR.md §4): inventory.
+//! Hardware view commands (docs/HARDWARE_MONITOR.md §4): inventory and sensors.
 //! Hardware access is read-only.
+//!
+//! Sensors are sampled on demand: the Sensors tab (and the Home card) poll
+//! [`sensors_snapshot`] about once a second, which samples when the last sample is
+//! older than ~0.9 s. Nothing samples while no view asks.
 
 use std::path::Path;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use nfd_sensors::{SensorHub, Snapshot};
+use tauri::State;
 
 use super::{CmdResult, err};
+
+/// Hardware view state, managed next to `AppState`.
+#[derive(Debug, Default)]
+pub struct HwState {
+    hub: Arc<Mutex<Option<SensorHub>>>,
+}
 
 /// Static hardware inventory (`nanofreedisk.hwinfo.v1`).
 #[tauri::command]
@@ -37,6 +52,58 @@ pub async fn hw_export(path: String) -> CmdResult<()> {
     })
     .await
     .map_err(|e| err("internal", e))?
+}
+
+/// Run `f` on the hub (created on first use) off the async runtime.
+async fn with_hub<T: Send + 'static>(
+    state: &State<'_, HwState>,
+    f: impl FnOnce(&mut SensorHub) -> T + Send + 'static,
+) -> CmdResult<T> {
+    let hub = state.hub.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let mut guard = hub.lock().map_err(|e| err("internal", e))?;
+        let hub = guard.get_or_insert_with(|| {
+            let mut h = SensorHub::native();
+            h.sample();
+            h
+        });
+        Ok(f(hub))
+    })
+    .await
+    .map_err(|e| err("internal", e))?
+}
+
+/// Current values with min / max; samples first when the last sample is stale.
+#[tauri::command]
+pub async fn sensors_snapshot(state: State<'_, HwState>) -> CmdResult<Snapshot> {
+    with_hub(&state, |hub| {
+        if hub
+            .since_last()
+            .is_none_or(|d| d >= Duration::from_millis(900))
+        {
+            hub.sample();
+        }
+        hub.snapshot()
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn sensors_reset_minmax(state: State<'_, HwState>) -> CmdResult<()> {
+    with_hub(&state, SensorHub::reset_minmax).await
+}
+
+/// The last `n` values of one sensor (sparkline), oldest first.
+#[tauri::command]
+pub async fn sensors_history(
+    state: State<'_, HwState>,
+    id: String,
+    n: usize,
+) -> CmdResult<Vec<f32>> {
+    with_hub(&state, move |hub| {
+        hub.history(&id, n.min(nfd_sensors::HISTORY))
+    })
+    .await
 }
 
 #[cfg(test)]

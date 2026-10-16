@@ -56,6 +56,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(state)
+        .manage(commands::hwmon::HwState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -98,6 +99,9 @@ pub fn run() {
             commands::write_text_file,
             commands::hwmon::hw_inventory,
             commands::hwmon::hw_export,
+            commands::hwmon::sensors_snapshot,
+            commands::hwmon::sensors_reset_minmax,
+            commands::hwmon::sensors_history,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NANOFreeDisk");

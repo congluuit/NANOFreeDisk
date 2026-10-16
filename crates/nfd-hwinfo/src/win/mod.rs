@@ -25,7 +25,10 @@ pub(crate) fn from_wide(buf: &[u16]) -> String {
 
 /// Owned kernel handle, closed on drop.
 #[derive(Debug)]
-pub(crate) struct Handle(pub HANDLE);
+pub struct Handle(pub HANDLE);
+
+// SAFETY: kernel handles may be used from any thread; the owner is single.
+unsafe impl Send for Handle {}
 
 impl Handle {
     pub fn valid(h: HANDLE) -> Option<Self> {

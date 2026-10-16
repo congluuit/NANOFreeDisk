@@ -105,3 +105,53 @@ export interface HwInventory {
     charge_percent: number | null;
   }[];
 }
+
+export type SensorKind =
+  | "temperature"
+  | "voltage"
+  | "power"
+  | "clock"
+  | "load"
+  | "fan"
+  | "control"
+  | "data"
+  | "throughput"
+  | "level"
+  | "energy";
+
+export type DeviceKind = "cpu" | "gpu" | "memory" | "storage" | "battery" | "board" | "network";
+
+export interface SensorDevice {
+  id: string;
+  kind: DeviceKind;
+  name: string;
+}
+
+export interface Sensor {
+  id: string;
+  device: string;
+  kind: SensorKind;
+  label: string;
+  index: number | null;
+  detail: string | null;
+  primary: boolean;
+  estimated: boolean;
+  source: string;
+  value: number | null;
+  min: number | null;
+  max: number | null;
+}
+
+export interface SensorNote {
+  device: string;
+  kind: SensorKind;
+  reason: string;
+}
+
+export interface SensorSnapshot {
+  devices: SensorDevice[];
+  sensors: Sensor[];
+  notes: SensorNote[];
+  samples: number;
+  sample_ms: number;
+}
