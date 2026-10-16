@@ -5,8 +5,9 @@
 //! from the scan history, the Old & Large total of the current scan), so the rules
 //! are unit-tested and the same in the GUI and a future CLI. Phase 2 only has disk
 //! space signals; Phase 3 adds junk the rule packs would clean safely
-//! ([`JunkFacts`], fixed in the Clean view); SMART (Phase 7) and startup items (E2)
-//! add their own [`Finding`]s later.
+//! ([`JunkFacts`], fixed in the Clean view); Phase 7 adds drive health
+//! ([`DriveFacts`], [`add_drive_findings`]: SMART / NVMe verdict, temperature against
+//! the drive's own limits, volumes marked dirty); startup items (E2) come later.
 
 use serde::Serialize;
 
@@ -205,23 +206,130 @@ pub fn score_with(
             fix: "home",
         }),
     }
-    findings.sort_by(|a, b| {
+    let mut out = HealthScore {
+        score: 100,
+        grade: "good",
+        findings,
+    };
+    regrade(&mut out);
+    out
+}
+
+/// Drive verdict as [`DriveFacts`] carries it (mirrors `nfd_health::Status`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriveStatus {
+    Unknown,
+    Good,
+    Caution,
+    Bad,
+}
+
+/// Drive temperature against its own limits (mirrors `nfd_health::Heat`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DriveHeat {
+    Unknown,
+    Normal,
+    Warning,
+    Critical,
+}
+
+/// One physical drive as the score sees it (Phase 7).
+#[derive(Debug, Clone, PartialEq)]
+pub struct DriveFacts {
+    /// Model name (the subject of the finding).
+    pub name: String,
+    pub status: DriveStatus,
+    pub heat: DriveHeat,
+    /// °C, for the message.
+    pub temperature: Option<f64>,
+    /// SSD life left in percent, for the message.
+    pub life_left: Option<u8>,
+}
+
+/// (status, penalty).
+const DRIVE_STATUS: [(DriveStatus, u32); 2] = [(DriveStatus::Bad, 45), (DriveStatus::Caution, 15)];
+/// (heat, penalty).
+const DRIVE_HEAT: [(DriveHeat, u32); 2] = [(DriveHeat::Critical, 10), (DriveHeat::Warning, 4)];
+/// Penalty for a volume Windows marked dirty (needs chkdsk).
+const DIRTY: u32 = 10;
+
+/// Add the drive-health findings: `drive-bad` / `drive-caution` per drive,
+/// `drive-hot` / `drive-warm` unless the Hardware Monitor already reported the same
+/// drive (`hot-disk` / `warm-disk`), `drive-unknown` (information) when nothing could
+/// be read, and `volume-dirty` per dirty volume root. Then [`regrade`].
+pub fn add_drive_findings(score: &mut HealthScore, drives: &[DriveFacts], dirty: &[String]) {
+    for d in drives {
+        if let Some(&(_, penalty)) = DRIVE_STATUS.iter().find(|(s, _)| *s == d.status) {
+            let bad = d.status == DriveStatus::Bad;
+            score.findings.push(Finding {
+                kind: if bad { "drive-bad" } else { "drive-caution" },
+                severity: if bad { Severity::Bad } else { Severity::Warn },
+                penalty,
+                subject: d.name.clone(),
+                value: d.life_left.map_or(0.0, f64::from),
+                bytes: 0,
+                fix: "health",
+            });
+        } else if d.status == DriveStatus::Unknown {
+            score.findings.push(Finding {
+                kind: "drive-unknown",
+                severity: Severity::Info,
+                penalty: 0,
+                subject: d.name.clone(),
+                value: 0.0,
+                bytes: 0,
+                fix: "health",
+            });
+        }
+        let already = score
+            .findings
+            .iter()
+            .any(|f| (f.kind == "hot-disk" || f.kind == "warm-disk") && f.subject == d.name);
+        if let Some(&(heat, penalty)) = DRIVE_HEAT.iter().find(|(h, _)| *h == d.heat) {
+            if !already {
+                let hot = heat == DriveHeat::Critical;
+                score.findings.push(Finding {
+                    kind: if hot { "drive-hot" } else { "drive-warm" },
+                    severity: if hot { Severity::Bad } else { Severity::Warn },
+                    penalty,
+                    subject: d.name.clone(),
+                    value: d.temperature.unwrap_or(0.0),
+                    bytes: 0,
+                    fix: "health",
+                });
+            }
+        }
+    }
+    for root in dirty {
+        score.findings.push(Finding {
+            kind: "volume-dirty",
+            severity: Severity::Bad,
+            penalty: DIRTY,
+            subject: root.clone(),
+            value: 0.0,
+            bytes: 0,
+            fix: "health",
+        });
+    }
+    regrade(score);
+}
+
+/// Sort the findings and recompute score and grade after findings were added
+/// outside [`score_with`] (same bands: >= 85 good, >= 60 fair).
+pub fn regrade(score: &mut HealthScore) {
+    score.findings.sort_by(|a, b| {
         b.penalty
             .cmp(&a.penalty)
             .then(b.severity.cmp(&a.severity))
             .then_with(|| a.subject.cmp(&b.subject))
     });
-    let lost: u32 = findings.iter().map(|f| f.penalty).sum();
-    let score = 100u32.saturating_sub(lost);
-    HealthScore {
-        score,
-        grade: match score {
-            85.. => "good",
-            60..85 => "fair",
-            _ => "poor",
-        },
-        findings,
-    }
+    let lost: u32 = score.findings.iter().map(|f| f.penalty).sum();
+    score.score = 100u32.saturating_sub(lost);
+    score.grade = match score.score {
+        85.. => "good",
+        60..85 => "fair",
+        _ => "poor",
+    };
 }
 
 #[cfg(test)]
@@ -344,5 +452,85 @@ mod tests {
         let h = score(&vols, None);
         assert_eq!(h.score, 0);
         assert_eq!(h.grade, "poor");
+    }
+
+    fn drive(status: DriveStatus, heat: DriveHeat) -> DriveFacts {
+        DriveFacts {
+            name: "Samsung SSD 980 PRO 1TB".into(),
+            status,
+            heat,
+            temperature: Some(84.0),
+            life_left: Some(7),
+        }
+    }
+
+    #[test]
+    fn drive_health_costs_points() {
+        let c = [vol(r"C:\", 500 * GB, 200 * GB, true)];
+        let mut h = score(&c, None);
+        let base = h.score;
+        add_drive_findings(
+            &mut h,
+            &[
+                drive(DriveStatus::Caution, DriveHeat::Warning),
+                DriveFacts {
+                    name: "USB disk".into(),
+                    ..drive(DriveStatus::Unknown, DriveHeat::Unknown)
+                },
+            ],
+            &[r"D:\".into()],
+        );
+        assert_eq!(
+            kinds(&h)[..3],
+            [
+                ("drive-caution", 15),
+                ("volume-dirty", 10),
+                ("drive-warm", 4)
+            ]
+        );
+        assert!(kinds(&h).contains(&("drive-unknown", 0)));
+        assert_eq!(h.score, base - 29);
+        assert_eq!(h.findings[0].fix, "health");
+        assert_eq!(h.findings[0].value, 7.0);
+
+        let mut bad = score(&c, None);
+        add_drive_findings(
+            &mut bad,
+            &[drive(DriveStatus::Bad, DriveHeat::Critical)],
+            &[],
+        );
+        assert_eq!(kinds(&bad)[..2], [("drive-bad", 45), ("drive-hot", 10)]);
+        // a failing drive alone makes the machine "poor"
+        assert_eq!(bad.grade, "poor");
+        let mut good = score(&c, None);
+        let before = good.clone();
+        add_drive_findings(
+            &mut good,
+            &[drive(DriveStatus::Good, DriveHeat::Normal)],
+            &[],
+        );
+        assert_eq!(good, before);
+    }
+
+    #[test]
+    fn heat_is_not_counted_twice() {
+        let c = [vol(r"C:\", 500 * GB, 200 * GB, true)];
+        let mut h = score(&c, None);
+        h.findings.push(Finding {
+            kind: "hot-disk",
+            severity: Severity::Bad,
+            penalty: 8,
+            subject: "Samsung SSD 980 PRO 1TB".into(),
+            value: 84.0,
+            bytes: 0,
+            fix: "hardware",
+        });
+        add_drive_findings(
+            &mut h,
+            &[drive(DriveStatus::Good, DriveHeat::Critical)],
+            &[],
+        );
+        assert!(!kinds(&h).iter().any(|k| k.0 == "drive-hot"));
+        assert_eq!(h.score, 92);
     }
 }

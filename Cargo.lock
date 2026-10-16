@@ -2253,6 +2253,7 @@ dependencies = [
  "nfd-core",
  "nfd-devtools",
  "nfd-dupes",
+ "nfd-health",
  "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",
@@ -2312,6 +2313,7 @@ dependencies = [
  "nfd-core",
  "nfd-devtools",
  "nfd-dupes",
+ "nfd-health",
  "nfd-history",
  "nfd-hwinfo",
  "nfd-monitor",
@@ -2365,9 +2367,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "nfd-health"
+version = "0.1.0"
+dependencies = [
+ "nfd-hwinfo",
+ "nfd-platform",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "nfd-helper"
 version = "0.1.0"
 dependencies = [
+ "nfd-health",
  "nfd-monitor",
  "nfd-sensors",
  "serde",

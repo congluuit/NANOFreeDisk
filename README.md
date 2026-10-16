@@ -164,7 +164,7 @@ nfd repos <root> [--keep-recent 7] [--json]   ·   nfd repos clean <root> [--app
 nfd stores [--json]   ·   nfd stores run npm-cache-clean
 nfd dupes <path...> [--min-size 1MB] [--folders] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
 nfd monitor [--seconds 10] [--top 10] [--json] [--source auto|etw|counters] [--watch <dir>]   ·   nfd monitor --history
-nfd health [--json] [--watch]
+nfd health [--json] [--raw] [--disk N]          # exit code 1 = caution, 2 = bad
 nfd quarantine [list|restore <id>|purge --older 7d]
 nfd rules [list|validate <dir>]
 ```
@@ -185,7 +185,7 @@ nfd clean --rules ai-tools --level safe --dry-run
 - **`nfd-core`** — entry arena, parallel scanner (+ NTFS MFT fast path), dedupe, the `Planner → SafetyGate → Executor` pipeline, quarantine and undo journal. UI-agnostic; 100 % test-coverage target for `safety`.
 - **`nfd-rules`** — TOML rule-pack loader, glob matcher, risk levels, DevCache catalog.
 - **`nfd-monitor`** — ETW consumers, per-process I/O counters, PDH disk counters.
-- **`nfd-health`** — SMART/NVMe via IOCTL, WMI reliability counters, trends and alerts.
+- **`nfd-health`** — SMART/NVMe via IOCTL (NVMe without admin rights), CrystalDiskInfo-style verdicts, volume checks, alerts.
 - **`nfd-platform`** — the `Platform` trait; Windows implementation on `windows-rs` now, macOS/Linux later.
 - **`apps/nanofreedisk`** — Tauri 2 desktop app (Svelte UI). **`apps/nfd-cli`** — the CLI. **`apps/nanofreedisk-setup`** — the branded installer (egui).
 
@@ -241,7 +241,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
 | 5 | Duplicate finder | ✅ done — Duplicates view (files + folders), "Find duplicates here", replace with hard links / ReFS block clones, `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ✅ done — Disk activity view (live chart, disks, processes → files, files being written, 24 h history, "Who touched this?"), I/O counters without admin or a private ETW session through the elevated helper, log-spam alert, tray "Pause monitor", `nfd monitor` |
-| 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ⏳ |
+| 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ✅ done — Health view + `nfd health` (NVMe health log without admin rights, ATA SMART / USB SAT through the elevated helper, CrystalDiskInfo-style verdict, volume checks, HTML/JSON report), Health Score, drive alerts and tray icon; quotas and the dump/log advisor remain for v1.x |
 | 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ⏳ |
 | 9 | **v1.0** release for Windows | ⏳ |
 

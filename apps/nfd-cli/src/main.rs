@@ -10,6 +10,7 @@ mod clean;
 mod devcache;
 mod diff;
 mod dupes;
+mod health;
 mod hw;
 mod monitor;
 mod ps;
@@ -93,6 +94,9 @@ enum Command {
     Ps(ps::PsArgs),
     /// Live disk activity: which processes (and, with ETW, which files) read and write.
     Monitor(monitor::MonitorArgs),
+    /// Drive health: SMART / NVMe verdict per drive and volume checks (read-only).
+    /// Exit code 1 = a drive needs attention, 2 = a drive is bad.
+    Health(health::HealthArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -151,6 +155,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Sensors(args) => sensors::run(args),
         Command::Ps(args) => ps::run(args),
         Command::Monitor(args) => monitor::run(args),
+        Command::Health(args) => health::run(args),
     }
 }
 

@@ -188,5 +188,5 @@ export const monitorHandlers: Record<string, (args: Record<string, unknown>) => 
   },
   monitor_history: () => history(),
   monitor_reveal: () => undefined,
-  tray_texts: () => undefined,
+  tray_monitor_text: () => undefined,
 };

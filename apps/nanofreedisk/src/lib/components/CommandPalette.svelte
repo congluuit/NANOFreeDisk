@@ -43,6 +43,7 @@
       ["devcache", "nav-devcache", "devcache"],
       ["duplicates", "nav-duplicates", "duplicates"],
       ["monitor", "nav-monitor", "monitor"],
+      ["health", "nav-health", "health"],
       ["settings", "nav-settings", "settings"],
     ];
     for (const [view, id, icon] of nav) {

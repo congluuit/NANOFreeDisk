@@ -81,7 +81,7 @@
       <strong>{t("home-action-analyze")}</strong>
       <span class="muted">{t("home-action-analyze-hint")}</span>
     </button>
-    <button class="action card" disabled title={t("home-action-health-hint")}>
+    <button class="action card" data-home-health onclick={() => (app.view = "health")} title={t("home-action-health-hint")}>
       <span class="ic health"><Icon name="health" size={26} /></span>
       <strong>{t("home-action-health")}</strong>
       <span class="muted">{t("home-action-health-hint")}</span>

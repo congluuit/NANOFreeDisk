@@ -14,6 +14,7 @@
   } from "./lib/state.svelte";
   import { applyPalette, resolvePalette } from "./lib/theme";
   import { startThermalSync } from "./lib/hw/thermal.svelte";
+  import { startHealthWatch } from "./lib/health/watch.svelte";
   import Icon from "./lib/components/Icon.svelte";
   import ScanProgress from "./lib/components/ScanProgress.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -30,6 +31,7 @@
   import Duplicates from "./lib/views/Duplicates.svelte";
   import Monitor from "./lib/views/Monitor.svelte";
   import { startMonitorSync } from "./lib/monitor/sync.svelte";
+  import Health from "./lib/views/Health.svelte";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
 
@@ -44,7 +46,7 @@
     { id: "devcache", icon: "devcache", label: "nav-devcache" },
     { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
     { id: "monitor", icon: "monitor", label: "nav-monitor" },
-    { id: null, icon: "health", label: "nav-health", phase: "Phase 7" },
+    { id: "health", icon: "health", label: "nav-health" },
   ];
 
   let systemDark = $state(true);
@@ -61,6 +63,7 @@
       await listenScanEvents();
       startThermalSync();
       startMonitorSync();
+      startHealthWatch();
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
@@ -180,6 +183,8 @@
       <Duplicates />
     {:else if app.view === "monitor"}
       <Monitor />
+    {:else if app.view === "health"}
+      <Health />
     {:else}
       <Settings />
     {/if}

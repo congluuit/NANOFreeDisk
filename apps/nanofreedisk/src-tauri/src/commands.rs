@@ -9,6 +9,7 @@ use std::time::Duration;
 
 pub mod clean;
 pub mod devcache;
+pub mod diskhealth;
 pub mod dupes;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
@@ -725,6 +726,7 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
         });
     let mut score = health::score_with(&facts, scan.as_ref(), junk.as_ref());
     hwmon::add_heat_findings(&app, &mut score);
+    diskhealth::add_findings(&app, &mut score);
     // information only: what the last duplicate search found
     if let Some((bytes, groups, root)) = app.state::<dupes::DupeState>().summary() {
         if bytes > 0 {

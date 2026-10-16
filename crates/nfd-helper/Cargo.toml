@@ -1,6 +1,6 @@
 [package]
 name = "nfd-helper"
-description = "NANOFreeDisk elevated helper: a narrow named-pipe protocol for Advanced sensors (PawnIO) and the disk activity trace session (read-only)"
+description = "NANOFreeDisk elevated helper: a narrow named-pipe protocol for Advanced sensors (PawnIO), drive health reads and the disk activity trace session, read-only"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -11,6 +11,7 @@ homepage.workspace = true
 
 [dependencies]
 nfd-monitor = { workspace = true }
+nfd-health = { workspace = true }
 nfd-sensors = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

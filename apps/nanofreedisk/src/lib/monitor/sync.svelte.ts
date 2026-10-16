@@ -40,10 +40,10 @@ export function startMonitorSync(): void {
     });
   });
   $effect.root(() => {
-    // tray menu (G5) in the UI language
+    // the tray menu's Pause item (G5) in the UI language
     $effect(() => {
       void i18n.locale;
-      call<void>("tray_texts", { open: t("tray-open"), pause: t("tray-pause"), quit: t("tray-quit") }).catch(() => {});
+      call<void>("tray_monitor_text", { pause: t("tray-pause") }).catch(() => {});
     });
   });
   void on<Alert>("monitor-alert", (a) => toast(alertText(a), "error"));

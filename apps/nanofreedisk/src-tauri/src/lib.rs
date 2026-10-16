@@ -85,10 +85,10 @@ pub fn run() {
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
         .manage(commands::monitor::MonitorState::default())
-        .manage(tray::TrayState::default())
+        .manage(commands::diskhealth::HealthState::default())
         .setup(|app| {
-            // a missing tray (no shell, policy) is not fatal
-            let _ = tray::install(app.handle());
+            // the notification-area icon (G5); the app works without it
+            let _ = tray::create(app.handle());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -187,7 +187,11 @@ pub fn run() {
             commands::monitor::monitor_configure,
             commands::monitor::monitor_history,
             commands::monitor::monitor_reveal,
-            tray::tray_texts,
+            tray::tray_monitor_text,
+            commands::diskhealth::health_report,
+            commands::diskhealth::health_elevated,
+            commands::diskhealth::health_export,
+            commands::diskhealth::health_watch_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

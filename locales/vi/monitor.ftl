@@ -107,6 +107,4 @@ settings-mon-hint = Bắt các trình ghi log mất kiểm soát, indexer và ap
 hint-mon-alerts = Khi bật, app lấy mẫu hoạt động ổ đĩa mỗi giây ở nền và hiện thông báo khi một tiến trình ghi nhanh hơn ngưỡng suốt cả khoảng thời gian. Không bao giờ dừng tiến trình đó.
 hint-mon-threshold = Đổi ngưỡng cảnh báo log spam.
 
-tray-open = Mở NANOFreeDisk
 tray-pause = Tạm dừng theo dõi ổ đĩa
-tray-quit = Thoát

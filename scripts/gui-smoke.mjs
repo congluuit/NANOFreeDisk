@@ -24,9 +24,11 @@
 // the Explorer verb); Phase 6: the disk activity monitor with I/O counters (this
 // script's own writes attributed to it, chart, disks, pause, the reveal guard, the
 // view's tabs — file detail is not turned on: it would ask UAC, and nothing is
-// recorded into the history). Nothing outside the fixture is ever deleted and the only
-// process ever ended is a `ping` the script starts itself; the fixture's history
-// snapshots and journal entries are forgotten at the end.
+// recorded into the history); Phase 7: the health report (drives, volumes, the JSON
+// export without serial numbers and its *.json guard), the Health view and the score.
+// Nothing outside the fixture is ever deleted and the only process ever ended is a
+// `ping` the script starts itself; the fixture's history snapshots and journal
+// entries are forgotten at the end.
 
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
@@ -743,9 +745,33 @@ try {
   check("Monitor: Who touched this? tab", await evaluate("!!document.querySelector('[data-who]')"));
   await evaluate("document.querySelector('[data-montab=activity]')?.click()");
 
+  // Phase 7: Health (read-only; the export goes to the temp fixture folder)
+  const driveHealth = await invoke("health_report", { refresh: true });
+  check(
+    "health: report lists this PC's drives and volumes",
+    driveHealth.schema === "nanofreedisk.health.v1" && driveHealth.drives?.length >= 1 && driveHealth.volumes?.length >= 1 &&
+      driveHealth.drives.every((d) => ["unknown", "good", "caution", "bad"].includes(d.status)),
+    JSON.stringify(driveHealth).slice(0, 300),
+  );
+  const healthJson = join(fixture, "health.json");
+  await invoke("health_export", { path: healthJson, serials: false });
+  const exported = existsSync(healthJson) ? JSON.parse(readFileSync(healthJson, "utf8")) : null;
+  check("health: JSON export leaves serial numbers out", exported?.drives?.every((d) => d.serial == null), JSON.stringify(exported?.drives?.map((d) => d.serial)));
+  const badHealthExport = await invoke("health_export", { path: join(fixture, "health.exe"), serials: false });
+  check("health: export only writes *.json", badHealthExport?.__error?.code === "bad-path", JSON.stringify(badHealthExport));
+  const healthNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Drive health|Sức khỏe ổ đĩa/.test(b.innerText))");
+  check("Health is in the sidebar", healthNav >= 0);
+  await nav(healthNav);
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-drive]')")); i++) await sleep(250);
+  check("Health view shows a card per drive", await evaluate(`document.querySelectorAll('[data-drive]').length === ${driveHealth.drives.length}`));
+  check("Health view shows the volume checks", await evaluate("document.querySelectorAll('[data-volume]').length >= 1 && !!document.querySelector('[data-detail]')"));
+  await shot("15-health");
+  const driveScore = await invoke("health");
+  check("health score knows the drives", driveScore.findings?.every((f) => typeof f.kind === "string"), JSON.stringify(driveScore.findings?.map((f) => f.kind)));
+
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"]]) {
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");

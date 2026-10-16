@@ -49,7 +49,7 @@ Lưu ý ngữ nghĩa (UI nói rõ): `Counters` đếm **mọi I/O** của tiến
 
 ### 2.2 Helper elevated (mở rộng `nfd-helper`)
 
-- Protocol **2**: thêm `MonitorStart { protocol, watch: Option<String> }`, `MonitorPoll` → `Response::Monitor { tick }`, `MonitorStop`. Không có request nào chạy lệnh, mở tệp để đọc nội dung hay kết thúc tiến trình; `watch` chỉ là tiền tố đường dẫn để lọc sự kiện.
+- Protocol **3** (2 ở nhánh Phase 6, gộp với `Request::Health` của Phase 7 thành 3): thêm `MonitorStart { protocol, watch: Option<String> }`, `MonitorPoll` → `Response::Monitor { tick }`, `MonitorStop`. Không có request nào chạy lệnh, mở tệp để đọc nội dung hay kết thúc tiến trình; `watch` chỉ là tiền tố đường dẫn để lọc sự kiện.
 - **Dùng chung một kết nối**: `nfd_helper::start()` trả về `Connection` (pipe trong `Arc<Mutex<…>>`); `RemoteProvider` (cảm biến) và `RemoteMonitor` cùng dùng. App giữ một `Helper` chung: bật Advanced sensors rồi bật Monitor chi tiết (hoặc ngược lại) không hỏi UAC lần hai.
 - Helper dừng phiên ETW khi pipe đóng / app thoát (`Drop`).
 

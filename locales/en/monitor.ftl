@@ -107,6 +107,4 @@ settings-mon-hint = Catches runaway loggers, indexers and sync clients. While on
 hint-mon-alerts = While on, the app samples disk activity every second in the background and shows a notification when a process writes faster than the limit for the whole time. It never stops the process.
 hint-mon-threshold = Changes the log-spam alert limit.
 
-tray-open = Open NANOFreeDisk
 tray-pause = Pause disk monitor
-tray-quit = Quit

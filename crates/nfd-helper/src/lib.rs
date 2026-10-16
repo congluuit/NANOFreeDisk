@@ -3,15 +3,17 @@
 //! The app stays unelevated. When the user turns on Advanced sensors it starts its
 //! own executable with `--elevated-helper <pipe> <app pid>` through UAC; the helper
 //! connects back to a named pipe the app created and then answers a closed set of
-//! requests: Advanced sensors ([`Request::Discover`], [`Request::Sample`]), the
-//! disk activity monitor's kernel trace session ([`Request::MonitorStart`],
+//! requests: Advanced sensors ([`Request::Discover`], [`Request::Sample`]), drive
+//! health reads ([`Request::Health`], Phase 7: SMART thresholds, SMART through USB
+//! bridges and the volume dirty bit — the fixed read commands of `nfd_health::cmd`),
+//! the disk activity monitor's kernel trace session ([`Request::MonitorStart`],
 //! [`Request::MonitorPoll`], [`Request::MonitorStop`], PHASE6_MONITOR §2.2) and
 //! [`Request::Shutdown`]. There is no request that runs code, reads file contents,
 //! ends a process or writes hardware.
 //!
-//! One helper serves both features: the app keeps a single [`Connection`] that the
-//! sensor provider and the monitor share, so turning on the second feature does
-//! not ask UAC again.
+//! One helper serves every feature: the app keeps a single [`Connection`] that the
+//! sensor provider, the health reads and the monitor share, so turning on a second
+//! feature does not ask UAC again.
 //!
 //! Both ends check each other: the app only accepts the PID UAC started, the helper
 //! only talks to the PID it was given, and both must be the same executable. The
@@ -25,7 +27,7 @@ pub use nfd_sensors::{Device, Kind, Note};
 pub const HELPER_FLAG: &str = "--elevated-helper";
 
 /// Wire version; both ends refuse a mismatch (stale helper after an update).
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
@@ -44,6 +46,21 @@ pub enum Request {
     MonitorPoll,
     MonitorStop,
     Shutdown,
+    /// Administrator-only drive reads for these drives / volumes (indices and roots
+    /// only — never command bytes).
+    Health {
+        protocol: u32,
+        drives: Vec<HealthDrive>,
+        volumes: Vec<String>,
+    },
+}
+
+/// A drive the app wants the helper to read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthDrive {
+    pub index: u32,
+    /// Read through SCSI / ATA Translation (USB bridge) instead of `SMART_RCV_DRIVE_DATA`.
+    pub usb: bool,
 }
 
 /// A sensor as sent over the pipe.
@@ -79,6 +96,9 @@ pub enum Response {
     /// The trace session could not start or has stopped.
     MonitorError {
         error: String,
+    },
+    Health {
+        privileged: nfd_health::Privileged,
     },
     /// Advanced sensors are not available in the helper (PawnIO missing…).
     Unavailable {
@@ -129,7 +149,9 @@ pub fn helper_args(args: &[String]) -> Option<(String, u32)> {
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{Connection, RemoteMonitor, RemoteProvider, StartError, run_helper, start};
+pub use win::{
+    Connection, RemoteMonitor, RemoteProvider, StartError, health_once, run_helper, start,
+};
 
 #[cfg(test)]
 mod tests {
@@ -169,6 +191,45 @@ mod tests {
         assert_eq!(
             decode::<Request>(b"{\"op\":\"monitor-kill\",\"pid\":4}"),
             None
+        );
+    }
+
+    #[test]
+    fn health_round_trip() {
+        let r = Request::Health {
+            protocol: PROTOCOL,
+            drives: vec![HealthDrive {
+                index: 2,
+                usb: true,
+            }],
+            volumes: vec![r"C:\".into()],
+        };
+        assert_eq!(decode::<Request>(&encode(&r)[4..]), Some(r));
+        let p = nfd_health::Privileged {
+            smart: vec![nfd_health::PrivilegedSmart {
+                disk: 2,
+                data: vec![1; 512],
+                thresholds: None,
+                via: nfd_health::Source::Sat,
+            }],
+            volumes: vec![nfd_health::PrivilegedVolume {
+                root: r"C:\".into(),
+                dirty: false,
+            }],
+            sat_failed: vec![3],
+        };
+        let resp = Response::Health { privileged: p };
+        let frame = encode(&resp);
+        assert!(frame.len() < MAX_FRAME);
+        assert_eq!(decode::<Response>(&frame[4..]), Some(resp));
+        // a request carrying command bytes does not parse
+        assert_eq!(
+            decode::<Request>(
+                br#"{"op":"health","protocol":3,"drives":[],"volumes":[],"cdb":[133]}"#
+            )
+            .map(|r| matches!(r, Request::Health { .. })),
+            Some(true),
+            "unknown fields are ignored, never executed"
         );
     }
 

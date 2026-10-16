@@ -6,6 +6,7 @@
 import { cleanHandlers, mockDeleted } from "./clean/mock";
 import { devHandlers } from "./devcache/mock";
 import { dupeHandlers } from "./dupes/mock";
+import { healthHandlers } from "./health/mock";
 import type { DeleteItem, Filter, Node, Slice } from "./types";
 import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
@@ -364,6 +365,7 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   ...cleanHandlers,
   ...devHandlers,
   ...dupeHandlers,
+  ...healthHandlers,
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
     { root: "C:\\", label: "Windows", fs: "NTFS", kind: "fixed", total: 4e12, available: 1.45e12, free: 1.45e12, ready: true, system: true },
