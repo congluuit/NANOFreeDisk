@@ -42,3 +42,8 @@ DoD (`docs/HARDWARE_MONITOR.md` §8): values within ±2 °C and ±5 % power / cl
 
 - At least one AMD machine (slice 5).
 - A PC with Memory Integrity (HVCI) on.
+
+## AMD and mainboard Super I/O (slice 5)
+
+- **AMD Zen (family 17h–1Ah)** is implemented with the official AMDFamily17 module (SHA-256 pinned): Tctl / Tdie (k10temp offset table), per-CCD temperatures, package and per-core RAPL power, per-core VID (SVI2 VID from the hardware P-state), and effective clocks. Only `ioctl_read_msr` and `ioctl_read_smn` are called; the SMN read writes the host bridge's index register, the same access k10temp and LibreHardwareMonitor use. **Not yet verified on AMD hardware**: the decoding is unit-tested against the k10temp / LHM formulas, but the ±2 °C / ±5 % check against LibreHardwareMonitor still has to be run on an AMD PC with `scripts/hw-compare-lhm.mjs` (the LHM sensor ids are `/amdcpu/0/...`; the pairs in the script need adjusting).
+- **Super I/O (fans, mainboard voltages, LpcIO)** is **not shipped**. Reading a chip means entering its configuration mode by writing magic bytes to ports 0x2E / 0x4E, and on laptops (the reference machine included) those ports often belong to the embedded controller, where a stray write can hang the EC or power the machine off. HARDWARE_MONITOR.md §3.2 asks for a table of chips verified on real boards, and none could be verified here, so the table is empty and nothing is probed. Next step: a desktop with a known Nuvoton / ITE chip, a chip-ID allow-list, and the `Access_ISABUS.HTP.Method` mutex.

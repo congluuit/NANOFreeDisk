@@ -34,15 +34,25 @@ const IOCTL_PIO_LOAD_BINARY: u32 = ctl(0x821);
 const IOCTL_PIO_EXECUTE_FN: u32 = ctl(0x841);
 /// The function-name field of an execute request.
 const FN_NAME_LENGTH: usize = 32;
-/// The only module function NANOFreeDisk calls.
+/// The module functions NANOFreeDisk calls — reads only. `ioctl_read_smn` writes
+/// the SMN *index* register of the AMD host bridge and reads the data register
+/// (the same access k10temp and LibreHardwareMonitor use); it changes no setting.
 const READ_MSR: &str = "ioctl_read_msr";
+const READ_SMN: &str = "ioctl_read_smn";
 
-/// Official module builds we accept (PawnIO.Modules release, SHA-256).
-pub const KNOWN_MODULES: &[(&str, &str, &str)] = &[(
-    "IntelMSR",
-    "0.2.11",
-    "d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f",
-)];
+/// Official module builds we accept (PawnIO.Modules release 0.2.11, SHA-256).
+pub const KNOWN_MODULES: &[(&str, &str, &str)] = &[
+    (
+        "IntelMSR",
+        "0.2.11",
+        "d6ed85d65ab17a22f813ef98207d6d537155ee2ded5976a21cb48413c9b92e5f",
+    ),
+    (
+        "AMDFamily17",
+        "0.2.11",
+        "dae74615761b78bdf064dfb3e136252ddcc6fc727d88f14738d0e5800d427a91",
+    ),
+];
 
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -59,7 +69,8 @@ pub struct PawnStatus {
     /// Memory Integrity (HVCI) is on — PawnIO is expected to work, but if the
     /// driver does not load this is the first thing to check.
     pub memory_integrity: bool,
-    /// A known IntelMSR module was found next to the app or in its data folder.
+    /// The known module for this CPU (IntelMSR / AMDFamily17) was found next to
+    /// the app or in its data folder.
     pub intel_module: bool,
     /// This process can open the device (only true when elevated).
     pub accessible: bool,
@@ -72,7 +83,7 @@ pub fn status() -> PawnStatus {
         running,
         version: uninstall_version(),
         memory_integrity: hvci_enabled(),
-        intel_module: find_module("IntelMSR").is_some(),
+        intel_module: find_module(cpu_module()).is_some(),
         accessible: running && PawnIo::open().is_ok(),
     }
 }
@@ -152,6 +163,15 @@ fn uninstall_version() -> Option<String> {
     }
     let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
     Some(String::from_utf16_lossy(&buf[..end]))
+}
+
+/// The module for this machine's CPU.
+pub fn cpu_module() -> &'static str {
+    if nfd_hwinfo::cpu::native().vendor == "AMD" {
+        "AMDFamily17"
+    } else {
+        "IntelMSR"
+    }
 }
 
 /// SHA-256 through Windows CNG.
@@ -267,7 +287,16 @@ impl PawnIo {
 
     /// Open the device and load the official IntelMSR module.
     pub fn intel_msr() -> Result<Self, PawnError> {
-        let blob = find_module("IntelMSR").ok_or(PawnError::ModuleMissing)?;
+        Self::load("IntelMSR")
+    }
+
+    /// Open the device and load the official AMDFamily17 module (Zen 1–5).
+    pub fn amd_family17() -> Result<Self, PawnError> {
+        Self::load("AMDFamily17")
+    }
+
+    fn load(module: &str) -> Result<Self, PawnError> {
+        let blob = find_module(module).ok_or(PawnError::ModuleMissing)?;
         let me = Self::open()?;
         let mut got = 0u32;
         // SAFETY: the blob is the input buffer; no output.
@@ -293,9 +322,19 @@ impl PawnIo {
     /// Read an MSR on the logical processor this thread runs on. The module's own
     /// allow-list refuses anything but the documented sensor registers.
     pub fn read_msr(&self, msr: u32) -> Option<u64> {
+        self.read1(READ_MSR, u64::from(msr))
+    }
+
+    /// Read an AMD SMN register (AMDFamily17 only): temperatures, SVI telemetry.
+    pub fn read_smn(&self, address: u32) -> Option<u32> {
+        self.read1(READ_SMN, u64::from(address)).map(|v| v as u32)
+    }
+
+    /// One-in, one-out call of a read function from the fixed list above.
+    fn read1(&self, function: &'static str, arg: u64) -> Option<u64> {
         let mut input = [0u8; FN_NAME_LENGTH + 8];
-        input[..READ_MSR.len()].copy_from_slice(READ_MSR.as_bytes());
-        input[FN_NAME_LENGTH..].copy_from_slice(&u64::from(msr).to_le_bytes());
+        input[..function.len()].copy_from_slice(function.as_bytes());
+        input[FN_NAME_LENGTH..].copy_from_slice(&arg.to_le_bytes());
         let mut out = 0u64;
         let mut got = 0u32;
         // SAFETY: buffered IOCTL with fixed-size buffers.
@@ -323,7 +362,8 @@ mod tests {
     fn ioctl_codes_match_pawnio_um_h() {
         assert_eq!(IOCTL_PIO_LOAD_BINARY, 0xA1B2_2084);
         assert_eq!(IOCTL_PIO_EXECUTE_FN, 0xA1B2_2104);
-        assert!(READ_MSR.len() < FN_NAME_LENGTH);
+        assert!(READ_MSR.len() < FN_NAME_LENGTH && READ_SMN.len() < FN_NAME_LENGTH);
+        assert!(!READ_MSR.contains("write") && !READ_SMN.contains("write"));
     }
 
     #[test]
