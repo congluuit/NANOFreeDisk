@@ -414,7 +414,12 @@ pub fn set_paused(app: &AppHandle, state: &MonitorState, paused: bool) -> CmdRes
         }
     }
     let _ = app.emit("monitor-paused", paused);
+    crate::tray::sync_paused(app, paused);
     Ok(paused)
+}
+
+pub fn is_paused(state: &MonitorState) -> bool {
+    state.inner.lock().is_ok_and(|g| g.paused)
 }
 
 /// Turn file-level detail on (may show UAC for the helper) or off.

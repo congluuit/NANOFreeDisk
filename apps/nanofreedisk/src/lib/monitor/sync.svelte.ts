@@ -1,7 +1,7 @@
 // Log-spam alerts (PLAN §13.2 C8): keeps the backend in step with the settings and
 // the UI language, and shows an in-app toast next to the system notification.
 
-import { on } from "../api";
+import { call, on } from "../api";
 import { formatSize } from "../format";
 import { i18n, intlLocale, t } from "../i18n.svelte";
 import { app, toast } from "../state.svelte";
@@ -37,6 +37,13 @@ export function startMonitorSync(): void {
           record,
         )
         .catch(() => {});
+    });
+  });
+  $effect.root(() => {
+    // tray menu (G5) in the UI language
+    $effect(() => {
+      void i18n.locale;
+      call<void>("tray_texts", { open: t("tray-open"), pause: t("tray-pause"), quit: t("tray-quit") }).catch(() => {});
     });
   });
   void on<Alert>("monitor-alert", (a) => toast(alertText(a), "error"));

@@ -7,6 +7,7 @@
 
 mod commands;
 mod session;
+mod tray;
 
 use tauri::{Emitter, Manager};
 
@@ -84,6 +85,12 @@ pub fn run() {
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
         .manage(commands::monitor::MonitorState::default())
+        .manage(tray::TrayState::default())
+        .setup(|app| {
+            // a missing tray (no shell, policy) is not fatal
+            let _ = tray::install(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -180,6 +187,7 @@ pub fn run() {
             commands::monitor::monitor_configure,
             commands::monitor::monitor_history,
             commands::monitor::monitor_reveal,
+            tray::tray_texts,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")
