@@ -1,0 +1,112 @@
+# Phase 8 — Installers: kế hoạch chi tiết
+
+> Trạng thái: **đang làm** — lát 1 ⏳ (gói Tauri MSI + NSIS, dọn khi gỡ), lát 2 ⏳ (portable), lát 3 ⏳ (bộ cài thương hiệu egui), lát 4 ⏳ (updater), lát 5 ⏳ (release.yml, ký số, smoke test). Bản chi tiết của hàng "8 – Installers" trong `docs/PLAN.md` §8, theo thiết kế §6.1–§6.3 và pipeline §7.2. Helper elevated / PawnIO theo `docs/adr/0002-hardware-sensors-pawnio.md`.
+
+## 1. Mục tiêu & DoD
+
+- Mỗi version phát hành **bốn gói** (PLAN §6.1), cùng một `nanofreedisk.exe` + `nfd.exe`:
+
+  | Gói | Tên file | Công nghệ | Phạm vi cài |
+  |-----|----------|-----------|-------------|
+  | **Bộ cài thương hiệu** ★ | `NANOFreeDisk-Setup-x.y.z-x64.exe` | Rust + egui (`apps/nanofreedisk-setup`), payload zstd gắn cuối exe | Chỉ tôi (mặc định, không UAC) hoặc Mọi người (UAC) |
+  | MSI | `NANOFreeDisk-x.y.z-x64.msi` | WiX 3 qua Tauri bundler | Mọi người (per-machine, cho IT/GPO/Intune) |
+  | EXE (NSIS) | `NANOFreeDisk-x.y.z-x64-setup.exe` | NSIS qua Tauri bundler | Chỉ tôi hoặc Mọi người (trang chọn) |
+  | Portable | `NANOFreeDisk-x.y.z-x64-portable.zip` | zip + `portable.flag` | Không cài; dữ liệu nằm cạnh exe |
+
+  Kèm: `SHA256SUMS.txt` (+ `.minisig` khi có khóa), `sbom-x.y.z.cdx.json`, `latest.json` (updater), release notes từ `git-cliff`.
+- **DoD** (PLAN §8 hàng 8): cài → chạy → gỡ **sạch** (không còn tệp, registry, shortcut, menu Explorer) cho cả bốn gói; **silent** cài/gỡ chạy được (`/S`, `/qn`); release-check vẫn chặn; gói chưa ký số vẫn build được và bước ký **tự bỏ qua** khi chưa có secret.
+- Mọi chuỗi giao diện của bộ cài (egui, NSIS, WiX, hộp thoại dọn dữ liệu) có **EN + VI**.
+- Kiểm tra trên VM Win10/11 sạch: **chưa làm được trên máy dev** (không có VM) — ghi rõ ở §6, chạy trong CI (`windows-latest` = Windows Server 2022/2025) và người dùng tự kiểm trên VM.
+
+## 2. Thành phần
+
+### 2.1 Gói Tauri: MSI + NSIS
+
+- `tauri.conf.json` → `bundle.targets = ["msi", "nsis"]`, `webviewInstallMode = downloadBootstrapper` (Windows 10 thiếu WebView2 → tải bootstrapper chính chủ của Microsoft rồi cài Evergreen; Windows 11 có sẵn).
+- `nfd.exe` (CLI) và `rules/` đi kèm app qua `bundle.resources` trong **cấu hình riêng** `src-tauri/tauri.bundle.conf.json` (chỉ ghép khi `tauri build --config …`), để `cargo build` / `clippy` không đòi `target/release/nfd.exe` có sẵn.
+- **NSIS**: `installMode = "both"` (trang Chỉ tôi / Mọi người; silent mặc định Chỉ tôi, `/ALLUSERS` cho mọi người), hai ngôn ngữ English / Vietnamese, hook `installer/nsis/hooks.nsh`:
+  - `NSIS_HOOK_PREUNINSTALL` → gỡ verb Explorer (HKCU, giống `nfd_platform::shell_menu`) và chạy `nanofreedisk.exe --uninstall-cleanup` (§2.3) **trước** khi template của Tauri xóa `%APPDATA%` / `%LOCALAPPDATA%\vn.io.nanodev.nanofreedisk` (ô "Delete the application data"), để Quarantine không bao giờ bị xóa âm thầm.
+  - `/REMOVEDATA` trên dòng lệnh = tích ô xóa dữ liệu khi gỡ silent; không có → giữ dữ liệu.
+  - `NSIS_HOOK_POSTUNINSTALL` → xóa khóa `HKCU\Software\<publisher>\NANOFreeDisk` (ngôn ngữ bộ cài) khi không phải chế độ update.
+- **MSI**: per-machine (template WiX của Tauri cố định `InstallScope="perMachine"`), fragment `installer/wix/shell-menu-cleanup.wxs`: `RemoveRegistryKey` cho verb Explorer + custom action chạy `nanofreedisk.exe --uninstall-cleanup` trong `InstallUISequence` khi `REMOVE="ALL"` (chỉ khi có UI — gỡ `/qn` giữ nguyên dữ liệu người dùng). MSI không xóa dữ liệu người dùng (với GPO, gỡ chạy dưới SYSTEM, không biết hồ sơ nào): ghi rõ trong README.
+
+### 2.2 Portable
+
+- Zip gồm `nanofreedisk.exe`, `nfd.exe`, `rules/`, `LICENSE`, `README.md`, `portable.flag`.
+- Khi `portable.flag` nằm cạnh exe đang chạy: mọi dữ liệu (lịch sử, settings, nhật ký, quarantine ổ hệ thống, dữ liệu WebView2 qua `WEBVIEW2_USER_DATA_FOLDER`) vào `<thư mục exe>\data\`. Một hàm duy nhất `nfd_history::portable_dir()` cho cả app và CLI; app gom mọi đường dẫn dữ liệu vào `paths.rs`.
+- Quarantine của ổ khác vẫn là `<ổ>\.nfd-quarantine` (đổi tên không vượt volume — đã có trong `QuarantineRoots`): khi exe nằm trên USB, tệp ổ `C:` vào `C:\.nfd-quarantine`.
+- Portable không ghi registry, không tự đăng ký menu Explorer (bật tay trong Settings thì tắt tay trước khi xóa thư mục), updater chỉ **thông báo** có bản mới.
+
+### 2.3 Dọn dữ liệu khi gỡ: `nanofreedisk.exe --uninstall-cleanup`
+
+Một đường duy nhất cho NSIS, MSI và bộ cài thương hiệu (không lặp logic trong NSIS script):
+
+- Đọc journal (`history.db`) → các thao tác còn mục trong **Quarantine** (`quarantine`, `hardlink`, `clone` chưa khôi phục, chưa purge) → số mục + dung lượng.
+- Có mục → hộp thoại rõ ràng (EN/VI theo `--lang`, settings, rồi ngôn ngữ Windows): **Khôi phục về chỗ cũ** / **Xóa vĩnh viễn** / **Để lại** (chỉ khi giữ dữ liệu). Khôi phục chỉ đụng mục Quarantine — mục trong Recycle Bin để Windows lo.
+- `--remove-data` → sau đó xóa `%LOCALAPPDATA%\vn.io.nanodev.nanofreedisk` (lịch sử, cache hash, nhật ký, quarantine ổ hệ thống, WebView2) và `%APPDATA%\vn.io.nanodev.nanofreedisk` (settings, nhiệt độ 24 h); thư mục `<ổ>\.nfd-quarantine` rỗng bị xóa.
+- `--silent`: không hộp thoại; có `--remove-data` thì **khôi phục** Quarantine (an toàn hơn xóa vĩnh viễn), không thì để nguyên. `--quarantine restore|purge|keep` chọn tường minh.
+- Luôn gỡ verb Explorer (`shell_menu::unregister`). App đang chạy → yêu cầu đóng (Thử lại / Bỏ qua).
+- **Không đụng PawnIO**: driver dùng chung với app khác (ADR 0002), gỡ NANOFreeDisk để nguyên; app không bundle PawnIO cho tới khi tác giả xác nhận quyền phân phối lại — chỉ link `pawnio.eu`.
+- Helper elevated (Advanced sensors) là chính `nanofreedisk.exe --nfd-helper`, không cài service / scheduled task → không có gì riêng để gỡ.
+
+### 2.4 Bộ cài thương hiệu `apps/nanofreedisk-setup`
+
+- Rust + **egui/eframe** (backend wgpu → DirectX 12, có WARP khi VM không có GPU), **không dùng WebView2**. Icon `installer/icons/nanofreedisk.ico` (resource exe), màu theo `docs/BRAND.md` (navy `#0B1220` / `#111C33`, cyan `#22D3EE` → lime `#A3E635`), wordmark **NANO**FreeDisk. EN/VI, chọn ở góc trên, mặc định theo ngôn ngữ Windows.
+- **Màn hình**: Splash → Chào mừng → Giấy phép (MIT) → Kiểu cài (Chỉ tôi `%LOCALAPPDATA%\Programs\NANOFreeDisk` / Mọi người `%ProgramFiles%\NANOFreeDisk` – UAC) → Thư mục & tùy chọn (Start Menu, Desktop, menu Explorer "Analyze with NANOFreeDisk") → Tiến trình (giải nén, kiểm tra WebView2, ghi registry) → Hoàn tất (Mở NANOFreeDisk, mở README).
+- **Payload**: `nanofreedisk-setup.exe --pack <thư mục> --out <file>` ghép stub + zstd(`nanofreedisk.exe`, `nfd.exe`, `rules/`, `LICENSE`, `README.md`, `uninstall.exe` = chính stub) + footer. Exe đọc payload theo footer, bỏ qua bảng chứng chỉ Authenticode ở cuối file (đọc PE security directory) → ký số sau khi ghép vẫn đọc được.
+- **Mọi người**: chọn → chạy lại chính nó với `runas` (UAC) và tham số đã chọn; tiến trình elevated cài rồi thoát.
+- **WebView2**: đọc `pv` dưới `…\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}` (HKLM WOW6432Node / HKLM / HKCU); thiếu → tải `MicrosoftEdgeWebview2Setup.exe` từ `go.microsoft.com/fwlink/p/?LinkId=2124703` (`URLDownloadToFileW`), **kiểm tra chữ ký Authenticode** (`WinVerifyTrust`, signer Microsoft) rồi chạy `/silent /install`. Không mạng → báo lỗi rõ, vẫn cài app (app báo thiếu WebView2 khi chạy).
+- **Registry** `HKCU|HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\NANOFreeDisk`: DisplayName, DisplayVersion, Publisher, InstallLocation, UninstallString, QuietUninstallString, DisplayIcon, EstimatedSize, URLInfoAbout, NoModify, NoRepair, `NanoInstaller=setup` (để nhận ra bản của mình). Thấy bản cài bởi NSIS/MSI (không có dấu này) → báo và đề nghị gỡ bản đó trước.
+- **Shortcut** `.lnk` qua `IShellLinkW` (crate `windows`, đã có trong lockfile qua Tauri).
+- **Uninstaller** `uninstall.exe --uninstall`: trang xác nhận + ô "Xóa dữ liệu của tôi" (mặc định không) → `--uninstall-cleanup` (§2.3) → xóa tệp, shortcut, registry, verb Explorer; tự chép sang `%TEMP%` để xóa được thư mục cài, bản tạm tự xóa khi thoát.
+- **Silent** tương thích NSIS: `/S`, `/D=<dir>` (cuối dòng), `/ALLUSERS`, `/NOSHORTCUTS`, `/SHELLMENU`; gỡ: `uninstall.exe --uninstall /S [/REMOVEDATA]`. Mã thoát 0 = ok, 1 = lỗi, 2 = người dùng hủy, 3 = cần quyền admin.
+
+### 2.5 Updater
+
+- `tauri-plugin-updater` (bản hợp MSRV 1.85 / Tauri 2.11) kiểm tra `https://github.com/congluuit/NANOFreeDisk/releases/latest/download/latest.json`; chữ ký minisign với **public key trong `tauri.conf.json`** (`plugins.updater.pubkey`).
+- Cài tự động chỉ cho bản NSIS / MSI (Tauri biết loại gói); bản thương hiệu và portable: chỉ thông báo + nút mở trang Release. Settings → "Kiểm tra cập nhật" (thủ công; không tự kiểm khi chưa bật).
+- `bundle.createUpdaterArtifacts` bật trong `tauri.bundle.conf.json` **chỉ khi** CI có `TAURI_SIGNING_PRIVATE_KEY` (không có → build không tạo `.sig`, không có `latest.json`, release vẫn chạy).
+- Khóa sinh **ngoài repo** (`%USERPROFILE%\.nanofreedisk-keys\updater.key`), không commit, không in. Tác giả tự đưa lên GitHub:
+
+  ```powershell
+  gh secret set TAURI_SIGNING_PRIVATE_KEY --repo congluuit/NANOFreeDisk < "$env:USERPROFILE\.nanofreedisk-keys\updater.key"
+  gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD --repo congluuit/NANOFreeDisk --body "<mật khẩu đã đặt khi sinh khóa>"
+  ```
+
+  Mất khóa riêng = bản đã cài không nhận cập nhật nữa → sao lưu thư mục khóa ra ngoài máy (USB / password manager).
+
+### 2.6 `release.yml`
+
+1. **release-check** (chặn, giữ nguyên): version Cargo / `tauri.conf.json` / `package.json` == tag, CHANGELOG có mục, fmt/clippy/test, rule packs, `cargo deny`.
+2. **build-windows**: CLI → app (`tauri build --bundles msi,nsis --config tauri.bundle.conf.json`) → setup stub → `--pack` → zip portable → **ký số** (SignPath, chỉ khi `SIGNPATH_API_TOKEN` tồn tại; không có → bước bị bỏ qua, ghi notice) → `scripts/smoke-test.ps1` (cài/gỡ silent cả 3 bộ cài + kiểm không sót tệp/registry/shortcut/menu) → upload.
+3. **publish**: SHA256SUMS, minisign (tùy chọn), SBOM, `latest.json` (từ `.sig` của NSIS nếu có), release notes, GitHub Release.
+4. `workflow_dispatch` có input `dry_run` (mặc định **true**): build + smoke test từ một ref bất kỳ, version lấy từ `Cargo.toml`, **không** tạo tag / Release / winget.
+
+## 3. Kiểm thử
+
+- Unit: đọc payload (footer, bỏ qua bảng chứng chỉ), round-trip pack → unpack, tham số silent (`/D=` có khoảng trắng, `/ALLUSERS`), đường dẫn cài mặc định, phát hiện portable, `--uninstall-cleanup` trên journal tạm (khôi phục / xóa / để lại; mục Recycle Bin không bị đụng), sinh `latest.json`.
+- Tích hợp trên máy dev (người dùng thường, không admin): build cả bốn gói; NSIS per-user và bộ cài thương hiệu per-user: cài có UI → mở app → gỡ; cài/gỡ silent; portable: chạy từ thư mục tạm, kiểm dữ liệu chỉ nằm trong `data\`. Sau mỗi vòng: không còn thư mục cài, khóa Uninstall, shortcut Start Menu/Desktop, verb Explorer, `%LOCALAPPDATA%`/`%APPDATA%` (khi chọn xóa dữ liệu). MSI cần admin (per-machine) → kiểm trong CI.
+- CI: `smoke-test.ps1` cài/gỡ silent MSI + NSIS + thương hiệu trên `windows-latest` (runner có admin).
+
+## 4. Lát cắt
+
+1. **Gói Tauri + dọn khi gỡ** — `tauri.bundle.conf.json` (nfd.exe, rules), `--uninstall-cleanup` + `nfd_history::uninstall`, NSIS hooks (`/REMOVEDATA`, khóa ngôn ngữ), WiX custom action.
+2. **Portable** — `portable_dir()`, `paths.rs` trong app, WebView2 data, CLI dùng chung, zip.
+3. **Bộ cài thương hiệu** — `apps/nanofreedisk-setup` (wizard egui, payload, WebView2, registry, shortcut, uninstaller, silent).
+4. **Updater** — plugin, pubkey, Settings → Kiểm tra cập nhật, `latest.json`.
+5. **Release** — `release.yml` (dry-run, SignPath tùy chọn, latest.json), `smoke-test.ps1` kiểm sót, README mục cài đặt, CHANGELOG.
+
+## 5. Ngoài phạm vi Phase 8
+
+- Bundle PawnIO (chờ tác giả xác nhận quyền phân phối lại, ADR 0002).
+- Tray monitor khởi động cùng Windows, file association `.nfdreport` (PLAN §6.2) — chưa có tính năng tương ứng trong app → v1.x.
+- MSI per-user / dual-purpose (cần template WiX riêng) — v1.x nếu có người dùng doanh nghiệp yêu cầu.
+- winget / Scoop: job winget có sẵn, chạy sau v1.0 khi có `WINGET_TOKEN`.
+- Delta update, kênh beta riêng.
+
+## 6. Rủi ro & việc còn lại
+
+- **Chưa ký số** → SmartScreen cảnh báo "Unknown publisher". Đăng ký SignPath Foundation (cần repo public + 1 release); trong lúc chờ, README hướng dẫn kiểm SHA256 (+ minisign).
+- **VM Win10/11 sạch chưa kiểm** (máy dev không có VM): người dùng chạy `scripts/smoke-test.ps1` trên VM, hoặc dựa vào CI `windows-latest`. Riêng WebView2 bootstrap chỉ kiểm được trên máy *thiếu* WebView2 (Win10 LTSC / VM sạch).
+- egui/wgpu trên VM không GPU: DirectX 12 WARP; nếu vẫn lỗi → bộ cài in lỗi và gợi ý dùng gói NSIS.
+- Antivirus heuristics với exe tự giải nén chưa ký: payload zstd chuẩn, không tự sửa mã, không ghi vào thư mục hệ thống ngoài thư mục cài.
