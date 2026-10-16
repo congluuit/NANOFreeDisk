@@ -21,16 +21,13 @@ pub struct Attribute {
     pub threshold: Option<u8>,
     /// 48-bit raw value.
     pub raw: u64,
+    /// Standard English name (a technical identifier, shown as is in every language,
+    /// as CrystalDiskInfo and smartctl do); `None` for vendor-specific ids.
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl Attribute {
-    /// Standard English name (a technical identifier, shown as is in every language,
-    /// as CrystalDiskInfo and smartctl do); `None` for vendor-specific ids.
-    #[must_use]
-    pub fn name(&self) -> Option<&'static str> {
-        name(self.id)
-    }
-
     /// The pre-fail flag (bit 0): falling to the threshold predicts failure.
     #[must_use]
     pub fn prefail(&self) -> bool {
@@ -134,6 +131,7 @@ pub fn parse(data: &[u8], thresholds: Option<&[u8]>) -> Vec<Attribute> {
                     None
                 },
                 raw: u64::from_le_bytes(raw),
+                name: name(e[0]).map(str::to_owned),
             })
         })
         .collect()
@@ -286,7 +284,7 @@ pub(crate) mod tests {
         assert_eq!((poh.current, poh.worst, poh.raw), (54, 54, 33_712));
         assert_eq!(attrs[0].threshold, Some(51));
         assert!(attrs[0].prefail());
-        assert_eq!(attrs[0].name(), Some("Read Error Rate"));
+        assert_eq!(attrs[0].name.as_deref(), Some("Read Error Rate"));
         let d = derive(&attrs, false);
         assert_eq!(d.temperature, Some(33));
         assert_eq!(d.power_on_hours, Some(33_712));

@@ -2253,6 +2253,7 @@ dependencies = [
  "nfd-core",
  "nfd-devtools",
  "nfd-dupes",
+ "nfd-health",
  "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",

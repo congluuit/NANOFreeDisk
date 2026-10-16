@@ -247,7 +247,7 @@ fn print_text(w: &mut impl Write, r: &HealthReport, raw: bool) -> io::Result<()>
                         w,
                         "  {:02X}  {:<38} {:>3} {:>3} {:>3}  {}",
                         at.id,
-                        at.name().unwrap_or("Vendor specific"),
+                        at.name.as_deref().unwrap_or("Vendor specific"),
                         at.current,
                         at.worst,
                         at.threshold.map_or("-".into(), |t| t.to_string()),

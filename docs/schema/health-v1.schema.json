@@ -99,7 +99,8 @@
                   "current": { "type": "integer" },
                   "worst": { "type": "integer" },
                   "threshold": { "type": ["integer", "null"] },
-                  "raw": { "$ref": "#/$defs/count", "description": "48-bit raw value" }
+                  "raw": { "$ref": "#/$defs/count", "description": "48-bit raw value" },
+                  "name": { "type": ["string", "null"], "description": "Standard English attribute name; null for vendor-specific ids" }
                 }
               }
             }

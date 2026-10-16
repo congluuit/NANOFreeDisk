@@ -25,7 +25,7 @@ home-pick-folder = Chọn thư mục cần phân tích
 home-action-analyze = Xem cái gì chiếm ổ đĩa
 home-action-analyze-hint = Treemap, sunburst và danh sách thư mục, tệp lớn nhất.
 home-action-health = Ổ đĩa có khỏe không?
-home-action-health-hint = Sức khỏe S.M.A.R.T. và NVMe sẽ có ở Phase 7.
+home-action-health-hint = Tốt / Cần chú ý / Xấu cho từng ổ, nhiệt độ, độ hao mòn và kiểm tra phân vùng.
 home-refresh = Làm mới
 home-no-drives = Không tìm thấy ổ đĩa nào.
 
@@ -351,7 +351,7 @@ health-good = Tốt
 health-fair = Cần chú ý
 health-poor = Nên xử lý sớm
 health-all-good = Hiện không có gì cần sửa.
-health-basis = Dựa trên dung lượng trống, tốc độ đầy của từng ổ (từ lịch sử quét) và lần quét gần nhất. Sức khỏe phần cứng (S.M.A.R.T.) sẽ có ở Phase 7.
+health-basis = Dựa trên dung lượng trống, tốc độ đầy của từng ổ (từ lịch sử quét), lần quét gần nhất và sức khỏe của chính từng ổ (S.M.A.R.T. / NVMe, nhiệt độ).
 health-low-space = { $drive } chỉ còn trống { $percent } ({ $size }).
 health-filling-fast = Với tốc độ hiện tại, { $drive } sẽ đầy sau khoảng { $days } ngày.
 health-old-large = Có thể giải phóng { $size } tệp lớn hoặc cũ trong { $folder }.

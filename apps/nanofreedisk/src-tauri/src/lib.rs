@@ -83,6 +83,7 @@ pub fn run() {
         .manage(commands::devcache::DevState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
+        .manage(commands::diskhealth::HealthState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -171,6 +172,9 @@ pub fn run() {
             commands::hwmon::pawnio_open_site,
             commands::hwmon::thermal_set,
             commands::hwmon::thermal_status,
+            commands::diskhealth::health_report,
+            commands::diskhealth::health_elevated,
+            commands::diskhealth::health_export,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

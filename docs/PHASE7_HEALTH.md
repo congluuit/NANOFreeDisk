@@ -1,6 +1,6 @@
 # Phase 7 — Health: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** — lát 1 ✅ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`, `docs/health-validation.md`), lát 2 ✅ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ⏳ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
+> Trạng thái: **đang làm** — lát 1 ✅ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`, `docs/health-validation.md`), lát 2 ✅ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ✅ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
 
 ## 1. Mục tiêu & DoD
 
@@ -63,7 +63,7 @@ Nhiệt độ không đổi trạng thái (như CrystalDiskInfo) mà là chỉ s
 
 ### 2.4 Health Score (F1)
 
-`nfd_core::health::DriveFacts` (thuần, có test) + `add_drive_findings`: ổ **Xấu** −35 (`drive-bad`), **Cần chú ý** −15 (`drive-caution`), ổ đang ≥ ngưỡng tới hạn −10 / ≥ ngưỡng cảnh báo −4 (`drive-hot` / `drive-warm`, bỏ qua khi Hardware Monitor đã có `hot-disk` / `warm-disk` cho ổ đó), volume dirty −10 (`volume-dirty`); ổ "Không rõ" chỉ là thông tin (`drive-unknown`). Nút Fix → view Health. `regrade` dùng chung các mốc điểm (≥ 85 tốt, ≥ 60 khá).
+`nfd_core::health::DriveFacts` (thuần, có test) + `add_drive_findings`: ổ **Xấu** −45 (`drive-bad`, một mình đủ đưa điểm xuống "kém"), **Cần chú ý** −15 (`drive-caution`), ổ đang ≥ ngưỡng tới hạn −10 / ≥ ngưỡng cảnh báo −4 (`drive-hot` / `drive-warm`, bỏ qua khi Hardware Monitor đã có `hot-disk` / `warm-disk` cho ổ đó), volume dirty −10 (`volume-dirty`); ổ "Không rõ" chỉ là thông tin (`drive-unknown`). Nút Fix → view Health. `regrade` dùng chung các mốc điểm (≥ 85 tốt, ≥ 60 khá).
 
 ### 2.5 CLI
 
