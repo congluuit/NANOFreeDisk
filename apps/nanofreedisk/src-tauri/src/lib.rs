@@ -7,6 +7,7 @@
 
 mod commands;
 mod session;
+mod tray;
 
 use tauri::{Emitter, Manager};
 
@@ -84,6 +85,11 @@ pub fn run() {
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
         .manage(commands::diskhealth::HealthState::default())
+        .setup(|app| {
+            // the notification-area icon (G5); the app works without it
+            let _ = tray::create(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -175,6 +181,7 @@ pub fn run() {
             commands::diskhealth::health_report,
             commands::diskhealth::health_elevated,
             commands::diskhealth::health_export,
+            commands::diskhealth::health_watch_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

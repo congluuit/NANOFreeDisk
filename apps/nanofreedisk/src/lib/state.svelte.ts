@@ -40,6 +40,9 @@ export interface Settings {
   dupeMinMb: number;
   /** Duplicates: how the copy to keep is chosen (auto, oldest, newest, shortest). */
   dupeKeep: string;
+  /** Drive health: notify when a drive's verdict gets worse, a drive gets too hot or
+   * a volume drops below 10 % free (checked every 30 minutes while the app runs). */
+  healthAlerts: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -61,6 +64,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staleDays: 90,
   dupeMinMb: 1,
   dupeKeep: "auto",
+  healthAlerts: true,
 };
 
 interface Toast {

@@ -14,6 +14,7 @@
   } from "./lib/state.svelte";
   import { applyPalette, resolvePalette } from "./lib/theme";
   import { startThermalSync } from "./lib/hw/thermal.svelte";
+  import { startHealthWatch } from "./lib/health/watch.svelte";
   import Icon from "./lib/components/Icon.svelte";
   import ScanProgress from "./lib/components/ScanProgress.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -59,6 +60,7 @@
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
       startThermalSync();
+      startHealthWatch();
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();

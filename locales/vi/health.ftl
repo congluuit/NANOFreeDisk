@@ -130,3 +130,21 @@ health-drive-warm = { $folder } đang ở { $value } °C, trên ngưỡng cảnh
 health-drive-unknown = Không đọc được sức khỏe của { $folder }.
 health-volume-dirty = { $drive } bị đánh dấu cần kiểm tra đĩa (chkdsk) — Windows sẽ kiểm tra ở lần khởi động lại tới.
 health-fix-health = Xem sức khỏe ổ đĩa
+
+## Alerts and tray (G5)
+
+health-tray-open = Mở NANOFreeDisk
+health-tray-quit = Thoát
+health-tray-status = Sức khỏe ổ đĩa: { $status }
+health-tray-free = { $drive }  còn trống { $size } ({ $percent })
+health-alert-status-title = { $subject }: sức khỏe ổ { $status }
+health-alert-status-body = Hãy sao lưu dữ liệu và mở Sức khỏe ổ đĩa để xem chi tiết.
+health-alert-hot-title = { $subject } đang nóng: { $value } °C
+health-alert-hot-body = Trên ngưỡng cảnh báo của chính ổ ({ $limit } °C).
+health-alert-low-title = { $subject } sắp đầy
+health-alert-low-body = Chỉ còn { $value } % dung lượng trống.
+
+settings-health = Sức khỏe ổ đĩa
+settings-health-alerts = Báo cho tôi khi ổ đĩa có vấn đề
+settings-health-alerts-note = Kiểm tra mỗi 30 phút khi app đang mở: sức khỏe ổ xấu đi, ổ vượt ngưỡng cảnh báo nhiệt của chính ổ (khi cảnh báo nhiệt độ trong Phần cứng đang tắt) và ổ còn dưới 10 % trống. Mỗi vấn đề chỉ báo một lần.
+hint-health-alerts = Nếu thay đổi: NANOFreeDisk hiện (hoặc thôi hiện) thông báo Windows khi sức khỏe ổ xấu đi, ổ quá nóng hoặc ổ sắp đầy. Chỉ kiểm tra đọc; không thay đổi gì.

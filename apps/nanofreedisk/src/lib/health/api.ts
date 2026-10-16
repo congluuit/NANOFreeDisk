@@ -9,5 +9,6 @@ export const healthApi = {
   /** Shows UAC once; adds SMART thresholds, USB bridges and the dirty bit. */
   elevated: () => call<HealthReport>("health_elevated"),
   exportJson: (path: string, serials: boolean) => call<void>("health_export", { path, serials }),
-  watchSet: (enabled: boolean, texts: Record<string, string>) => call<void>("health_watch_set", { enabled, texts }),
+  watchSet: (enabled: boolean, temperatures: boolean, texts: Record<string, string>) =>
+    call<void>("health_watch_set", { enabled, temperatures, texts }),
 };

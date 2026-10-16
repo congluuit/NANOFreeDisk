@@ -130,3 +130,21 @@ health-drive-warm = { $folder } is at { $value } °C, above its own warning temp
 health-drive-unknown = The health of { $folder } could not be read.
 health-volume-dirty = { $drive } is marked for a disk check (chkdsk) — Windows will check it at the next restart.
 health-fix-health = See drive health
+
+## Alerts and tray (G5)
+
+health-tray-open = Open NANOFreeDisk
+health-tray-quit = Quit
+health-tray-status = Drive health: { $status }
+health-tray-free = { $drive }  { $size } free ({ $percent })
+health-alert-status-title = { $subject }: drive health { $status }
+health-alert-status-body = Back up your data and open Drive health for the details.
+health-alert-hot-title = { $subject } is hot: { $value } °C
+health-alert-hot-body = Above the drive's own warning temperature ({ $limit } °C).
+health-alert-low-title = { $subject } is almost full
+health-alert-low-body = Only { $value } % free space is left.
+
+settings-health = Drive health
+settings-health-alerts = Alert me about drive problems
+settings-health-alerts-note = Checked every 30 minutes while the app is open: a drive's health getting worse, a drive above its own warning temperature (when temperature alerts in Hardware are off) and a drive dropping below 10 % free. Each problem is reported once.
+hint-health-alerts = If you change this: NANOFreeDisk shows (or stops showing) a Windows notification when a drive's health gets worse, a drive gets too hot or a drive is almost full. Read-only checks; nothing is changed.

@@ -1,16 +1,21 @@
 //! Health view (docs/PHASE7_HEALTH.md §2.6): SMART / NVMe verdict per drive and the
 //! read-only volume checks from `nfd-health`, the "read everything" button that asks
-//! the elevated helper once (UAC), the JSON export, and the drive findings of the
-//! Health Score.
+//! the elevated helper once (UAC), the JSON export, the drive findings of the
+//! Health Score, and the alert watch (G5): every 30 minutes while the app runs, a
+//! notification when a drive's verdict gets worse, a drive passes its warning
+//! temperature or a volume drops below 10 % free; the tray icon shows the result.
 //!
 //! Strictly read-only: nothing here changes a drive or a volume.
 
-use std::path::Path;
+use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::time::Duration;
 
 use nfd_core::health::{DriveFacts, DriveHeat, DriveStatus, HealthScore};
+use nfd_health::alerts::{Alert, AlertKind, AlertState};
 use nfd_health::{HealthReport, Heat, Options, Privileged, Status};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 
 use super::{AppState, CmdResult, err, with_history};
 
@@ -24,7 +29,25 @@ pub struct HealthState {
     /// What the elevated helper read this session; folded into later refreshes
     /// (thresholds never change, the dirty bit only at chkdsk / restart).
     privileged: Mutex<Option<Privileged>>,
+    watch: Mutex<Watch>,
 }
+
+/// Alert settings from the UI.
+#[derive(Debug, Default)]
+struct Watch {
+    enabled: bool,
+    /// Also alert on temperature (off while the Hardware Monitor's own temperature
+    /// alerts are on, so a hot drive is not reported twice).
+    temperatures: bool,
+    /// Notification and tray texts in the UI language (`{subject}`, `{status}`,
+    /// `{value}`, `{limit}` are filled in here).
+    texts: HashMap<String, String>,
+    started: bool,
+}
+
+/// First check after start (leave the app time to come up), then every 30 minutes.
+const FIRST_CHECK: Duration = Duration::from_secs(20);
+const EVERY: Duration = Duration::from_secs(30 * 60);
 
 impl HealthState {
     pub fn cached(&self) -> Option<HealthReport> {
@@ -61,7 +84,161 @@ pub fn fresh(app: &AppHandle) -> HealthReport {
     }
     add_trend(app, &mut report);
     state.store(&report);
+    update_tray(app, &report);
     report
+}
+
+fn update_tray(app: &AppHandle, report: &HealthReport) {
+    let texts = app
+        .state::<HealthState>()
+        .watch
+        .lock()
+        .map(|w| w.texts.clone())
+        .unwrap_or_default();
+    let status = match report.worst() {
+        Status::Good => "good",
+        Status::Caution => "caution",
+        Status::Bad => "bad",
+        Status::Unknown => "unknown",
+    };
+    let drives = report
+        .volumes
+        .iter()
+        .filter(|v| !v.removable && v.total > 0)
+        .map(|v| (v.root.clone(), v.free, v.total))
+        .collect();
+    crate::tray::update(
+        app,
+        &crate::tray::TrayState {
+            status: status.to_owned(),
+            drives,
+        },
+        &texts,
+    );
+}
+
+fn state_path(app: &AppHandle) -> Option<PathBuf> {
+    app.path()
+        .app_local_data_dir()
+        .ok()
+        .map(|d| d.join("health-state.json"))
+}
+
+/// Fill an alert's template.
+fn fill(template: &str, a: &Alert, texts: &HashMap<String, String>) -> String {
+    let status = a
+        .status
+        .map(|s| {
+            let key = match s {
+                Status::Bad => "status-bad",
+                Status::Caution => "status-caution",
+                Status::Good => "status-good",
+                Status::Unknown => "status-unknown",
+            };
+            crate::tray::text(texts, key)
+        })
+        .unwrap_or_default();
+    template
+        .replace("{subject}", a.subject.trim_end_matches('\\'))
+        .replace("{status}", &status)
+        .replace("{value}", &format!("{:.0}", a.value))
+        .replace("{limit}", &format!("{:.0}", a.limit.unwrap_or(0.0)))
+}
+
+/// English fallbacks until the UI sends its texts.
+fn alert_text(texts: &HashMap<String, String>, kind: AlertKind, part: &str) -> String {
+    let key = format!(
+        "alert-{}-{part}",
+        match kind {
+            AlertKind::Status => "status",
+            AlertKind::Hot => "hot",
+            AlertKind::LowSpace => "low",
+        }
+    );
+    if let Some(t) = texts.get(&key).filter(|t| !t.is_empty()) {
+        return t.clone();
+    }
+    match (kind, part) {
+        (AlertKind::Status, "title") => "{subject}: drive health {status}",
+        (AlertKind::Status, _) => "Back up your data and open Drive health for the details.",
+        (AlertKind::Hot, "title") => "{subject} is hot: {value} °C",
+        (AlertKind::Hot, _) => "Above the drive's warning temperature ({limit} °C).",
+        (AlertKind::LowSpace, "title") => "{subject} is almost full",
+        (AlertKind::LowSpace, _) => "Only {value} % free space is left.",
+    }
+    .to_owned()
+}
+
+/// One check: read, compare with the last check, notify.
+fn check(app: &AppHandle) {
+    use tauri_plugin_notification::NotificationExt;
+    let report = fresh(app);
+    let (enabled, temperatures, texts) = match app.state::<HealthState>().watch.lock() {
+        Ok(w) => (w.enabled, w.temperatures, w.texts.clone()),
+        Err(_) => return,
+    };
+    if !enabled {
+        return;
+    }
+    let Some(path) = state_path(app) else {
+        return;
+    };
+    let mut last: AlertState = std::fs::read_to_string(&path)
+        .ok()
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    let alerts = nfd_health::alerts::check(&mut last, &report, temperatures);
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(json) = serde_json::to_string(&last) {
+        let _ = std::fs::write(&path, json);
+    }
+    for a in alerts {
+        let _ = app
+            .notification()
+            .builder()
+            .title(fill(&alert_text(&texts, a.kind, "title"), &a, &texts))
+            .body(fill(&alert_text(&texts, a.kind, "body"), &a, &texts))
+            .show();
+        let _ = app.emit("health-alert", &a);
+    }
+}
+
+/// Alerts on or off, with the texts in the UI language. Starts the watch thread on
+/// first use (it also keeps the tray icon current while alerts are off).
+#[tauri::command]
+pub fn health_watch_set(
+    app: AppHandle,
+    enabled: bool,
+    temperatures: bool,
+    texts: HashMap<String, String>,
+) -> CmdResult<()> {
+    let state = app.state::<HealthState>();
+    let start = {
+        let mut w = state.watch.lock().map_err(|e| err("internal", e))?;
+        w.enabled = enabled;
+        w.temperatures = temperatures;
+        w.texts = texts;
+        !std::mem::replace(&mut w.started, true)
+    };
+    if let Some(r) = state.cached() {
+        update_tray(&app, &r);
+    }
+    if start {
+        let app = app.clone();
+        std::thread::Builder::new()
+            .name("health-watch".into())
+            .spawn(move || {
+                std::thread::sleep(FIRST_CHECK);
+                loop {
+                    check(&app);
+                    std::thread::sleep(EVERY);
+                }
+            })
+            .map_err(|e| err("internal", e))?;
+    }
+    Ok(())
 }
 
 /// Drives and volumes; `refresh` reads again, otherwise the last report is reused.

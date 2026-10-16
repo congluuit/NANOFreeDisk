@@ -241,7 +241,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
 | 5 | Duplicate finder | ✅ done — Duplicates view (files + folders), "Find duplicates here", replace with hard links / ReFS block clones, `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ⏳ |
-| 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | 🚧 in progress — `nfd-health` + `nfd health` (NVMe health log, ATA SMART, CrystalDiskInfo-style verdict, volume checks) |
+| 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ✅ done — Health view + `nfd health` (NVMe health log without admin rights, ATA SMART / USB SAT through the elevated helper, CrystalDiskInfo-style verdict, volume checks, HTML/JSON report), Health Score, drive alerts and tray icon; quotas and the dump/log advisor remain for v1.x |
 | 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ⏳ |
 | 9 | **v1.0** release for Windows | ⏳ |
 
