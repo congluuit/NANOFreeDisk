@@ -1,6 +1,6 @@
 # Phase 3 — Safety + Clean: kế hoạch chi tiết
 
-> Trạng thái: **kế hoạch**, chưa code (2026-10-16). Bản chi tiết của hàng "3 – Safety + Clean" trong `docs/PLAN.md` §8, theo thiết kế §3.4, §4.2, §5. Chạy song song với Hardware Monitor (`docs/HARDWARE_MONITOR.md`) — xem mục 7 để hai bên không đụng file của nhau.
+> Trạng thái: **đã làm xong 4 lát cắt** (2026-10-16) — checklist ở `docs/PLAN.md` §12 "Phase 3". Khác kế hoạch: quarantine trên ổ hệ thống nằm trong thư mục dữ liệu của app (vốn riêng tư cho user) thay vì `C:\.nfd-quarantine`; kiểm tra Authenticode được thay bằng quy tắc chặt hơn (mọi file chương trình dưới `%SystemRoot%` đều bị chặn); `cargo-fuzz` chưa làm. Bản chi tiết của hàng "3 – Safety + Clean" trong `docs/PLAN.md` §8, theo thiết kế §3.4, §4.2, §5. Chạy song song với Hardware Monitor (`docs/HARDWARE_MONITOR.md`) — xem mục 7 để hai bên không đụng file của nhau.
 
 ## 1. Mục tiêu & DoD
 

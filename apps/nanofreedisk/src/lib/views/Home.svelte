@@ -3,12 +3,26 @@
   import { formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, refreshVolumes, startScan } from "../state.svelte";
+  import { clean, defaultPicks, scanJunk } from "../clean/state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
   import Icon from "../components/Icon.svelte";
   import type { Volume } from "../types";
 
   const loc = $derived(intlLocale());
   const system = $derived(app.volumes.find((v) => v.system && v.ready));
+
+  // G1: what the rule packs would free safely, found in the background on Home
+  $effect(() => {
+    if (!clean.scan && !clean.scanning && !clean.running) void scanJunk();
+  });
+
+  function freeSafely() {
+    app.view = "clean";
+    if (clean.scan) {
+      const ids = defaultPicks(clean.scan);
+      if (ids.length) clean.confirm = ids;
+    }
+  }
 
   async function scanFolder() {
     const path = await pickFolder(t("home-pick-folder"));
@@ -49,10 +63,16 @@
   <HealthCard />
 
   <div class="big">
-    <button class="action card" disabled title={t("home-action-free-hint")}>
+    <button class="action card free" onclick={freeSafely} disabled={!!clean.scan && !clean.scan.safe} data-effect title={t("home-free-hint")}>
       <span class="ic safe"><Icon name="clean" size={26} /></span>
-      <strong>{t("home-action-free")}</strong>
-      <span class="muted">{t("home-action-free-hint")}</span>
+      <strong>
+        {#if clean.scan}
+          {clean.scan.safe ? t("home-free-safely", { size: formatSize(clean.scan.safe, loc) }) : t("home-free-nothing")}
+        {:else}
+          {t("home-free-checking")}
+        {/if}
+      </strong>
+      <span class="muted">{t("home-free-sub")}</span>
     </button>
     <button class="action card" onclick={analyzeSystem} disabled={!system && !app.summary} data-effect title={t("hint-scan")}>
       <span class="ic"><Icon name="analyze" size={26} /></span>

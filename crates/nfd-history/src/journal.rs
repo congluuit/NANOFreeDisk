@@ -397,6 +397,16 @@ impl History {
         Ok(purged)
     }
 
+    /// Remove one operation from the journal (its files are not touched).
+    ///
+    /// # Errors
+    /// SQLite failure.
+    pub fn forget_operation(&mut self, id: &str) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM operations WHERE id = ?1", [id])?;
+        Ok(())
+    }
+
     /// Forget operations older than `days` days (the journal keeps 90 days like the
     /// audit log). Their quarantine must already be purged.
     ///

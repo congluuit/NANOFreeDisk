@@ -3,6 +3,7 @@
 // to exercise the treemap at the Phase 2 target (50k rectangles). Never bundled into
 // the Tauri build's hot path — `api.ts` imports it lazily only outside Tauri.
 
+import { cleanHandlers, mockDeleted } from "./clean/mock";
 import type { DeleteItem, Filter, Node, Slice } from "./types";
 import { REST_ID } from "./types";
 
@@ -355,6 +356,7 @@ const MOCK_ARTICLES = [
 ];
 
 const handlers: Record<string, (a: Record<string, any>) => unknown> = {
+  ...cleanHandlers,
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
     { root: "C:\\", label: "Windows", fs: "NTFS", kind: "fixed", total: 4e12, available: 1.45e12, free: 1.45e12, ready: true, system: true },
@@ -556,6 +558,12 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
       return { id, status: c.allowed ? "done" : "blocked", reason: c.reason, message: null, onDisk: c.onDisk };
     });
     rollUp();
+    return out;
+  },
+  delete_entries: ({ ids, mode, kind }) => {
+    const items = [...new Set<number>(ids)].map(check).filter((c) => c.allowed && !entries[c.id].removed);
+    const out = handlers.recycle({ ids }) as { status: string }[];
+    mockDeleted(kind ?? "manual", items.map((c) => ({ path: c.path, bytes: c.onDisk, isDir: c.kind === "dir" })), mode ?? "recycle-bin");
     return out;
   },
   export_report: () => undefined,

@@ -22,8 +22,6 @@ home-title = Your drives
 home-subtitle = Pick a drive or folder to see what uses the space. Nothing is deleted without your confirmation.
 home-scan-folder = Scan a folder…
 home-pick-folder = Choose a folder to analyze
-home-action-free = Free up space safely
-home-action-free-hint = Junk & cache cleaning arrives with the safety engine (Phase 3).
 home-action-analyze = See what fills the disk
 home-action-analyze-hint = Treemap, sunburst and lists of the biggest folders and files.
 home-action-health = Is my drive healthy?
@@ -180,7 +178,7 @@ delete-result = { $done } moved ({ $size }) · { $failed } not moved
 delete-declined = Kept (permanent delete declined)
 
 reason-volume-root = The root of a drive cannot be deleted.
-reason-system-dir = Inside the Windows folder — use Clean (coming in Phase 3) or Windows tools.
+reason-system-dir = Inside the Windows folder — junk there is cleaned from the Clean view or with Windows tools.
 reason-protected = Protected location ({ $template }): Windows, programs or credentials need it.
 reason-contains-protected = Contains a protected folder ({ $template }); delete items inside it instead.
 reason-link = Links, junctions and mount points are removed in Explorer, not here.
@@ -307,7 +305,6 @@ ol-none = Nothing here — nice and tidy.
 nav-tidy = Tidy up
 tidy-title = Tidy up
 tidy-intro = Empty folders and shortcuts whose target is gone. They take almost no space but clutter Explorer and the Start menu.
-tidy-readonly = Read-only for now: removing them arrives with the safety engine (Phase 3) so every change can be undone.
 tidy-empty-title = Empty folders
 tidy-empty-summary = { $count ->
     [one] 1 empty folder tree
