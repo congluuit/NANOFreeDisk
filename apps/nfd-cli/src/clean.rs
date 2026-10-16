@@ -32,7 +32,7 @@ pub enum Level {
 }
 
 impl Level {
-    const fn max(self) -> RiskLevel {
+    pub const fn max(self) -> RiskLevel {
         match self {
             Self::Safe => RiskLevel::Safe,
             Self::Caution => RiskLevel::Caution,

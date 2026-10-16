@@ -1,11 +1,12 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3), `rules list` / `rules validate`, and the Hardware
+//! `plan explain` (Phase 3), `devcache` (Phase 4), `rules list` / `rules validate`, and the Hardware
 //! Monitor's `hw` / `sensors` / `ps`. Dedupe, watch and health commands arrive with
 //! their phases (see `docs/PLAN.md` §4.7).
 
 mod clean;
+mod devcache;
 mod diff;
 mod hw;
 mod ps;
@@ -46,6 +47,11 @@ enum Command {
     Diff(diff::DiffArgs),
     /// Find junk with the rule packs and clean it (dry run unless --apply).
     Clean(clean::CleanArgs),
+    /// Developer caches by vendor → app → folder; clean them; find unknown ones.
+    Devcache {
+        #[command(subcommand)]
+        action: Option<devcache::DevcacheAction>,
+    },
     /// Clean / delete operations: list, restore, purge the quarantine.
     Quarantine {
         #[command(subcommand)]
@@ -114,6 +120,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Scan(args) => scan::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Clean(args) => clean::run(args),
+        Command::Devcache { action } => devcache::run(action),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {
             action: PlanAction::Explain { path, rules },
