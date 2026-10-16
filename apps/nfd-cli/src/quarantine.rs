@@ -7,7 +7,7 @@ use std::process::ExitCode;
 use anyhow::Context;
 use clap::Subcommand;
 use indicatif::{ProgressBar, ProgressStyle};
-use nfd_core::exec::{self, ExecOptions, ItemStatus, QuarantineRoots};
+use nfd_core::exec::{self, ExecOptions, ItemStatus, Operation, QuarantineRoots};
 use nfd_core::plan::{CleanPlan, DeleteMode};
 use nfd_core::safety::{LiveProbe, SafetyGate};
 use nfd_core::units::{format_count, format_size};
@@ -86,61 +86,59 @@ fn ask(prompt: &str) -> anyhow::Result<String> {
     Ok(line.trim().to_owned())
 }
 
-/// `nfd clean --apply`.
-pub fn apply(args: &CleanArgs, report: &MatchReport, plan: CleanPlan) -> anyhow::Result<ExitCode> {
+/// Ask before acting on `plan` (unless `yes`; a permanent plan always asks for
+/// `DELETE`). `Ok(false)` = the user cancelled.
+pub fn confirm(plan: &CleanPlan, yes: bool) -> anyhow::Result<bool> {
     let selected = plan.selected().count();
-    if selected == 0 {
-        println!("Nothing to clean.");
-        return Ok(ExitCode::SUCCESS);
-    }
     let bytes = plan.selected_bytes();
     let permanent = plan.selected().any(|i| i.mode == DeleteMode::Permanent);
-    if !args.json {
-        for r in report.rules.iter().filter(|r| !r.running.is_empty()) {
-            eprintln!(
-                "note: {} is running ({}); files it keeps open are skipped",
-                r.app,
-                r.running.join(", ")
-            );
-        }
-    }
-    if permanent {
+    let ok = if permanent {
         let answer = ask(&format!(
             "Permanently delete {} in {selected} item(s)? This cannot be undone. Type DELETE to continue: ",
             format_size(bytes)
         ))?;
-        if answer != "DELETE" {
-            eprintln!("Cancelled.");
-            return Ok(ExitCode::FAILURE);
-        }
-    } else if !args.yes {
+        answer == "DELETE"
+    } else if yes {
+        true
+    } else {
         let answer = ask(&format!(
             "Move {} in {selected} item(s) to the quarantine (restorable for {} days)? [y/N] ",
             format_size(bytes),
             exec::QUARANTINE_TTL_DAYS
         ))?;
-        if !matches!(answer.to_lowercase().as_str(), "y" | "yes" | "c" | "co") {
-            eprintln!("Cancelled.");
-            return Ok(ExitCode::FAILURE);
-        }
+        matches!(answer.to_lowercase().as_str(), "y" | "yes" | "c" | "co")
+    };
+    if !ok {
+        eprintln!("Cancelled.");
     }
+    Ok(ok)
+}
 
+/// Run a confirmed plan through the SafetyGate (live checks) and the executor, then
+/// record it in the undo journal and the audit log. Returns the operation and
+/// whether the journal was written.
+pub fn execute(
+    plan: &CleanPlan,
+    kind: &str,
+    db: Option<PathBuf>,
+    quiet: bool,
+) -> (Operation, bool) {
     let platform = nfd_platform::Native;
     let gate = SafetyGate::new(&platform.resolver());
     let roots = roots();
-    let mut history = crate::diff::open_history(args.db.clone()).ok();
+    let mut history = crate::diff::open_history(db).ok();
     if let Some(h) = history.as_mut() {
         let _ = h.purge_expired(&roots, exec::unix_now(), None);
     }
     let now = exec::unix_now();
     let opts = ExecOptions {
         op_id: exec::new_op_id(now),
-        kind: "clean".into(),
+        kind: kind.into(),
         owner: 0,
         roots,
         now,
     };
-    let bar = if args.json {
+    let bar = if quiet {
         ProgressBar::hidden()
     } else {
         ProgressBar::new(plan.items.len() as u64)
@@ -149,7 +147,7 @@ pub fn apply(args: &CleanArgs, report: &MatchReport, plan: CleanPlan) -> anyhow:
         ProgressStyle::with_template("{bar:30} {pos}/{len} {wide_msg}")
             .unwrap_or_else(|_| ProgressStyle::default_bar()),
     );
-    let op = exec::execute(&plan, &gate, &LiveProbe, &opts, &mut |done, _, r| {
+    let op = exec::execute(plan, &gate, &LiveProbe, &opts, &mut |done, _, r| {
         bar.set_position(done as u64);
         bar.set_message(r.path.display().to_string());
         true
@@ -163,49 +161,80 @@ pub fn apply(args: &CleanArgs, report: &MatchReport, plan: CleanPlan) -> anyhow:
     if let Some(dir) = nfd_history::audit::default_dir() {
         let _ = nfd_history::audit::append(&dir, &op);
     }
+    (op, journal_ok)
+}
 
+/// Problems, totals and the undo hint of an operation.
+pub fn print_outcome(op: &Operation, journal_ok: bool) {
+    for r in op
+        .items
+        .iter()
+        .filter(|r| !matches!(r.status, ItemStatus::Done | ItemStatus::NotSelected))
+    {
+        println!(
+            "  {:<9} {}{}",
+            r.status.as_str(),
+            r.path.display(),
+            r.reason
+                .as_deref()
+                .map(|x| format!(" ({x})"))
+                .unwrap_or_default()
+        );
+    }
+    println!(
+        "Freed {} — {} done, {} partly (files in use), {} skipped, {} failed. Operation {}.",
+        format_size(op.freed()),
+        format_count(op.count(ItemStatus::Done) as u64),
+        op.count(ItemStatus::Partial),
+        op.count(ItemStatus::Skipped),
+        op.count(ItemStatus::Failed),
+        op.id
+    );
+    if journal_ok {
+        println!("Undo with `nfd quarantine restore {}`.", op.id);
+    } else {
+        println!(
+            "warning: the undo journal could not be written; quarantined items are listed in each `manifest.jsonl`."
+        );
+    }
+}
+
+/// Exit code of an operation: failure when an item failed.
+pub fn exit_code(op: &Operation) -> ExitCode {
+    if op.count(ItemStatus::Failed) == 0 {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
+}
+
+/// `nfd clean --apply`.
+pub fn apply(args: &CleanArgs, report: &MatchReport, plan: CleanPlan) -> anyhow::Result<ExitCode> {
+    if plan.selected().next().is_none() {
+        println!("Nothing to clean.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    if !args.json {
+        for r in report.rules.iter().filter(|r| !r.running.is_empty()) {
+            eprintln!(
+                "note: {} is running ({}); files it keeps open are skipped",
+                r.app,
+                r.running.join(", ")
+            );
+        }
+    }
+    if !confirm(&plan, args.yes)? {
+        return Ok(ExitCode::FAILURE);
+    }
+    let (op, journal_ok) = execute(&plan, "clean", args.db.clone(), args.json);
     if args.json {
         let mut value = crate::clean::to_json(report, &plan, false);
         value["operation"] = serde_json::to_value(&op)?;
         println!("{}", serde_json::to_string_pretty(&value)?);
     } else {
-        for r in op
-            .items
-            .iter()
-            .filter(|r| !matches!(r.status, ItemStatus::Done | ItemStatus::NotSelected))
-        {
-            println!(
-                "  {:<9} {}{}",
-                r.status.as_str(),
-                r.path.display(),
-                r.reason
-                    .as_deref()
-                    .map(|x| format!(" ({x})"))
-                    .unwrap_or_default()
-            );
-        }
-        println!(
-            "Freed {} — {} done, {} partly (files in use), {} skipped, {} failed. Operation {}.",
-            format_size(op.freed()),
-            format_count(op.count(ItemStatus::Done) as u64),
-            op.count(ItemStatus::Partial),
-            op.count(ItemStatus::Skipped),
-            op.count(ItemStatus::Failed),
-            op.id
-        );
-        if journal_ok {
-            println!("Undo with `nfd quarantine restore {}`.", op.id);
-        } else {
-            println!(
-                "warning: the undo journal could not be written; quarantined items are listed in each `manifest.jsonl`."
-            );
-        }
+        print_outcome(&op, journal_ok);
     }
-    Ok(if op.count(ItemStatus::Failed) == 0 {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::FAILURE
-    })
+    Ok(exit_code(&op))
 }
 
 pub fn run(action: QuarantineAction) -> anyhow::Result<ExitCode> {

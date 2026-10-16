@@ -1,7 +1,7 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3), `devcache` (Phase 4), `rules list` / `rules validate`, and the Hardware
+//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos` (Phase 4), `rules list` / `rules validate`, and the Hardware
 //! Monitor's `hw` / `sensors` / `ps`. Dedupe, watch and health commands arrive with
 //! their phases (see `docs/PLAN.md` §4.7).
 
@@ -11,6 +11,7 @@ mod diff;
 mod hw;
 mod ps;
 mod quarantine;
+mod repos;
 mod scan;
 mod sensors;
 
@@ -52,6 +53,11 @@ enum Command {
         #[command(subcommand)]
         action: Option<devcache::DevcacheAction>,
     },
+    /// Installed toolchains and SDKs, with the proper command to remove each (read-only).
+    Toolchains(repos::ToolchainsArgs),
+    /// Git repositories and projects under a folder, with their build output; `clean`
+    /// moves the build output to the quarantine.
+    Repos(repos::ReposArgs),
     /// Clean / delete operations: list, restore, purge the quarantine.
     Quarantine {
         #[command(subcommand)]
@@ -121,6 +127,8 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Diff(args) => diff::run(args),
         Command::Clean(args) => clean::run(args),
         Command::Devcache { action } => devcache::run(action),
+        Command::Toolchains(args) => repos::toolchains(&args),
+        Command::Repos(args) => repos::repos(args),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {
             action: PlanAction::Explain { path, rules },

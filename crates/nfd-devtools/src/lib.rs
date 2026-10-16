@@ -3,13 +3,19 @@
 //! * [`devcache`] — the DevCache rule packs grouped **vendor → app → folder**, with the
 //!   🔒 Keep list and per-vendor thresholds (C1).
 //! * [`unknown`] — cache-like folders no rule knows yet, marked 🟡 "unverified" (C1).
+//! * [`toolchains`] — installed SDKs / runtimes / editors and how to remove them (C2).
+//! * [`repos`] + [`artifacts`] — Repo Finder and the build artifact policy (C3, C9).
 //!
 //! Nothing here deletes anything: modules either produce
 //! [`PlanItem`](nfd_core::plan::PlanItem)s for the Phase 3 Planner → SafetyGate →
 //! Executor → UndoJournal path, or describe a command the user may run.
 
+pub mod artifacts;
 pub mod devcache;
 pub mod fsutil;
+pub mod process;
+pub mod repos;
+pub mod toolchains;
 pub mod unknown;
 
 /// Lower-case, `/`-separated form of a path for prefix comparisons.
