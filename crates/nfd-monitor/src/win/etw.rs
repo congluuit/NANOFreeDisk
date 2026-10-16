@@ -366,6 +366,15 @@ impl EtwSession {
         }
     }
 
+    /// The last Create events as decoded (diagnostics).
+    pub fn recent_creates(&self) -> Vec<String> {
+        self.shared
+            .collector
+            .lock()
+            .map(|c| c.recent_creates())
+            .unwrap_or_default()
+    }
+
     pub fn stop(&mut self) {
         if let Some(t) = self.consumer.take() {
             control(SESSION, EVENT_TRACE_CONTROL_STOP);

@@ -64,6 +64,7 @@ fn etw_attributes_file_writes_to_this_process() {
         assert_eq!(t.undecoded, 0, "every event layout is known");
     }
     eprintln!("events {events}, written {written}, touches {touches:?}");
+    eprintln!("recent creates: {:#?}", session.recent_creates());
     assert!(
         written >= 4 << 20,
         "saw {written} bytes written by this process"

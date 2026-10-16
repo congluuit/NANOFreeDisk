@@ -358,6 +358,30 @@ impl Devices {
         None
     }
 
+    /// A path as a process opened it may be in DOS-device form (`\??\C:\x`, the
+    /// name handed to `NtCreateFile`): turn it into the device form events use
+    /// elsewhere. Anything else is returned unchanged.
+    pub fn normalize(&self, path: String) -> String {
+        let Some(rest) = path
+            .get(..4)
+            .filter(|p| p.eq_ignore_ascii_case(r"\??\"))
+            .and_then(|_| path.get(4..))
+        else {
+            return path;
+        };
+        let Some(letter) = rest.get(..2).filter(|l| l.ends_with(':')) else {
+            return path;
+        };
+        match self
+            .map
+            .iter()
+            .find(|(_, l)| l.eq_ignore_ascii_case(letter))
+        {
+            Some((dev, _)) => format!("{dev}{}", &rest[2..]),
+            None => path,
+        }
+    }
+
     /// `C:\x` → `\device\harddiskvolume3\x` (lowercase), for matching device paths.
     pub fn to_device(&self, win32: &str) -> Option<String> {
         let (letter, rest) = win32.split_at_checked(2)?;
@@ -391,6 +415,8 @@ pub struct Collector {
     touches: Vec<Touch>,
     events: u64,
     undecoded: u64,
+    /// The last few Create events as decoded (diagnostics).
+    recent_creates: std::collections::VecDeque<String>,
 }
 
 /// `IRP_PAGING_IO`: the cache or memory manager moving pages (a flush, a mapped
@@ -416,6 +442,12 @@ impl Collector {
             watch: w,
             ..Self::default()
         }
+    }
+
+    /// The last Create events as decoded (version, PID, options, path), for
+    /// diagnosing a Windows build whose events do not match.
+    pub fn recent_creates(&self) -> Vec<String> {
+        self.recent_creates.iter().cloned().collect()
     }
 
     /// Watching a folder ("Who touched this?")?
@@ -494,6 +526,14 @@ impl Collector {
                 options,
                 path,
             } => {
+                let path = self.devices.normalize(path);
+                if self.recent_creates.len() >= 16 {
+                    self.recent_creates.pop_front();
+                }
+                self.recent_creates.push_back(format!(
+                    "v{} pid {} opt {options:#x} {path}",
+                    h.version, h.pid
+                ));
                 if creates(options) {
                     if let Some(pid) = self.pid(h, tid) {
                         self.touch(now_ms, pid, TouchOp::Create, &path, None);
@@ -556,6 +596,7 @@ impl Collector {
                 path,
             } => {
                 let Some(pid) = self.pid(h, tid) else { return };
+                let path = self.devices.normalize(path);
                 let old = self.name_of(key, object);
                 match op {
                     PathOp::Delete => self.touch(now_ms, pid, TouchOp::Delete, &path, None),
@@ -862,6 +903,16 @@ mod tests {
             Some(r"\device\harddiskvolume3\users")
         );
         assert_eq!(dv.to_device("Q:\\x"), None);
+        assert_eq!(
+            dv.to_win32(&dv.normalize(r"\??\C:\Users\a.txt".into()))
+                .as_deref(),
+            Some(r"C:\Users\a.txt")
+        );
+        assert_eq!(dv.normalize(r"\??\Q:\x".into()), r"\??\Q:\x");
+        assert_eq!(
+            dv.normalize(r"\Device\NamedPipe\p".into()),
+            r"\Device\NamedPipe\p"
+        );
     }
 
     #[test]
