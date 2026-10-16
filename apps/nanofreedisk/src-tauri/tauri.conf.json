@@ -46,8 +46,17 @@
     ],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
-      "wix": { "language": ["en-US", "vi-VN"] },
-      "nsis": { "languages": ["English", "Vietnamese"], "displayLanguageSelector": true, "installMode": "both" }
+      "wix": {
+        "language": ["en-US", "vi-VN"],
+        "fragmentPaths": ["../../../installer/wix/shell-menu-cleanup.wxs"],
+        "componentRefs": ["ShellMenuCleanup"]
+      },
+      "nsis": {
+        "languages": ["English", "Vietnamese"],
+        "displayLanguageSelector": true,
+        "installMode": "both",
+        "installerHooks": "../../../installer/nsis/hooks.nsh"
+      }
     }
   }
 }

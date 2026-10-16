@@ -29,6 +29,12 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 - **Scan history** (`nfd-history`, SQLite compiled in): every scan can be saved as a compact snapshot (folder sizes from 1 MB, large files) on this PC only; 30 snapshots per folder, 300 in all; a damaged database is set aside and replaced. Turn it off or clear it in Settings.
 - **What changed?** tab in Analyze: compares the scan with an earlier one of the same folder — folders that grew or shrank (shown at the most specific level), large files added or removed, and the change in the drive's free space; click a row to jump to it.
 - **Health score** on Home (`nfd_core::health`): 0–100 from free space per drive, how fast each drive fills (from the scan history) and the Old & Large total, with the three biggest reasons and a button to fix each.
+- `nfd diff <root> [--since 7d] [--json]` compares saved scans from the command line (`nfd scan --save` saves one; the app's history is shared), and the HTML report gains a "What changed since…" section.
+- **Folder Encyclopedia**: 23 English/Vietnamese articles in `rules/encyclopedia/*.md` (WinSxS, Windows Installer, pagefile, `$Recycle.Bin`, AppData\Local\Packages, .ollama, node_modules, Unity Library, Rust target, .git…) explaining what a folder is, what happens if it is deleted and what to do instead. Shown as "What is this?" in the Details panel and by `nfd explain <path>`; validated by `nfd rules validate`. Information only — no delete action is attached.
+- **Age heatmap** tab in Analyze (space by last-modified age per sub-folder), the **owner** of the selected item (Expert mode), and **orphan junctions / broken symbolic links** in Tidy up (read-only).
+- "If you do this…" tooltips on every control that changes something.
+- **Explorer integration**: optional "Analyze with NANOFreeDisk" in the right-click menu of folders and drives (per user, no admin rights; removed when turned off or on uninstall), `nanofreedisk.exe <folder>` starts a scan, and a second launch hands its folder to the window already open.
+- Demo recording of the real app (`scripts/demo-video.mjs`, `docs/assets/demo/`).
 
 ## [0.1.0] - unreleased
 

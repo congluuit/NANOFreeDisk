@@ -16,7 +16,8 @@
   $effect(() => {
     const id = app.focus;
     owner = null;
-    if (id == null) return;
+    // technical detail: Expert mode only
+    if (id == null || !expert()) return;
     let cancelled = false;
     api
       .owner(id)

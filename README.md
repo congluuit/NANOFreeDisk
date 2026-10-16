@@ -66,8 +66,8 @@
 | 🔔 | Old & Large finder, empty folders & broken shortcuts, scheduled 🟢-only cleaning, Recycle Bin manager, folder quotas & alerts, free-space forecast, HTML report export, tray with per-drive free space, Explorer context menu, no telemetry | Small things that add up |
 
 <p align="center">
-  <img src="docs/assets/screenshot-analyze.svg" alt="Analyze view (mockup)" width="90%"><br>
-  <sub>Analyze view — design mockup; real screenshots will replace this once the GUI lands.</sub>
+  <img src="docs/assets/demo/nanofreedisk-demo.webp" alt="NANOFreeDisk demo: treemap, Ctrl+K palette, Folder Encyclopedia, Old &amp; large, What changed?, Vietnamese dark theme" width="90%"><br>
+  <sub>The real app on a synthetic demo drive (recorded by <code>scripts/demo-video.mjs</code>; <a href="docs/assets/demo/nanofreedisk-demo.gif">GIF version</a>).</sub>
 </p>
 
 ---
@@ -233,7 +233,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 |---|---|---|
 | 0 | Foundation: workspace, CI/CD, docs, DevCache catalog v0 | ✅ |
 | 1 | Core scanner (standard + MFT), `nfd scan` | 🟡 standard mode done, MFT next |
-| 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | 🚧 treemap/sunburst/list, search, safe Recycle Bin, Old & Large, empty folders / broken shortcuts, HTML report, Simple/Expert, Ctrl+K, scan history + "What changed?", Health Score, EN/VI, themes done |
+| 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | ✅ done — plus age heatmap, empty folders / broken shortcuts / orphan junctions, Explorer menu, `nfd diff` / `nfd explain` ([demo](docs/assets/demo/nanofreedisk-demo.webp)) |
 | 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ⏳ |
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ⏳ |
 | 5 | Duplicate finder | ⏳ |

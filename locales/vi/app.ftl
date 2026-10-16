@@ -418,6 +418,16 @@ hint-font = Nếu bấm: cỡ chữ đổi ngay.
 hint-history-toggle = Nếu tắt: các lần quét mới không được lưu nữa; các lần đã lưu vẫn còn cho tới khi bạn xóa.
 hint-history-clear = Nếu bấm: mọi lần quét đã lưu bị xóa khỏi máy này (có hỏi trước). Tệp của bạn không bị đụng tới.
 
+## Tích hợp Explorer (A7)
+
+shell-menu-caption = Phân tích bằng NANOFreeDisk
+settings-shell = Tích hợp Explorer
+settings-shell-toggle = Hiện "Phân tích bằng NANOFreeDisk" khi bấm chuột phải vào thư mục hoặc ổ đĩa
+settings-shell-hint = Chỉ thêm cho tài khoản của bạn (không cần quyền admin). Tắt tùy chọn này hoặc gỡ NANOFreeDisk sẽ xóa nó. Nếu ứng dụng đang mở, thư mục sẽ mở trong cửa sổ đó.
+settings-shell-on = Đã thêm vào menu Explorer.
+settings-shell-off = Đã gỡ khỏi menu Explorer.
+hint-shell = Nếu bấm: một mục được thêm vào (hoặc gỡ khỏi) menu chuột phải của Explorer, chỉ cho tài khoản của bạn; không thay đổi gì khác.
+
 ## Errors
 
 error-generic = Đã xảy ra lỗi: { $message }

@@ -54,6 +54,19 @@
   }
 
   let history = $state<HistoryInfo | null>(null);
+  let shellMenu = $state<boolean | null>(null);
+  $effect(() => {
+    api.shellMenuStatus().then((s) => (shellMenu = s)).catch(() => (shellMenu = null));
+  });
+
+  async function setShellMenu(enabled: boolean) {
+    try {
+      shellMenu = await api.shellMenuSet(enabled, t("shell-menu-caption"));
+      toast(t(enabled ? "settings-shell-on" : "settings-shell-off"), "ok");
+    } catch (e) {
+      fail(e);
+    }
+  }
   $effect(() => {
     void app.version;
     api.historyInfo().then((h) => (history = h)).catch(() => (history = null));
@@ -191,6 +204,22 @@
         </button>
       {/each}
     </div>
+  </div>
+
+  <div class="block card">
+    <h2>{t("settings-shell")}</h2>
+    <label class="toggle" title={t("hint-shell")}>
+      <input
+        type="checkbox"
+        checked={shellMenu ?? false}
+        disabled={shellMenu == null || !inTauri}
+        onchange={(e) => setShellMenu((e.currentTarget as HTMLInputElement).checked)}
+        data-effect
+        title={t("hint-shell")}
+      />
+      <span>{t("settings-shell-toggle")}</span>
+    </label>
+    <p class="muted small">{t("settings-shell-hint")}</p>
   </div>
 
   <div class="block card">

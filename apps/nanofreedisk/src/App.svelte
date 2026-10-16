@@ -7,6 +7,7 @@
     applyLocale,
     listenScanEvents,
     loadSettings,
+    openStartupPath,
     refreshVolumes,
     saveSettingsSoon,
     type View,
@@ -47,6 +48,7 @@
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
       await refreshVolumes();
+      await openStartupPath();
     })();
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === ",") {

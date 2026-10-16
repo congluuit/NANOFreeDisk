@@ -437,6 +437,16 @@ hint-font = If you do this: the text size changes right away.
 hint-history-toggle = If you turn this off: new scans are no longer saved; saved ones stay until you clear them.
 hint-history-clear = If you do this: every saved scan is deleted from this PC (you are asked first). Your files are not touched.
 
+## Explorer integration (A7)
+
+shell-menu-caption = Analyze with NANOFreeDisk
+settings-shell = Explorer integration
+settings-shell-toggle = Show "Analyze with NANOFreeDisk" when right-clicking a folder or drive
+settings-shell-hint = Added for your account only (no administrator rights). Turning it off, or uninstalling NANOFreeDisk, removes it again. If the app is already open, the folder opens in that window.
+settings-shell-on = Explorer menu added.
+settings-shell-off = Explorer menu removed.
+hint-shell = If you do this: an entry is added to (or removed from) Explorer's right-click menu for your account only; nothing else changes.
+
 ## Errors
 
 error-generic = Something went wrong: { $message }

@@ -81,6 +81,10 @@ System Volume Information/
 *~
 .directory
 
+# ───────────── Python helper scripts ─────────────
+__pycache__/
+*.pyc
+
 # ───────────── Logs / temp ─────────────
 *.log
 *.tmp
@@ -101,6 +105,7 @@ System Volume Information/
 .codex/
 .gemini/
 CLAUDE.local.md
+.claude/worktrees/
 
 # ───────────── Test fixtures generated at runtime ─────────────
 /tests/fixtures/generated/

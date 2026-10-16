@@ -13,7 +13,7 @@
 // "What changed?", find_path) and the Health Score. Nothing outside the fixture is
 // ever deleted; the fixture's history snapshots are forgotten at the end.
 
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -63,7 +63,13 @@ function lnk(target) {
 }
 writeFileSync(join(fixture, "ok.lnk"), lnk(join(fixture, "videos", "clip.mp4")));
 writeFileSync(join(fixture, "broken.lnk"), lnk(join(fixture, "gone.exe")));
-const FILES = 7;
+// A5: a node_modules folder the encyclopedia knows; A3: an orphan junction
+mkdirSync(join(fixture, "projects", "web", "node_modules", "pkg"), { recursive: true });
+writeFileSync(join(fixture, "projects", "web", "node_modules", "pkg", "index.js"), "module.exports = 1;\n");
+mkdirSync(join(fixture, "junction-target"));
+execFileSync("cmd", ["/C", "mklink", "/J", join(fixture, "old-link"), join(fixture, "junction-target")], { stdio: "ignore" });
+rmSync(join(fixture, "junction-target"), { recursive: true });
+const FILES = 8;
 
 const failures = [];
 const check = (name, ok, detail = "") => {
@@ -228,6 +234,46 @@ try {
   }
   const videos = (await invoke("children", { id: 0 })).find((k) => k.name === "videos");
   check("find_path resolves a relative path", (await invoke("find_path", { path: "VIDEOS" })) === videos?.id);
+
+  // A5 Folder Encyclopedia
+  const nm = await invoke("find_path", { path: "projects\\web\\node_modules" });
+  const nmArticle = await invoke("explain", { id: nm, lang: "vi" });
+  check("encyclopedia explains node_modules", nmArticle?.id === "node-modules" && !nmArticle.inside && nmArticle.title.length > 5, JSON.stringify(nmArticle?.title));
+  const inner = await invoke("find_path", { path: "projects\\web\\node_modules\\pkg\\index.js" });
+  const innerArticle = await invoke("explain", { id: inner, lang: "en" });
+  check("encyclopedia covers what is inside", innerArticle?.id === "node-modules" && innerArticle.inside === true);
+  // an ordinary folder only gets the article of a described parent (the fixture lives in %TEMP%)
+  const plain = await invoke("explain", { id: videos?.id, lang: "en" });
+  check("ordinary folder gets no article of its own", plain === null || (plain.inside && plain.id === "temp"), JSON.stringify(plain?.id ?? null));
+  // A9 age heatmap and owner
+  const age = await invoke("age_matrix", { id: 0, limit: 10 });
+  const ageTotal = age.totals?.reduce((a, b) => a + b, 0);
+  check("age heatmap adds up", age.totals?.length === 7 && ageTotal === (await invoke("summary")).stats.on_disk, `${ageTotal}`);
+  const owner = await invoke("owner", { id: 0 });
+  check("owner of the fixture", typeof owner === "string" && owner.length > 2, owner);
+  // A3 orphan junction (read-only)
+  const brokenLinks = await invoke("broken_links", { id: 0, limit: 10 });
+  check("orphan junction found", brokenLinks.rows?.length === 1 && brokenLinks.rows[0].name === "old-link" && brokenLinks.rows[0].status === "missing", JSON.stringify(brokenLinks.rows?.map((r) => r.target)));
+  // A7 Explorer menu: turn on, check the registry, turn off, restore the previous state
+  const shellBefore = await invoke("shell_menu_status");
+  const on = await invoke("shell_menu_set", { enabled: true, caption: "Analyze with NANOFreeDisk" });
+  let regValue = "";
+  try {
+    regValue = execFileSync("reg", ["query", "HKCU\\Software\\Classes\\Directory\\shell\\NANOFreeDisk\\command", "/ve"], { encoding: "utf8" });
+  } catch {
+    /* missing key */
+  }
+  check("Explorer menu registered for this exe", on === true && regValue.toLowerCase().includes(exe.toLowerCase()) && regValue.includes("%V"), regValue.trim().split("\n").pop());
+  const off = await invoke("shell_menu_set", { enabled: false, caption: "" });
+  let stillThere = true;
+  try {
+    execFileSync("reg", ["query", "HKCU\\Software\\Classes\\Directory\\shell\\NANOFreeDisk"], { stdio: "ignore" });
+  } catch {
+    stillThere = false;
+  }
+  check("Explorer menu removed", off === false && !stillThere);
+  if (shellBefore) await invoke("shell_menu_set", { enabled: true, caption: "Analyze with NANOFreeDisk" });
+  check("no startup path when started without one", (await invoke("take_startup_path")) === null);
   const healthStart = Date.now();
   const health = await invoke("health");
   const healthMs = Date.now() - healthStart;
@@ -274,6 +320,33 @@ try {
   for (let i = 0; i < 100 && !(await evaluate("!!document.querySelector('.health .num b')")); i++) await sleep(100);
   check("Home shows the health score", await evaluate("!!document.querySelector('.health .num b')"));
   await shot("8-home-health");
+
+  // G4: every control that changes something explains what happens
+  const untitled = [];
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"]]) {
+    await nav(i);
+    await sleep(600);
+    const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");
+    if (missing.length) untitled.push(`${view}: ${missing.join(" | ")}`);
+  }
+  await evaluate("[...document.querySelectorAll('.side .nav')].pop().click()");
+  await sleep(600);
+  const settingsMissing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).length");
+  const effects = await evaluate("document.querySelectorAll('[data-effect]').length");
+  check("every changing control has an 'If you do this' tooltip", !untitled.length && settingsMissing === 0 && effects > 5, untitled.join("; ") || `${effects} on Settings`);
+  await shot("9-settings");
+
+  // A7 single instance: a second launch with a folder hands it to this window
+  const videosDir = join(fixture, "videos");
+  spawn(exe, [videosDir], { stdio: "ignore", env: process.env }).unref();
+  let handed = false;
+  for (let i = 0; i < 80 && !handed; i++) {
+    await sleep(150);
+    const sum = await invoke("summary");
+    handed = !sum.__error && sum.root.toLowerCase() === videosDir.toLowerCase();
+  }
+  check("second launch with a folder opens it in the running window", handed);
+  await invoke("history_forget", { root: videosDir });
 } catch (e) {
   check("smoke run", false, e.message);
 } finally {

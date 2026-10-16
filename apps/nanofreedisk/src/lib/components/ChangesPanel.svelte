@@ -9,6 +9,8 @@
   import type { DirChange, Diff, FileChange, Snapshot } from "../types";
 
   let snapshots = $state<Snapshot[]>([]);
+  /** The snapshot list has been loaded for the current scan. */
+  let listed = $state(false);
   let older = $state<number | null>(null);
   let diff = $state<Diff | null>(null);
   let loading = $state(false);
@@ -20,11 +22,13 @@
     void app.snapshot;
     if (!root) return;
     let cancelled = false;
+    listed = false;
     api
       .historySnapshots(root)
       .then((list) => {
         if (cancelled) return;
         snapshots = list;
+        listed = true;
         // default: the snapshot just before the loaded one
         const others = list.filter((s) => s.id !== app.snapshot);
         if (!others.some((s) => s.id === older)) older = others[0]?.id ?? null;
@@ -82,6 +86,8 @@
     <p class="muted note"><Icon name="alert" size={16} />{t("changes-history-off")}</p>
   {:else if app.snapshot == null}
     <p class="muted note"><Icon name="alert" size={16} />{t("changes-not-recorded")}</p>
+  {:else if !listed}
+    <p class="muted note">…</p>
   {:else if !choices.length}
     <p class="muted note"><Icon name="refresh" size={16} />{t("changes-first")}</p>
   {:else}

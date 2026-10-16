@@ -143,6 +143,10 @@ let listening = false;
 export async function listenScanEvents(): Promise<void> {
   if (listening) return;
   listening = true;
+  // A7: "Analyze with NANOFreeDisk" on a folder while the app is already open
+  await on<string>("open-path", (path) => {
+    if (path) void startScan(path);
+  });
   await on<Progress>("scan-progress", (p) => {
     if (app.scanning && p.scan === app.scanning.id) app.scanning.progress = p;
   });
@@ -168,6 +172,16 @@ export async function listenScanEvents(): Promise<void> {
       toast(t("scan-failed", { error: f.error ?? "?" }), "error");
     }
   });
+}
+
+/** A7: the folder the app was started with (Explorer menu, command line). */
+export async function openStartupPath(): Promise<void> {
+  try {
+    const path = await api.takeStartupPath();
+    if (path) await startScan(path);
+  } catch (e) {
+    fail(e);
+  }
 }
 
 export async function loadSummary(): Promise<void> {

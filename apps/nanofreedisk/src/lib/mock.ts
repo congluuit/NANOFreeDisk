@@ -298,6 +298,7 @@ function emptyTrees(): (id: number) => boolean {
 // Scan history (A1/F1): three snapshots of C:\ a week apart; the diff is derived
 // from the synthetic tree so every path in it can be opened.
 let historyCleared = false;
+let shellMenu = false;
 let historyIds = [1, 2, 3];
 const DAY = 86_400;
 
@@ -501,6 +502,9 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
     for (const r of rows) r.bytes.forEach((b: number, i: number) => ((totals[i] += b), (files[i] += r.files[i])));
     return { bucketDays: BOUNDS, rows: shown, other, totals, files };
   },
+  take_startup_path: () => null,
+  shell_menu_status: () => shellMenu,
+  shell_menu_set: ({ enabled }) => (shellMenu = Boolean(enabled)),
   owner: ({ id }) => (path(id).toLowerCase().startsWith("c:\\windows") ? "NT SERVICE\\TrustedInstaller" : path(id).toLowerCase().startsWith("c:\\users\\nano") ? "NANO-PC\\nano" : "BUILTIN\\Administrators"),
   broken_links: ({ id, limit }) => {
     const links = descendants(id).filter((i) => entries[i].kind === "junction");
