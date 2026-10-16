@@ -1,0 +1,337 @@
+# Màn hình Phần cứng (docs/HARDWARE_MONITOR.md): Tổng quan, Cảm biến, Tasks.
+
+nav-hardware = Phần cứng
+hw-title = Phần cứng
+hw-subtitle = Linh kiện của máy, cảm biến trực tiếp và các tiến trình đang chạy — chỉ đọc, không cần driver.
+hw-tab-overview = Tổng quan
+hw-tab-sensors = Cảm biến
+hw-tab-tasks = Tasks
+hw-refresh = Làm mới
+hw-loading = Đang đọc thông tin phần cứng…
+hw-error = Không đọc được phần cứng: { $message }
+hw-copy-text = Sao chép dạng văn bản
+hw-copied = Đã sao chép tóm tắt phần cứng vào clipboard.
+hw-export-json = Xuất JSON
+hw-export-title = Lưu danh mục phần cứng
+hw-exported = Đã lưu danh mục vào { $path }.
+hw-text-header = Tóm tắt phần cứng NANOFreeDisk — { $date }
+hw-privacy = Không bao giờ thu thập số serial, địa chỉ MAC hay IP, nên bản tóm tắt an toàn để chia sẻ.
+hw-none = Không phát hiện thiết bị nào.
+
+hw-sec-system = Hệ thống
+hw-sec-cpu = Bộ xử lý
+hw-sec-board = Bo mạch chủ & BIOS
+hw-sec-memory = Bộ nhớ RAM
+hw-sec-gpu = Đồ họa
+hw-sec-storage = Ổ lưu trữ
+hw-sec-display = Màn hình
+hw-sec-network = Mạng
+hw-sec-battery = Pin
+
+hw-model = Model
+hw-chassis = Loại máy
+hw-chassis-laptop = Laptop
+hw-chassis-desktop = Máy bàn
+hw-chassis-server = Máy chủ
+hw-chassis-tablet = Máy tính bảng
+hw-chassis-handheld = Thiết bị cầm tay
+hw-os = Windows
+hw-os-build = Bản dựng
+hw-computer = Tên máy
+hw-uptime = Thời gian chạy
+hw-uptime-value = { $days } ngày { $hours } giờ { $minutes } phút
+
+hw-cores = Số nhân
+hw-cores-hybrid = { $cores } ({ $p } nhân hiệu năng + { $e } nhân tiết kiệm)
+hw-threads = Số luồng
+hw-clock-base = Xung cơ bản
+hw-clock-max = Xung tối đa
+hw-ghz = { $value } GHz
+hw-mhz = { $value } MHz
+hw-cache = Bộ nhớ đệm
+hw-socket = Socket
+hw-cpuid = CPUID
+hw-family = Family
+hw-model-id = Model
+hw-stepping = Stepping
+
+hw-board = Bo mạch
+hw-board-version = Phiên bản
+hw-bios = BIOS
+hw-bios-date = Ngày BIOS
+hw-smbios = SMBIOS
+
+hw-mem-installed = Đã lắp
+hw-mem-usable = Windows dùng được
+hw-mem-in-use = Đang dùng
+hw-mem-in-use-value = { $used } ({ $percent } %)
+hw-mem-slots = Khe cắm
+hw-mem-slots-value = Đã dùng { $used }/{ $total }
+hw-mem-max = Hỗ trợ tối đa
+hw-mem-speed = Tốc độ
+hw-mem-rated = Tốc độ định mức
+hw-mts = { $value } MT/s
+hw-maker = Hãng sản xuất
+hw-part = Mã linh kiện
+hw-rank = Số rank
+hw-bank = Bank
+
+hw-vram = Bộ nhớ đồ họa
+hw-driver = Driver
+hw-driver-date = Ngày driver
+hw-location = Vị trí
+
+hw-capacity = Dung lượng
+hw-disk-type = Loại
+hw-disk-n = Ổ { $n }
+hw-removable = tháo rời được
+hw-temperature = Nhiệt độ
+hw-firmware = Firmware
+
+hw-display-builtin = Màn hình tích hợp
+hw-display-generic = Màn hình
+hw-primary = Chính
+hw-resolution = Độ phân giải
+hw-refresh-rate = Tần số quét
+hw-hz = { $value } Hz
+hw-connector = Kết nối
+
+hw-net-wifi = Wi-Fi
+hw-net-ethernet = Ethernet
+hw-net-status = Trạng thái
+hw-net-up = Đã kết nối
+hw-net-up-speed = Đã kết nối — { $mbps } Mbps
+hw-net-down = Chưa kết nối
+hw-net-alias = Tên trong Windows
+
+hw-bat-charge = Mức pin
+hw-bat-health = Sức khỏe pin
+hw-bat-health-value = Còn { $percent } % dung lượng thiết kế (chai { $wear } %)
+hw-bat-capacity = Dung lượng
+hw-bat-capacity-value = { $full }/{ $design } mWh
+hw-bat-cycles = Số lần sạc
+hw-bat-chemistry = Loại pin
+
+## Tab Cảm biến
+
+hw-sensors-pawn-hint = Nhiệt độ, công suất và điện áp CPU cần Cảm biến nâng cao (PawnIO).
+hw-sensors-stats = { $count } cảm biến · lấy mẫu trong { $ms } ms
+hw-reset-minmax = Đặt lại min/max
+hw-col-sensor = Cảm biến
+hw-col-value = Giá trị
+hw-col-min = Min
+hw-col-max = Max
+hw-estimated = ước tính
+hw-estimated-hint = Giá trị xấp xỉ: "% Processor Performance" của Windows × xung cơ bản. Xung chính xác cần Cảm biến nâng cao.
+hw-core-p = Nhân P
+hw-core-e = Nhân E
+hw-kind-temperature = Nhiệt độ
+hw-kind-voltage = Điện áp
+hw-kind-power = Công suất
+hw-kind-clock = Xung nhịp
+hw-kind-load = Tải
+hw-kind-fan = Quạt
+hw-kind-control = Mức quạt
+hw-kind-level = Mức
+hw-kind-energy = Dung lượng
+hw-kind-data = Dữ liệu
+hw-kind-throughput = Tốc độ truyền
+hw-note-needs-pawnio = Cần Cảm biến nâng cao (PawnIO) — không có nếu thiếu.
+hw-note-gpu-asleep = GPU đang ngủ để tiết kiệm điện; giá trị sẽ hiện khi GPU thức dậy.
+hw-note-not-reported = Driver không cung cấp thông số này.
+
+hw-s-cpu-total = Tổng CPU
+hw-s-cpu-thread-max = Luồng bận nhất
+hw-s-cpu-thread = Luồng #{ $n }
+hw-s-cpu-clock-avg = Xung trung bình
+hw-s-mem-load = Bộ nhớ
+hw-s-mem-used = Bộ nhớ đã dùng
+hw-s-mem-available = Bộ nhớ còn trống
+hw-s-mem-commit-load = Bộ nhớ ảo
+hw-s-mem-commit-used = Bộ nhớ ảo đã dùng
+hw-s-mem-commit-limit = Giới hạn bộ nhớ ảo
+hw-s-acpi-zone = Vùng nhiệt { $detail }
+hw-s-gpu-temp = Lõi GPU
+hw-s-gpu-clock-core = Lõi GPU
+hw-s-gpu-clock-mem = Bộ nhớ GPU
+hw-s-gpu-power = Toàn GPU
+hw-s-gpu-power-limit = Giới hạn công suất
+hw-s-gpu-fan-duty = Quạt GPU
+hw-s-gpu-fan = Quạt GPU
+hw-s-gpu-load = Lõi GPU
+hw-s-gpu-load-3d = 3D
+hw-s-gpu-load-copy = Sao chép
+hw-s-gpu-load-decode = Giải mã video
+hw-s-gpu-load-encode = Mã hóa video
+hw-s-gpu-load-compute = Tính toán
+hw-s-gpu-mem-used = Bộ nhớ riêng đã dùng
+hw-s-gpu-mem-shared = Bộ nhớ dùng chung đã dùng
+hw-s-gpu-mem-load = Bộ nhớ riêng
+hw-s-gpu-mem-total = Tổng bộ nhớ riêng
+hw-s-disk-temp = Nhiệt độ
+hw-s-disk-active = Thời gian hoạt động
+hw-s-disk-read = Tốc độ đọc
+hw-s-disk-write = Tốc độ ghi
+hw-s-bat-charge = Mức pin
+hw-s-bat-wear = Độ chai
+hw-s-bat-rate = Tốc độ sạc / xả
+hw-s-bat-voltage = Điện áp
+hw-s-bat-remaining = Dung lượng còn lại
+hw-s-bat-full = Dung lượng khi sạc đầy
+hw-s-bat-design = Dung lượng thiết kế
+hw-s-net-down = Tốc độ tải xuống
+hw-s-net-up = Tốc độ tải lên
+
+## Thẻ nhiệt độ trên Home
+
+home-temps-title = Nhiệt độ
+home-temps-open = Mở Phần cứng → Cảm biến
+home-temp-cpu = CPU
+home-temp-gpu = GPU
+home-temp-disk = Ổ nóng nhất
+home-temp-acpi = Vùng nhiệt ACPI (xấp xỉ)
+home-temp-load = tải { $percent } %
+home-temp-why-needs-pawnio = cần Cảm biến nâng cao
+home-temp-why-gpu-asleep = GPU đang ngủ (tiết kiệm điện)
+home-temp-why-not-reported = không có dữ liệu
+home-temp-why-none = không khả dụng
+
+## Tab Tasks
+
+task-sum-cpu = CPU
+task-sum-memory = Bộ nhớ
+task-sum-disk = Ổ đĩa
+task-sum-gpu = GPU
+task-sum-processes = Tiến trình
+task-search = Tìm theo tên, PID, nhà phát hành…
+task-tree = Dạng cây
+task-pause = Tạm dừng
+task-pause-hint = Ngừng làm mới danh sách (giữ nguyên lựa chọn)
+task-hint = Chuột phải vào tiến trình để thao tác. Không bao giờ tự động kết thúc tiến trình.
+task-expand = Mở rộng hoặc thu gọn
+task-group-app = Ứng dụng
+task-group-background = Tiến trình nền
+task-group-windows = Tiến trình Windows
+task-col-name = Tên
+task-col-pid = PID
+task-col-cpu = CPU
+task-col-memory = Bộ nhớ
+task-col-disk = Ổ đĩa
+task-col-gpu = GPU
+task-col-publisher = Nhà phát hành
+task-col-threads = Luồng
+task-col-handles = Handle
+task-col-path = Đường dẫn
+task-menu-close = Đóng ứng dụng
+task-menu-kill = Kết thúc tiến trình…
+task-menu-kill-tree = Kết thúc cây tiến trình…
+task-menu-blocked = Windows cần tiến trình này — không thể kết thúc ở đây
+task-menu-reveal = Mở vị trí tệp
+task-menu-copy-path = Sao chép đường dẫn
+task-menu-copy-cmd = Sao chép dòng lệnh
+task-menu-taskmgr = Mở Task Manager
+task-copied = Đã sao chép vào clipboard.
+task-no-cmd = Không đọc được dòng lệnh của tiến trình này.
+
+task-title-close = Đóng ứng dụng này?
+task-title-kill = Kết thúc tiến trình này?
+task-title-kill-tree = Kết thúc tiến trình này và mọi tiến trình nó đã mở?
+task-name = Tiến trình
+task-publisher = Nhà phát hành
+task-publisher-unknown = không rõ
+task-signed = có chữ ký
+task-path = Tệp
+task-children = Tiến trình con
+task-what-close = Ứng dụng được yêu cầu đóng, như khi bạn bấm nút ✕. Nó có thể hỏi lưu công việc trước.
+task-what-kill = Tiến trình dừng ngay lập tức. Mọi dữ liệu chưa lưu sẽ mất.
+task-what-kill-tree = Tiến trình và tất cả tiến trình nó mở sẽ dừng ngay lập tức. Mọi dữ liệu chưa lưu sẽ mất.
+task-warn-service-host = Tiến trình này chứa các dịch vụ Windows. Kết thúc nó sẽ dừng tất cả; Windows có thể tự khởi động lại một số, số khác sẽ tắt cho đến khi bạn khởi động lại máy.
+task-warn-explorer = Đây là Windows Explorer: thanh tác vụ, menu Start và màn hình nền sẽ biến mất cho đến khi nó chạy lại. Thường nên khởi động lại nó từ Task Manager.
+task-warn-windows-component = Chương trình này là một phần của Windows. Kết thúc nó có thể làm Windows chạy không ổn định cho đến khi khởi động lại.
+task-ack = Tôi hiểu — vẫn kết thúc
+task-no-undo = Không thể hoàn tác. Thao tác được ghi vào nhật ký hoạt động.
+task-cancel = Hủy
+task-working = Đang xử lý…
+task-confirm-close = Đóng ứng dụng
+task-confirm-kill = Kết thúc tiến trình
+task-confirm-kill-tree = Kết thúc cây tiến trình
+task-close-sent = Đã yêu cầu "{ $name }" đóng.
+task-close-timeout = "{ $name }" không đóng sau 5 giây.
+task-ended = Đã kết thúc { $count ->
+    [one] { $name }
+   *[other] { $count } tiến trình
+}.
+task-not-ended = Chưa kết thúc: { $name } — { $reason }
+task-block-kernel = Đây là nhân Windows.
+task-block-system-core = Windows không thể chạy nếu thiếu tiến trình này.
+task-block-critical = Windows đánh dấu tiến trình này là tối quan trọng: kết thúc nó sẽ làm sập hệ thống.
+task-block-protected = Đây là tiến trình được bảo vệ (ví dụ phần mềm diệt virus); Windows không cho phép kết thúc.
+task-block-own = Đây chính là NANOFreeDisk.
+task-outcome-changed = Tiến trình đã kết thúc hoặc PID nay thuộc về tiến trình khác. Không có gì được thực hiện.
+task-outcome-access-denied = Tiến trình thuộc người dùng khác hoặc chạy với quyền quản trị. Cần quyền quản trị để kết thúc.
+task-outcome-no-window = Tiến trình không có cửa sổ để đóng. Hãy dùng Kết thúc tiến trình.
+task-outcome-needs-confirm = Cần xác nhận lần hai.
+
+## Cảm biến nâng cao (PawnIO, ADR 0002)
+
+hw-adv-on = Đã bật Cảm biến nâng cao (PawnIO, chỉ đọc)
+hw-adv-not-installed = Nhiệt độ, công suất và điện áp CPU cần PawnIO — driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng.
+hw-adv-not-running = Đã cài PawnIO nhưng driver chưa chạy. Nếu Memory Integrity chặn, Windows Security sẽ nêu lý do.
+hw-adv-no-module = Đã cài PawnIO nhưng không tìm thấy module chính thức cho CPU này (IntelMSR hoặc AMDFamily17).
+hw-adv-get = Tải PawnIO (pawnio.eu)
+hw-adv-start = Bật Cảm biến nâng cao
+hw-adv-start-hint = Windows hỏi quyền quản trị một lần; một helper nhỏ sẽ đọc cảm biến CPU qua PawnIO. Không bao giờ ghi gì vào phần cứng.
+hw-adv-starting = Đang chờ Windows…
+hw-adv-declined = Cảm biến nâng cao vẫn tắt: chưa được cấp quyền quản trị.
+hw-adv-failed = Không bật được Cảm biến nâng cao: { $message }
+hw-adv-unavailable = Máy này không dùng được Cảm biến nâng cao ({ $reason }).
+hw-note-helper-stopped = Helper Cảm biến nâng cao đã dừng; hãy bật lại ở tab này.
+home-temp-why-helper-stopped = Cảm biến nâng cao đã dừng
+
+hw-s-cpu-package = Toàn CPU (package)
+hw-s-cpu-core-max = Nhân nóng nhất
+hw-s-cpu-core-avg = Trung bình các nhân
+hw-s-cpu-core-temp = Nhân #{ $n }
+hw-s-cpu-tjmax = TjMax
+hw-s-cpu-power-package = Toàn CPU (package)
+hw-s-cpu-power-cores = Các nhân CPU
+hw-s-cpu-power-gt = Đồ họa tích hợp
+hw-s-cpu-power-dram = Bộ nhớ (DRAM)
+hw-s-cpu-power-psys = Toàn nền tảng (PSys)
+hw-s-cpu-pl1 = Giới hạn công suất PL1 (dài hạn)
+hw-s-cpu-pl2 = Giới hạn công suất PL2 (ngắn hạn)
+hw-s-cpu-vid-max = Nhân CPU (VID cao nhất)
+hw-s-cpu-vid = VID nhân #{ $n }
+hw-s-cpu-clock-eff = Xung hiệu dụng (trung bình)
+hw-s-cpu-clock-core = Nhân #{ $n }
+hw-s-cpu-bus = Xung bus
+hw-s-cpu-tdie = Nhân (Tdie)
+hw-s-cpu-ccd = CCD #{ $n }
+hw-s-cpu-ccd-max = CCD nóng nhất
+hw-s-cpu-power-core = Nhân #{ $n }
+
+## Cảnh báo nhiệt, nhật ký 24 giờ, Health Score (slice 6)
+
+hw-alerts = Cảnh báo nhiệt độ
+hw-alerts-hint = Báo khi CPU, GPU hoặc ổ đĩa quá nóng (CPU 95 °C, GPU 90 °C, ổ đĩa 70 °C). Khi bật, cảm biến được đọc mỗi 5 giây kể cả khi đã đóng màn hình này.
+hw-alert-title = { $device } đang rất nóng
+hw-alert-body = { $value } °C (ngưỡng { $limit } °C). Hãy kiểm tra quạt và khe tản nhiệt, đóng các ứng dụng nặng nếu không cần.
+hw-alert-toast = { $part } { $device } đang ở { $value } °C (ngưỡng { $limit } °C).
+hw-part-cpu = CPU
+hw-part-gpu = GPU
+hw-part-disk = Ổ đĩa
+hw-24h-title = 24 giờ qua
+hw-24h-peak = cao nhất { $value } °C
+hw-24h-empty = Chưa ghi nhận gì. Nhiệt độ được ghi lại khi màn hình này đang mở hoặc khi bật cảnh báo nhiệt độ.
+hw-24h-ago = 24 giờ trước
+hw-24h-now = bây giờ
+
+health-hot-cpu = Bộ xử lý ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
+health-hot-gpu = Card đồ họa ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
+health-hot-disk = { $folder } đã lên tới { $value } °C trong 24 giờ qua; nóng như vậy lâu dài sẽ làm giảm tuổi thọ ổ.
+health-warm-cpu = Bộ xử lý ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-warm-gpu = Card đồ họa ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-warm-disk = { $folder } chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-fix-hardware = Xem nhiệt độ
+hw-s-disk-temp-warning = Ngưỡng cảnh báo (của ổ)
+hw-s-disk-temp-critical = Ngưỡng nguy hiểm (của ổ)

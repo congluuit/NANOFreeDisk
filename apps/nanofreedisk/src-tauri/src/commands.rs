@@ -20,6 +20,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+pub mod hwmon;
+
 use crate::session::{
     self, AgeDto, DeletePlan, Detail, EmptyRows, ExtRow, Located, Node, OldLargeRows, SearchRows,
     Session, ShortcutRows, Slice,
@@ -692,7 +694,9 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
             bytes,
             volume_total: facts.iter().find(|v| v.system).map_or(0, |v| v.total),
         });
-    Ok(health::score_with(&facts, scan.as_ref(), junk.as_ref()))
+    let mut score = health::score_with(&facts, scan.as_ref(), junk.as_ref());
+    hwmon::add_heat_findings(&app, &mut score);
+    Ok(score)
 }
 
 #[tauri::command]

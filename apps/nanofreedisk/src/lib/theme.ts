@@ -234,6 +234,11 @@ export function paletteVars(colors: Palette, dark: boolean): Record<string, stri
   all["tm-border"] = dark ? mix("#000000", colors.bg, 0.35) : mix("#ffffff", colors.bg, 0.6);
   all["tm-text"] = colors.text;
   all["tm-hover"] = dark ? "#ffffff" : "#000000";
+  // Hardware sensors: temperature levels follow the risk colors so every theme
+  // (and Custom overrides) keeps them readable
+  all["temp-ok"] = colors["risk-safe"];
+  all["temp-warm"] = colors["risk-caution"];
+  all["temp-hot"] = colors["risk-protected"];
   all["shadow"] = dark ? "0 8px 30px rgba(0,0,0,.45)" : "0 8px 30px rgba(15,23,42,.12)";
   return all;
 }

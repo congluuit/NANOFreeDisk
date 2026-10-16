@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
@@ -24,6 +24,8 @@ export interface Settings {
   installerDays: number;
   /** Keep a snapshot of every scan for "What changed?" and the Health Score trend. */
   history: boolean;
+  /** Hardware: notify when the CPU / GPU / a disk gets too hot (samples every 5 s). */
+  tempAlerts: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staleMinMb: 100,
   installerDays: 30,
   history: true,
+  tempAlerts: false,
 };
 
 interface Toast {

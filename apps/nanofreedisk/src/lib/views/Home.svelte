@@ -5,6 +5,7 @@
   import { app, refreshVolumes, startScan } from "../state.svelte";
   import { clean, defaultPicks, scanJunk } from "../clean/state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
+  import TempCard from "../components/TempCard.svelte";
   import Icon from "../components/Icon.svelte";
   import type { Volume } from "../types";
 
@@ -61,6 +62,7 @@
   </header>
 
   <HealthCard />
+  <TempCard />
 
   <div class="big">
     <button class="action card free" onclick={freeSafely} disabled={!!clean.scan && !clean.scan.safe} data-effect title={t("home-free-hint")}>

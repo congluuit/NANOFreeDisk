@@ -42,6 +42,7 @@
       percent: formatPercent(f.value / 100, loc),
       days: Math.max(1, Math.round(f.value)),
       size: formatSize(f.bytes, loc),
+      value: Math.round(f.value),
     });
   }
 

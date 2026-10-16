@@ -13,6 +13,7 @@
     type View,
   } from "./lib/state.svelte";
   import { applyPalette, resolvePalette } from "./lib/theme";
+  import { startThermalSync } from "./lib/hw/thermal.svelte";
   import Icon from "./lib/components/Icon.svelte";
   import ScanProgress from "./lib/components/ScanProgress.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -24,6 +25,7 @@
   import Tidy from "./lib/views/Tidy.svelte";
   import Clean from "./lib/views/Clean.svelte";
   import CleanActivity from "./lib/views/CleanActivity.svelte";
+  import Hardware from "./lib/views/Hardware.svelte";
 
   const NAV: { id: View | null; icon: string; label: string; phase?: string }[] = [
     { id: "home", icon: "home", label: "nav-home" },
@@ -32,6 +34,7 @@
     { id: "tidy", icon: "folder", label: "nav-tidy" },
     { id: "clean", icon: "clean", label: "nav-clean" },
     { id: "activity", icon: "undo", label: "nav-activity" },
+    { id: "hardware", icon: "cpu", label: "nav-hardware" },
     { id: null, icon: "devcache", label: "nav-devcache", phase: "Phase 4" },
     { id: null, icon: "duplicates", label: "nav-duplicates", phase: "Phase 5" },
     { id: null, icon: "monitor", label: "nav-monitor", phase: "Phase 6" },
@@ -50,6 +53,7 @@
       applyLocale();
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
+      startThermalSync();
       await refreshVolumes();
       await openStartupPath();
     })();
@@ -159,6 +163,8 @@
       <Clean />
     {:else if app.view === "activity"}
       <CleanActivity />
+    {:else if app.view === "hardware"}
+      <Hardware />
     {:else}
       <Settings />
     {/if}

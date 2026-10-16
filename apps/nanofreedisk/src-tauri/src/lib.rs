@@ -36,6 +36,11 @@ pub fn run() {
         let _ = nfd_platform::shell_menu::unregister();
         return;
     }
+    // elevated helper for Advanced sensors: no window, only the pipe protocol
+    #[cfg(windows)]
+    if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
+        std::process::exit(nfd_helper::run_helper(&args));
+    }
     let cwd = std::env::current_dir()
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
@@ -55,8 +60,10 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .manage(commands::clean::CleanState::default())
+        .manage(commands::hwmon::HwState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -107,9 +114,30 @@ pub fn run() {
             commands::clean::activity_restore,
             commands::clean::activity_purge,
             commands::clean::activity_forget,
+            commands::hwmon::hw_inventory,
+            commands::hwmon::hw_export,
+            commands::hwmon::sensors_snapshot,
+            commands::hwmon::sensors_reset_minmax,
+            commands::hwmon::sensors_history,
+            commands::hwmon::tasks_snapshot,
+            commands::hwmon::task_verdict,
+            commands::hwmon::task_details,
+            commands::hwmon::task_end,
+            commands::hwmon::task_reveal,
+            commands::hwmon::open_task_manager,
+            commands::hwmon::pawnio_status,
+            commands::hwmon::advanced_sensors_start,
+            commands::hwmon::pawnio_open_site,
+            commands::hwmon::thermal_set,
+            commands::hwmon::thermal_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running NANOFreeDisk");
+        .build(tauri::generate_context!())
+        .expect("error while running NANOFreeDisk")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::hwmon::thermal_flush(app);
+            }
+        });
 }
 
 #[cfg(test)]

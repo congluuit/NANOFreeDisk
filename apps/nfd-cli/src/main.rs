@@ -1,13 +1,17 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3) and `rules list` / `rules validate`. Dedupe, watch and
-//! health commands arrive with their phases (see `docs/PLAN.md` §4.7).
+//! `plan explain` (Phase 3), `rules list` / `rules validate`, and the Hardware
+//! Monitor's `hw` / `sensors` / `ps`. Dedupe, watch and health commands arrive with
+//! their phases (see `docs/PLAN.md` §4.7).
 
 mod clean;
 mod diff;
+mod hw;
+mod ps;
 mod quarantine;
 mod scan;
+mod sensors;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -60,6 +64,12 @@ enum Command {
         #[arg(long, default_value = "en")]
         lang: String,
     },
+    /// Hardware inventory: CPU, mainboard, memory sticks, GPUs, disks, displays, battery.
+    Hw(hw::HwArgs),
+    /// Live sensors: load, clocks, temperatures, power, memory, disks, battery.
+    Sensors(sensors::SensorsArgs),
+    /// Running processes with CPU, memory, I/O and GPU use (read-only).
+    Ps(ps::PsArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -109,6 +119,9 @@ fn run() -> anyhow::Result<ExitCode> {
             action: PlanAction::Explain { path, rules },
         } => clean::explain(&path, rules.as_deref()),
         Command::Explain { path, lang } => explain(&path, &lang),
+        Command::Hw(args) => hw::hw(args),
+        Command::Sensors(args) => sensors::run(args),
+        Command::Ps(args) => ps::run(args),
     }
 }
 
