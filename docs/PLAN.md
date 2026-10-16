@@ -522,6 +522,17 @@ NANOFreeDisk/
 - [ ] `cargo-fuzz` cho rule loader; job CI dry-run toàn hệ thống mới viết, chưa chạy trên runner `windows-latest`
 - [ ] Dọn junk cần quyền admin (`%SystemRoot%\Temp`, CBS log…) — cần helper elevated (cùng helper Hardware Monitor); hiện các mục đó báo lỗi truy cập và được bỏ qua
 
+**Phase 4 — DevCache Manager** (chi tiết: `docs/PHASE4_DEVCACHE.md`; C1 + C2 cơ bản + C3 + C4 + C9, 3 tuần)
+
+- [ ] Rule pack `ide-editors`, `package-managers`, `game-engines` + mở rộng `ai-tools`: ≥ 60 rule DevCache, mỗi rule có `impact` EN + VI và `verified_on`; cờ `devcache` trong `[pack]`; test pack
+- [ ] `nfd-devtools::devcache`: vendor → app → thư mục, 🔒 Giữ lại (rule Protected), ngưỡng theo vendor
+- [ ] `nfd-devtools::unknown`: thư mục lạ trong `%USERPROFILE%` / `%APPDATA%` / `%LOCALAPPDATA%` → 🟡 "Chưa xác minh" + link đóng góp rule
+- [ ] C2 Toolchain Inventory cơ bản (rustup, Node, Python, Conda, JDK, Gradle, Go, Android SDK, .NET, Unity, Unreal, Flutter, Visual Studio) — chỉ Hướng dẫn lệnh gỡ
+- [ ] C3 Repo Finder + C9 build artifact policy (marker, tên chung chung cần git ignore, giữ repo hoạt động 7 ngày) → Quarantine qua Planner
+- [ ] C4 lệnh dọn package store chính chủ: hiện đúng dòng lệnh + xác nhận; không hoàn tác được → Hướng dẫn; ghi Activity log
+- [ ] CLI `nfd devcache [list|clean|unknown]`, `nfd toolchains`, `nfd repos [clean]`, `nfd stores [run]`
+- [ ] View DevCache (Cache / Toolchain / Repo / Package store / Thư mục lạ), "Dọn an toàn (chỉ 🟢)" theo vendor, Settings ngưỡng + nhắc; `locales/{en,vi}/devcache.ftl`; `gui-smoke.mjs` phủ DevCache
+
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 
 1. *Lưu trữ*: crate mới `nfd-history` (SQLite qua `rusqlite` feature `bundled`; kiểm tra MSRV 1.85 và `cargo deny` trước khi thêm). DB ở `%LOCALAPPDATA%\NANOFreeDisk\history.db`. Bảng `scans(id, root, volume_serial, started_at, elapsed_ms, files, dirs, on_disk, free_bytes, total_bytes)`, `dir_sizes(scan_id, path_hash, path, depth, on_disk, files)` — **chỉ thư mục tới độ sâu 6 + mọi thư mục ≥ 50 MB** (không lưu từng tệp: 1 triệu tệp → vài chục nghìn dòng) — và `top_files(scan_id, path, on_disk, mtime)` top 500. Đường dẫn chuẩn hóa chữ thường + `path_hash` (xxh3) để join nhanh. Giữ 30 snapshot / root (cấu hình được), tự xóa cũ; có tùy chọn tắt lưu lịch sử.
