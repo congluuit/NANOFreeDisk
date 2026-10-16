@@ -2182,6 +2182,7 @@ version = "0.1.0"
 dependencies = [
  "nfd-core",
  "nfd-history",
+ "nfd-hwinfo",
  "nfd-platform",
  "nfd-rules",
  "serde",
@@ -2233,6 +2234,7 @@ dependencies = [
  "indicatif",
  "nfd-core",
  "nfd-history",
+ "nfd-hwinfo",
  "nfd-platform",
  "nfd-rules",
  "serde_json",
@@ -2259,6 +2261,15 @@ dependencies = [
  "serde",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "nfd-hwinfo"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

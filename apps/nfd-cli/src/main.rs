@@ -1,10 +1,11 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
-//! Ships `scan` (Phase 1), `diff` (scan history, Phase 2) and `rules list` /
-//! `rules validate`. Cleaning, dedupe, watch
+//! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `rules list` /
+//! `rules validate` and the Hardware Monitor's `hw`. Cleaning, dedupe, watch
 //! and health commands arrive with their phases (see `docs/PLAN.md` §4.7).
 
 mod diff;
+mod hw;
 mod scan;
 
 use std::path::PathBuf;
@@ -46,6 +47,8 @@ enum Command {
         #[arg(long, default_value = "en")]
         lang: String,
     },
+    /// Hardware inventory: CPU, mainboard, memory sticks, GPUs, disks, displays, battery.
+    Hw(hw::HwArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -79,6 +82,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Scan(args) => scan::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Explain { path, lang } => explain(&path, &lang),
+        Command::Hw(args) => hw::hw(args),
     }
 }
 

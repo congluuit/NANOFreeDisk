@@ -21,6 +21,7 @@
   import OldLarge from "./lib/views/OldLarge.svelte";
   import Settings from "./lib/views/Settings.svelte";
   import Tidy from "./lib/views/Tidy.svelte";
+  import Hardware from "./lib/views/Hardware.svelte";
 
   const NAV: { id: View | null; icon: string; label: string; phase?: string }[] = [
     { id: "home", icon: "home", label: "nav-home" },
@@ -28,6 +29,7 @@
     { id: "oldlarge", icon: "drive", label: "nav-oldlarge" },
     { id: "tidy", icon: "folder", label: "nav-tidy" },
     { id: null, icon: "clean", label: "nav-clean", phase: "Phase 3" },
+    { id: "hardware", icon: "cpu", label: "nav-hardware" },
     { id: null, icon: "devcache", label: "nav-devcache", phase: "Phase 4" },
     { id: null, icon: "duplicates", label: "nav-duplicates", phase: "Phase 5" },
     { id: null, icon: "monitor", label: "nav-monitor", phase: "Phase 6" },
@@ -150,6 +152,8 @@
       <OldLarge />
     {:else if app.view === "tidy"}
       <Tidy />
+    {:else if app.view === "hardware"}
+      <Hardware />
     {:else}
       <Settings />
     {/if}

@@ -96,6 +96,8 @@ pub fn run() {
             commands::save_settings,
             commands::read_text_file,
             commands::write_text_file,
+            commands::hwmon::hw_inventory,
+            commands::hwmon::hw_export,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NANOFreeDisk");

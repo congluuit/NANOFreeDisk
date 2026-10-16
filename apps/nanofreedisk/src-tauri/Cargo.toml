@@ -20,6 +20,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 nfd-core = { workspace = true }
 nfd-history = { workspace = true }
+nfd-hwinfo = { workspace = true }
 nfd-platform = { workspace = true }
 nfd-rules = { workspace = true }
 serde = { workspace = true }

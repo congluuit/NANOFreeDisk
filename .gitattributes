@@ -30,6 +30,7 @@
 *.msi binary
 *.exe binary
 *.dll binary
+*.bin binary
 
 # Linguist: treat rule packs and docs as data, keep SVG mockups out of language stats
 rules/** linguist-language=TOML

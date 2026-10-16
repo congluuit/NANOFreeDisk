@@ -19,6 +19,8 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
+pub mod hwmon;
+
 use crate::session::{
     self, AgeDto, DeletePlan, Detail, EmptyRows, ExtRow, Located, Node, OldLargeRows, SearchRows,
     Session, ShortcutRows, Slice,
