@@ -10,6 +10,7 @@ import { healthHandlers } from "./health/mock";
 import type { DeleteItem, Filter, Node, Slice } from "./types";
 import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
+import { monitorHandlers } from "./monitor/mock";
 
 interface E {
   id: number;
@@ -600,9 +601,9 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
 };
 
 export async function invoke<T>(cmd: string, args: Record<string, unknown> = {}): Promise<T> {
-  const h = handlers[cmd] ?? hwHandlers[cmd];
+  const h = handlers[cmd] ?? hwHandlers[cmd] ?? monitorHandlers[cmd];
   if (!h) throw { code: "unknown", message: `mock: no command ${cmd}` };
-  if (!entries.length && !(cmd in hwHandlers) && cmd !== "list_volumes" && cmd !== "app_info" && cmd !== "load_settings") build();
+  if (!entries.length && !(cmd in hwHandlers) && !(cmd in monitorHandlers) && cmd !== "list_volumes" && cmd !== "app_info" && cmd !== "load_settings") build();
   await new Promise((r) => setTimeout(r, 0));
   return h(args) as T;
 }

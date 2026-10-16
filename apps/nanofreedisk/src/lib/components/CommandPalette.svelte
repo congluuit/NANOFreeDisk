@@ -42,6 +42,7 @@
       ["tidy", "nav-tidy", "folder"],
       ["devcache", "nav-devcache", "devcache"],
       ["duplicates", "nav-duplicates", "duplicates"],
+      ["monitor", "nav-monitor", "monitor"],
       ["health", "nav-health", "health"],
       ["settings", "nav-settings", "settings"],
     ];

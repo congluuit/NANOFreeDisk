@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/congluuit/NANOFreeDisk/blob/main/docs/schema/monitor-v1.schema.json",
+  "title": "NANOFreeDisk disk activity sample (nanofreedisk.monitor.v1)",
+  "description": "One line of `nfd monitor --json` (JSON Lines: one sample per interval). Rates are per second (bytes or operations), times are Unix milliseconds (UTC), paths are Win32 paths. Process creation times are FILETIME as decimal text (they do not fit a JSON number). Adding fields is backward compatible; renaming or removing one bumps the schema id.",
+  "type": "object",
+  "required": ["schema", "at", "source", "intervalMs", "read", "write", "ops", "processes", "files", "disks", "touches", "lost", "undecoded", "alerts"],
+  "properties": {
+    "schema": { "const": "nanofreedisk.monitor.v1" },
+    "at": { "$ref": "#/$defs/count", "description": "When the sample was taken" },
+    "source": {
+      "enum": ["counters", "etw", "helper"],
+      "description": "counters: per-process IO_COUNTERS (every I/O, no files, no admin); etw: file I/O from a private kernel trace session in this process; helper: the same in the app's elevated helper"
+    },
+    "intervalMs": { "$ref": "#/$defs/count" },
+    "read": { "$ref": "#/$defs/rate" },
+    "write": { "$ref": "#/$defs/rate" },
+    "ops": { "$ref": "#/$defs/rate" },
+    "processes": {
+      "type": "array",
+      "description": "Processes with I/O in the interval, busiest first (at most 150)",
+      "items": {
+        "type": "object",
+        "required": ["pid", "createTime", "name", "path", "read", "write", "readOps", "writeOps", "files"],
+        "properties": {
+          "pid": { "type": "integer", "minimum": 0 },
+          "createTime": { "type": "string", "pattern": "^[0-9]*$", "description": "Empty when the process has exited" },
+          "name": { "type": "string" },
+          "path": { "type": ["string", "null"] },
+          "read": { "$ref": "#/$defs/rate" },
+          "write": { "$ref": "#/$defs/rate" },
+          "readOps": { "$ref": "#/$defs/rate" },
+          "writeOps": { "$ref": "#/$defs/rate" },
+          "files": { "type": "integer", "minimum": 0, "description": "Files touched (file-level sources only)" }
+        }
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Files with I/O, most written first (at most 300; empty for the counters source)",
+      "items": {
+        "type": "object",
+        "required": ["pid", "process", "path", "read", "write", "ops"],
+        "properties": {
+          "pid": { "type": "integer", "minimum": 0 },
+          "process": { "type": "string" },
+          "path": { "type": "string" },
+          "read": { "$ref": "#/$defs/rate" },
+          "write": { "$ref": "#/$defs/rate" },
+          "ops": { "$ref": "#/$defs/rate" }
+        }
+      }
+    },
+    "disks": {
+      "type": "array",
+      "description": "Physical disks (PDH PhysicalDisk counters)",
+      "items": {
+        "type": "object",
+        "required": ["name", "read", "write", "transfers", "queue", "latencyMs", "idle"],
+        "properties": {
+          "name": { "type": "string", "description": "PDH instance, e.g. \"0 C: E:\"" },
+          "read": { "$ref": "#/$defs/rate" },
+          "write": { "$ref": "#/$defs/rate" },
+          "transfers": { "$ref": "#/$defs/rate" },
+          "queue": { "type": "number", "minimum": 0, "description": "Average queue length" },
+          "latencyMs": { "type": "number", "minimum": 0, "description": "Average time per transfer" },
+          "idle": { "type": "number", "minimum": 0, "maximum": 100, "description": "% idle time" }
+        }
+      }
+    },
+    "touches": {
+      "type": "array",
+      "description": "File events under the --watch folder (file-level sources only)",
+      "items": {
+        "type": "object",
+        "required": ["at", "pid", "process", "op", "path", "target"],
+        "properties": {
+          "at": { "$ref": "#/$defs/count" },
+          "pid": { "type": "integer", "minimum": 0 },
+          "process": { "type": "string" },
+          "op": { "enum": ["create", "write", "delete", "rename"] },
+          "path": { "type": "string" },
+          "target": { "type": ["string", "null"], "description": "New name of a rename" }
+        }
+      }
+    },
+    "lost": { "$ref": "#/$defs/count", "description": "Events the trace session dropped since it started" },
+    "undecoded": { "$ref": "#/$defs/count", "description": "Events with an unknown layout since the session started" },
+    "alerts": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["kind", "pid", "createTime", "name", "path", "rate", "minutes", "since"],
+            "properties": {
+              "kind": { "const": "log-spam" },
+              "pid": { "type": "integer" },
+              "createTime": { "type": "string" },
+              "name": { "type": "string" },
+              "path": { "type": ["string", "null"] },
+              "rate": { "$ref": "#/$defs/rate", "description": "Average write rate over the run" },
+              "minutes": { "type": "integer", "minimum": 1 },
+              "since": { "$ref": "#/$defs/count" }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["kind", "pid", "name", "path", "size"],
+            "properties": {
+              "kind": { "const": "big-log" },
+              "pid": { "type": "integer" },
+              "name": { "type": "string" },
+              "path": { "type": "string" },
+              "size": { "$ref": "#/$defs/count" }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "rate": { "type": "number", "minimum": 0 }
+  }
+}

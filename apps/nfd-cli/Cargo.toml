@@ -20,6 +20,7 @@ nfd-dupes = { workspace = true }
 nfd-health = { workspace = true }
 nfd-history = { workspace = true }
 nfd-hwinfo = { workspace = true }
+nfd-monitor = { workspace = true }
 nfd-sensors = { workspace = true }
 nfd-tasks = { workspace = true }
 nfd-rules = { workspace = true }

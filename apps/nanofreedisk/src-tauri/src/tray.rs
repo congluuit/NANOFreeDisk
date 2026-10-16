@@ -1,13 +1,17 @@
 //! Notification-area icon (PLAN §13 G5): the drives' verdict and the free space of
-//! each fixed drive at a glance, "Open" and "Quit". Display only — no action in the
-//! menu deletes or changes anything. Texts come from the UI (EN / VI); English is
-//! used until it sends them.
+//! each fixed drive at a glance, "Pause disk monitor" (Phase 6), "Open" and "Quit".
+//! No action in the menu deletes or changes anything on the PC. Texts come from the
+//! UI (EN / VI); English is used until it sends them.
 
 use std::collections::HashMap;
+use std::sync::Mutex;
 
-use tauri::menu::{Menu, MenuItem, PredefinedMenuItem};
+use tauri::menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+
+use crate::commands::monitor::{MonitorState, is_paused, set_paused};
+use crate::commands::{CmdResult, err};
 
 const ID: &str = "nanofreedisk";
 
@@ -19,6 +23,7 @@ pub fn text(texts: &HashMap<String, String>, key: &str) -> String {
     match key {
         "tray-open" => "Open NANOFreeDisk",
         "tray-quit" => "Quit",
+        "tray-pause" => "Pause disk monitor",
         "tray-status" => "Drive health: {status}",
         "tray-free" => "{drive}  {size} free ({percent})",
         "status-good" => "Good",
@@ -39,6 +44,7 @@ fn show_main(app: &AppHandle) {
 }
 
 /// One line per drive plus the verdict, from the last health report.
+#[derive(Clone)]
 pub struct TrayState {
     pub status: String,
     /// (drive root, free, total).
@@ -66,11 +72,30 @@ fn lines(state: &TrayState, texts: &HashMap<String, String>) -> (String, Vec<Str
     (head, drives)
 }
 
+/// What the menu was last built from, so it can be rebuilt when the monitor is
+/// paused or resumed.
+#[derive(Default)]
+struct Last {
+    state: Option<TrayState>,
+    texts: HashMap<String, String>,
+    paused: bool,
+    /// "Pause disk monitor" in the UI language (sent by the Monitor).
+    pause_text: Option<String>,
+}
+
+static LAST: Mutex<Option<Last>> = Mutex::new(None);
+
+fn with_last<T>(f: impl FnOnce(&mut Last) -> T) -> Option<T> {
+    let mut g = LAST.lock().ok()?;
+    Some(f(g.get_or_insert_with(Last::default)))
+}
+
 fn menu(
     app: &AppHandle,
     state: Option<&TrayState>,
     texts: &HashMap<String, String>,
 ) -> tauri::Result<Menu<tauri::Wry>> {
+    let (paused, pause_text) = with_last(|l| (l.paused, l.pause_text.clone())).unwrap_or_default();
     let menu = Menu::new(app)?;
     menu.append(&MenuItem::with_id(
         app,
@@ -100,6 +125,14 @@ fn menu(
         }
     }
     menu.append(&PredefinedMenuItem::separator(app)?)?;
+    menu.append(&CheckMenuItem::with_id(
+        app,
+        "pause",
+        pause_text.unwrap_or_else(|| text(texts, "tray-pause")),
+        true,
+        paused,
+        None::<&str>,
+    )?)?;
     menu.append(&MenuItem::with_id(
         app,
         "quit",
@@ -119,6 +152,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
+            "pause" => {
+                let state = app.state::<MonitorState>();
+                let _ = set_paused(app, &state, !is_paused(&state));
+            }
             "quit" => app.exit(0),
             _ => {}
         })
@@ -141,6 +178,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
 /// Show the latest verdict and free space.
 pub fn update(app: &AppHandle, state: &TrayState, texts: &HashMap<String, String>) {
+    with_last(|l| {
+        l.state = Some(state.clone());
+        l.texts.clone_from(texts);
+    });
     let Some(tray) = app.tray_by_id(ID) else {
         return;
     };
@@ -154,6 +195,30 @@ pub fn update(app: &AppHandle, state: &TrayState, texts: &HashMap<String, String
     if let Ok(m) = menu(app, Some(state), texts) {
         let _ = tray.set_menu(Some(m));
     }
+}
+
+/// Rebuild the menu from what it last showed.
+fn rebuild(app: &AppHandle) {
+    let Some((state, texts)) = with_last(|l| (l.state.clone(), l.texts.clone())) else {
+        return;
+    };
+    if let (Some(tray), Ok(m)) = (app.tray_by_id(ID), menu(app, state.as_ref(), &texts)) {
+        let _ = tray.set_menu(Some(m));
+    }
+}
+
+/// Keep the check mark in step with the monitor (paused or resumed anywhere).
+pub fn sync_paused(app: &AppHandle, paused: bool) {
+    with_last(|l| l.paused = paused);
+    rebuild(app);
+}
+
+/// "Pause disk monitor" in the UI language.
+#[tauri::command]
+pub fn tray_monitor_text(app: AppHandle, pause: String) -> CmdResult<()> {
+    with_last(|l| l.pause_text = Some(pause)).ok_or_else(|| err("internal", "tray"))?;
+    rebuild(&app);
+    Ok(())
 }
 
 #[cfg(test)]

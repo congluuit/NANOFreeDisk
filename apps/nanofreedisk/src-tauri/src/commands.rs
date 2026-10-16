@@ -24,6 +24,7 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
 pub mod hwmon;
+pub mod monitor;
 pub mod update;
 
 use crate::session::{
@@ -119,9 +120,9 @@ pub struct CmdError {
     pub message: String,
 }
 
-type CmdResult<T> = Result<T, CmdError>;
+pub(crate) type CmdResult<T> = Result<T, CmdError>;
 
-fn err(code: &'static str, message: impl ToString) -> CmdError {
+pub(crate) fn err(code: &'static str, message: impl ToString) -> CmdError {
     CmdError {
         code,
         message: message.to_string(),

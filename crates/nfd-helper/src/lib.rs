@@ -2,11 +2,18 @@
 //!
 //! The app stays unelevated. When the user turns on Advanced sensors it starts its
 //! own executable with `--elevated-helper <pipe> <app pid>` through UAC; the helper
-//! connects back to a named pipe the app created and then answers exactly four
-//! requests — [`Request::Discover`], [`Request::Sample`], [`Request::Shutdown`] and
-//! [`Request::Health`] (Phase 7: SMART thresholds, SMART through USB bridges and the
-//! volume dirty bit — the fixed read commands of `nfd_health::cmd`, nothing else).
-//! There is no request that runs code, opens files or writes hardware.
+//! connects back to a named pipe the app created and then answers a closed set of
+//! requests: Advanced sensors ([`Request::Discover`], [`Request::Sample`]), drive
+//! health reads ([`Request::Health`], Phase 7: SMART thresholds, SMART through USB
+//! bridges and the volume dirty bit — the fixed read commands of `nfd_health::cmd`),
+//! the disk activity monitor's kernel trace session ([`Request::MonitorStart`],
+//! [`Request::MonitorPoll`], [`Request::MonitorStop`], PHASE6_MONITOR §2.2) and
+//! [`Request::Shutdown`]. There is no request that runs code, reads file contents,
+//! ends a process or writes hardware.
+//!
+//! One helper serves every feature: the app keeps a single [`Connection`] that the
+//! sensor provider, the health reads and the monitor share, so turning on a second
+//! feature does not ask UAC again.
 //!
 //! Both ends check each other: the app only accepts the PID UAC started, the helper
 //! only talks to the PID it was given, and both must be the same executable. The
@@ -20,7 +27,7 @@ pub use nfd_sensors::{Device, Kind, Note};
 pub const HELPER_FLAG: &str = "--elevated-helper";
 
 /// Wire version; both ends refuse a mismatch (stale helper after an update).
-pub const PROTOCOL: u32 = 2;
+pub const PROTOCOL: u32 = 3;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
@@ -29,6 +36,15 @@ pub enum Request {
         protocol: u32,
     },
     Sample,
+    /// Start the monitor's trace session; `watch` only filters which file events
+    /// are reported ("Who touched this?").
+    MonitorStart {
+        protocol: u32,
+        watch: Option<String>,
+    },
+    /// The activity since the previous poll.
+    MonitorPoll,
+    MonitorStop,
     Shutdown,
     /// Administrator-only drive reads for these drives / volumes (indices and roots
     /// only — never command bytes).
@@ -72,6 +88,15 @@ pub enum Response {
     Sample {
         values: Vec<(usize, f64)>,
     },
+    MonitorStarted,
+    MonitorStopped,
+    Monitor {
+        tick: nfd_monitor::Tick,
+    },
+    /// The trace session could not start or has stopped.
+    MonitorError {
+        error: String,
+    },
     Health {
         privileged: nfd_health::Privileged,
     },
@@ -84,8 +109,12 @@ pub enum Response {
     },
 }
 
-/// Largest frame accepted (a discovery of a 64-core CPU is ~40 KB).
-pub const MAX_FRAME: usize = 1 << 20;
+/// Largest frame accepted (a discovery of a 64-core CPU is ~40 KB, a monitor tick
+/// trimmed to [`MONITOR_FILES`] files ~200 KB).
+pub const MAX_FRAME: usize = 4 << 20;
+
+/// Files per monitor tick sent over the pipe (busiest first).
+pub const MONITOR_FILES: usize = 1000;
 
 /// `u32` little-endian length + JSON.
 pub fn encode<T: Serialize>(msg: &T) -> Vec<u8> {
@@ -120,7 +149,9 @@ pub fn helper_args(args: &[String]) -> Option<(String, u32)> {
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{RemoteProvider, StartError, health_once, run_helper, start};
+pub use win::{
+    Connection, RemoteMonitor, RemoteProvider, StartError, health_once, run_helper, start,
+};
 
 #[cfg(test)]
 mod tests {
@@ -142,7 +173,24 @@ mod tests {
         assert_eq!(
             decode::<Request>(b"{\"op\":\"run\",\"cmd\":\"calc\"}"),
             None,
-            "only the four requests exist"
+            "only the listed requests exist"
+        );
+        let m = Request::MonitorStart {
+            protocol: PROTOCOL,
+            watch: Some(r"C:\work".into()),
+        };
+        assert_eq!(decode::<Request>(&encode(&m)[4..]), Some(m));
+        let t = Response::Monitor {
+            tick: nfd_monitor::Tick {
+                elapsed_ms: 1000,
+                events: 3,
+                ..nfd_monitor::Tick::default()
+            },
+        };
+        assert_eq!(decode::<Response>(&encode(&t)[4..]), Some(t));
+        assert_eq!(
+            decode::<Request>(b"{\"op\":\"monitor-kill\",\"pid\":4}"),
+            None
         );
     }
 
@@ -177,7 +225,7 @@ mod tests {
         // a request carrying command bytes does not parse
         assert_eq!(
             decode::<Request>(
-                br#"{"op":"health","protocol":2,"drives":[],"volumes":[],"cdb":[133]}"#
+                br#"{"op":"health","protocol":3,"drives":[],"volumes":[],"cdb":[133]}"#
             )
             .map(|r| matches!(r, Request::Health { .. })),
             Some(true),

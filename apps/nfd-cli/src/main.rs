@@ -3,7 +3,7 @@
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
 //! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores` (Phase 4),
 //! `dupes` (Phase 5), `rules list` / `rules validate`, and the Hardware Monitor's
-//! `hw` / `sensors` / `ps`. Watch and health commands arrive with their phases (see
+//! `hw` / `sensors` / `ps`, and `monitor` (Phase 6). Watch and health commands arrive with their phases (see
 //! `docs/PLAN.md` §4.7).
 
 mod clean;
@@ -12,6 +12,7 @@ mod diff;
 mod dupes;
 mod health;
 mod hw;
+mod monitor;
 mod ps;
 mod quarantine;
 mod repos;
@@ -91,6 +92,8 @@ enum Command {
     Sensors(sensors::SensorsArgs),
     /// Running processes with CPU, memory, I/O and GPU use (read-only).
     Ps(ps::PsArgs),
+    /// Live disk activity: which processes (and, with ETW, which files) read and write.
+    Monitor(monitor::MonitorArgs),
     /// Drive health: SMART / NVMe verdict per drive and volume checks (read-only).
     /// Exit code 1 = a drive needs attention, 2 = a drive is bad.
     Health(health::HealthArgs),
@@ -151,6 +154,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Hw(args) => hw::hw(args),
         Command::Sensors(args) => sensors::run(args),
         Command::Ps(args) => ps::run(args),
+        Command::Monitor(args) => monitor::run(args),
         Command::Health(args) => health::run(args),
     }
 }

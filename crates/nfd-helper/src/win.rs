@@ -1,5 +1,6 @@
 //! Named pipe, UAC launch and the two ends of the protocol.
 
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use nfd_sensors::{Discovery, SensorInfo, SensorProvider};
@@ -152,8 +153,8 @@ pub enum StartError {
     Failed(String),
 }
 
-/// Start the elevated helper (shows UAC) and return its sensors as a provider.
-pub fn start() -> Result<RemoteProvider, StartError> {
+/// Start the elevated helper (shows UAC) and return the connection to it.
+pub fn start() -> Result<Connection, StartError> {
     // SAFETY: no arguments.
     let me = unsafe { GetCurrentProcessId() };
     let nonce = std::time::SystemTime::now()
@@ -271,32 +272,45 @@ pub fn start() -> Result<RemoteProvider, StartError> {
     if client != helper_pid || !same_exe(client) {
         return Err(StartError::WrongPeer);
     }
-    Ok(RemoteProvider {
-        pipe: Some(pipe),
-        unavailable: None,
+    Ok(Connection {
+        link: Arc::new(Mutex::new(Link { pipe: Some(pipe) })),
     })
 }
 
-/// The app's end: Advanced sensors from the helper, as a normal provider.
 #[derive(Debug)]
-pub struct RemoteProvider {
+struct Link {
     pipe: Option<Pipe>,
-    /// Why the helper has no sensors (PawnIO missing, module rejected…).
-    pub unavailable: Option<String>,
 }
 
-impl RemoteProvider {
-    fn ask(&mut self, req: &Request) -> Option<Response> {
-        let pipe = self.pipe.as_ref()?;
+impl Drop for Link {
+    fn drop(&mut self) {
+        if let Some(p) = &self.pipe {
+            let _ = p.send(&Request::Shutdown);
+        }
+    }
+}
+
+/// The app's end of the pipe, shared by the sensor provider and the monitor (one
+/// request / response at a time). The helper is told to exit when the last clone
+/// is dropped.
+#[derive(Debug, Clone)]
+pub struct Connection {
+    link: Arc<Mutex<Link>>,
+}
+
+impl Connection {
+    fn ask(&self, req: &Request) -> Option<Response> {
+        let mut link = self.link.lock().ok()?;
+        let pipe = link.pipe.as_ref()?;
         let r = if pipe.send(req) { pipe.recv() } else { None };
         if r.is_none() {
-            self.pipe = None; // helper gone
+            link.pipe = None; // helper gone
         }
         r
     }
 
     pub fn connected(&self) -> bool {
-        self.pipe.is_some()
+        self.link.lock().is_ok_and(|l| l.pipe.is_some())
     }
 
     /// Administrator-only drive reads (Phase 7).
@@ -331,11 +345,92 @@ pub fn health_once(
         .ok_or(StartError::NoConnection)
 }
 
-impl Drop for RemoteProvider {
-    fn drop(&mut self) {
-        if let Some(p) = &self.pipe {
-            let _ = p.send(&Request::Shutdown);
+/// The app's end: Advanced sensors from the helper, as a normal provider.
+#[derive(Debug)]
+pub struct RemoteProvider {
+    conn: Connection,
+    /// Why the helper has no sensors (PawnIO missing, module rejected…).
+    pub unavailable: Option<String>,
+}
+
+impl RemoteProvider {
+    pub fn new(conn: Connection) -> Self {
+        Self {
+            conn,
+            unavailable: None,
         }
+    }
+
+    fn ask(&mut self, req: &Request) -> Option<Response> {
+        self.conn.ask(req)
+    }
+
+    pub fn connected(&self) -> bool {
+        self.conn.connected()
+    }
+}
+
+/// The app's end of the disk activity trace session in the helper.
+#[derive(Debug)]
+pub struct RemoteMonitor {
+    conn: Connection,
+    running: bool,
+}
+
+impl RemoteMonitor {
+    pub fn new(conn: Connection) -> Self {
+        Self {
+            conn,
+            running: false,
+        }
+    }
+
+    /// Start (or restart, with another `watch` folder) the session.
+    ///
+    /// # Errors
+    /// The session could not start (the reason as text) or the helper is gone.
+    pub fn start(&mut self, watch: Option<String>) -> Result<(), String> {
+        match self.conn.ask(&Request::MonitorStart {
+            protocol: PROTOCOL,
+            watch,
+        }) {
+            Some(Response::MonitorStarted) => {
+                self.running = true;
+                Ok(())
+            }
+            Some(Response::MonitorError { error }) => Err(error),
+            Some(_) => Err("protocol".into()),
+            None => Err("helper-stopped".into()),
+        }
+    }
+
+    /// Activity since the previous poll.
+    ///
+    /// # Errors
+    /// The session stopped or the helper is gone.
+    pub fn poll(&mut self) -> Result<nfd_monitor::Tick, String> {
+        match self.conn.ask(&Request::MonitorPoll) {
+            Some(Response::Monitor { tick }) => Ok(tick),
+            Some(Response::MonitorError { error }) => Err(error),
+            Some(_) => Err("protocol".into()),
+            None => Err("helper-stopped".into()),
+        }
+    }
+
+    pub fn stop(&mut self) {
+        if std::mem::take(&mut self.running) {
+            let _ = self.conn.ask(&Request::MonitorStop);
+        }
+    }
+
+    pub fn connected(&self) -> bool {
+        self.conn.connected()
+    }
+}
+
+impl Drop for RemoteMonitor {
+    fn drop(&mut self) {
+        self.stop();
     }
 }
 
@@ -422,12 +517,51 @@ pub fn run_helper(args: &[String]) -> i32 {
     }
     let mut providers: Vec<Box<dyn SensorProvider>> = Vec::new();
     let mut maps: Vec<usize> = Vec::new(); // provider start offsets
+    // the monitor's trace session; dropping it (return, app gone) stops it
+    let mut etw: Option<nfd_monitor::win::etw::EtwSession> = None;
     loop {
         let Some(req) = pipe.recv::<Request>() else {
             return 0; // app closed the pipe
         };
         let resp = match req {
             Request::Shutdown => return 0,
+            Request::MonitorStart { protocol, .. } if protocol != PROTOCOL => {
+                Response::MonitorError {
+                    error: format!("protocol {protocol} != {PROTOCOL}"),
+                }
+            }
+            Request::MonitorStart { watch, .. } => {
+                etw = None; // stop a previous session first (same name)
+                match nfd_monitor::win::etw::EtwSession::start(watch.as_deref()) {
+                    Ok(s) => {
+                        etw = Some(s);
+                        Response::MonitorStarted
+                    }
+                    Err(e) => Response::MonitorError {
+                        error: format!("{e:?}"),
+                    },
+                }
+            }
+            Request::MonitorPoll => match etw.as_mut() {
+                Some(s) if s.alive() => {
+                    let mut tick = s.take();
+                    tick.trim_files(crate::MONITOR_FILES);
+                    Response::Monitor { tick }
+                }
+                Some(_) => {
+                    etw = None;
+                    Response::MonitorError {
+                        error: "session-stopped".into(),
+                    }
+                }
+                None => Response::MonitorError {
+                    error: "not-started".into(),
+                },
+            },
+            Request::MonitorStop => {
+                etw = None;
+                Response::MonitorStopped
+            }
             Request::Discover { protocol } if protocol != PROTOCOL => Response::Error {
                 message: format!("protocol {protocol} != {PROTOCOL}"),
             },

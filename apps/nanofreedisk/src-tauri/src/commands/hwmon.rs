@@ -24,6 +24,10 @@ pub struct HwState {
     tasks: Arc<Mutex<Option<nfd_tasks::TaskMonitor>>>,
     /// Why Advanced sensors could not start, for the UI.
     advanced_error: Arc<Mutex<Option<String>>>,
+    /// The elevated helper, shared by Advanced sensors and the Monitor's
+    /// file-level detail (one UAC prompt for both).
+    #[cfg(windows)]
+    helper: Arc<Mutex<Option<nfd_helper::Connection>>>,
     /// Temperature alerts and the 24-hour log.
     thermal: Arc<Mutex<Thermal>>,
     thermal_thread: std::sync::OnceLock<()>,
@@ -359,6 +363,32 @@ pub async fn pawnio_status(state: State<'_, HwState>) -> CmdResult<AdvancedStatu
     })
 }
 
+/// The running elevated helper, or a new one (UAC prompt). Blocking.
+#[cfg(windows)]
+pub fn helper_connection(
+    slot: &Mutex<Option<nfd_helper::Connection>>,
+) -> CmdResult<nfd_helper::Connection> {
+    let mut guard = slot.lock().map_err(|e| err("internal", e))?;
+    if let Some(c) = guard.as_ref().filter(|c| c.connected()) {
+        return Ok(c.clone());
+    }
+    let conn = nfd_helper::start().map_err(|e| {
+        let code = match e {
+            nfd_helper::StartError::Declined => "uac-declined",
+            _ => "helper-failed",
+        };
+        err(code, format!("{e:?}"))
+    })?;
+    *guard = Some(conn.clone());
+    Ok(conn)
+}
+
+/// The helper slot, for the Monitor.
+#[cfg(windows)]
+pub fn helper_slot(state: &HwState) -> Arc<Mutex<Option<nfd_helper::Connection>>> {
+    state.helper.clone()
+}
+
 /// Start the elevated helper (UAC prompt) and add its sensors to the hub.
 #[tauri::command]
 pub async fn advanced_sensors_start(state: State<'_, HwState>) -> CmdResult<AdvancedStatus> {
@@ -366,6 +396,7 @@ pub async fn advanced_sensors_start(state: State<'_, HwState>) -> CmdResult<Adva
     {
         let hub = state.hub.clone();
         let error = state.advanced_error.clone();
+        let helper = state.helper.clone();
         tauri::async_runtime::spawn_blocking(move || {
             if hub
                 .lock()
@@ -375,13 +406,7 @@ pub async fn advanced_sensors_start(state: State<'_, HwState>) -> CmdResult<Adva
             {
                 return Ok(());
             }
-            let remote = nfd_helper::start().map_err(|e| {
-                let code = match e {
-                    nfd_helper::StartError::Declined => "uac-declined",
-                    _ => "helper-failed",
-                };
-                err(code, format!("{e:?}"))
-            })?;
+            let remote = nfd_helper::RemoteProvider::new(helper_connection(&helper)?);
             let mut guard = hub.lock().map_err(|e| err("internal", e))?;
             let h = guard.get_or_insert_with(SensorHub::native);
             let mut remote = Box::new(remote);

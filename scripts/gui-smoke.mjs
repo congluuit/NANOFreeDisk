@@ -21,8 +21,11 @@
 // reveal / propose commands; Phase 5: duplicates in their own fixture (groups, keeper,
 // refusal of a selection that keeps nothing, quarantine + restore, a keeper changed
 // after the search, preview / reveal / export guards, the view and its confirmation,
-// the Explorer verb); Phase 7: the health report (drives, volumes, the JSON export
-// without serial numbers and its *.json guard), the Health view and the score.
+// the Explorer verb); Phase 6: the disk activity monitor with I/O counters (this
+// script's own writes attributed to it, chart, disks, pause, the reveal guard, the
+// view's tabs — file detail is not turned on: it would ask UAC, and nothing is
+// recorded into the history); Phase 7: the health report (drives, volumes, the JSON
+// export without serial numbers and its *.json guard), the Health view and the score.
 // Nothing outside the fixture is ever deleted and the only process ever ended is a
 // `ping` the script starts itself; the fixture's history snapshots and journal
 // entries are forgotten at the end.
@@ -695,6 +698,53 @@ try {
   await evaluate("document.querySelector('[data-dupetab=folders]')?.click()");
   await sleep(200);
 
+  // Monitor (docs/PHASE6_MONITOR.md): I/O counters only — file detail would ask UAC.
+  // Minutes are not recorded into the real history from here.
+  const noAlerts = { enabled: false, mbps: 5, minutes: 5 };
+  const monTexts = { spamTitle: "", spamBody: "", logTitle: "", logBody: "" };
+  check("monitor: configure", (await invoke("monitor_configure", { alerts: noAlerts, texts: monTexts, record: false }))?.__error === undefined);
+  await invoke("monitor_snapshot");
+  // this script writes a file for a few seconds: its own process must show up
+  const monFile = join(fixture, "monitor-write.bin");
+  const chunk = randomBytes(1 << 20);
+  let mine = null;
+  let monView = null;
+  for (let i = 0; i < 16 && !mine; i++) {
+    writeFileSync(monFile, Buffer.concat([chunk, chunk, chunk, chunk]));
+    await sleep(350);
+    monView = await invoke("monitor_snapshot");
+    mine = monView.snapshot?.processes?.find((p) => p.pid === process.pid && p.write > 0);
+  }
+  const monSnap = monView?.snapshot;
+  check(
+    "monitor: samples processes and disks without admin",
+    monSnap?.schema === "nanofreedisk.monitor.v1" && monSnap.source === "counters" && Array.isArray(monSnap.disks) && monSnap.processes.length > 0,
+    `${monSnap?.processes?.length} active, ${monSnap?.disks?.length} disk(s), elevated ${monView?.elevated}`,
+  );
+  check("monitor: this script's writes are attributed to it", !!mine, mine ? `${(mine.write / 2 ** 20).toFixed(1)} MB/s` : "not seen");
+  const monChart = await invoke("monitor_chart", { seconds: 60 });
+  check("monitor: realtime chart", Array.isArray(monChart) && monChart.length >= 2 && monChart.every((p) => p.t > 0), `${monChart.length} points`);
+  const monRefused = await invoke("monitor_reveal", { path: "C:\\Windows\\System32\\config\\SAM" });
+  check("monitor: Explorer opens only paths it reported", monRefused?.__error?.code === "not-found", JSON.stringify(monRefused));
+  check("monitor: 24-hour history reads", Array.isArray((await invoke("monitor_history")).minutes));
+  check("monitor: pause", (await invoke("monitor_pause", { paused: true })) === true && (await invoke("monitor_snapshot")).paused === true);
+  await invoke("monitor_pause", { paused: false });
+  const monNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Disk activity|Hoạt động ổ đĩa/.test(b.innerText))");
+  check("Disk activity is in the sidebar", monNav >= 0);
+  await nav(monNav);
+  for (let i = 0; i < 30 && !(await evaluate("document.querySelectorAll('[data-procs] .row').length > 0")); i++) await sleep(200);
+  await sleep(1500);
+  check("Monitor view lists processes and draws the chart", await evaluate("document.querySelectorAll('[data-procs] .row').length > 0 && (document.querySelector('[data-chart] path.line')?.getAttribute('d') ?? '').length > 4"));
+  check("Monitor view shows the physical disks", await evaluate("document.querySelectorAll('[data-disk]').length > 0"));
+  await shot("15-monitor");
+  await evaluate("document.querySelector('[data-montab=history]')?.click()");
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('[data-history]')")); i++) await sleep(150);
+  check("Monitor: 24 hours tab", await evaluate("!!document.querySelector('[data-history]')"));
+  await evaluate("document.querySelector('[data-montab=who]')?.click()");
+  await sleep(300);
+  check("Monitor: Who touched this? tab", await evaluate("!!document.querySelector('[data-who]')"));
+  await evaluate("document.querySelector('[data-montab=activity]')?.click()");
+
   // Phase 7: Health (read-only; the export goes to the temp fixture folder)
   const driveHealth = await invoke("health_report", { refresh: true });
   check(
@@ -721,7 +771,7 @@ try {
 
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [healthNav, "health"]]) {
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");

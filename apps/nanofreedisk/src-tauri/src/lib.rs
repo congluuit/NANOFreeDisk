@@ -52,7 +52,7 @@ pub fn run() {
     if args.iter().any(|a| a == uninstall::FLAG) {
         std::process::exit(uninstall::run(&args));
     }
-    // elevated helper for Advanced sensors: no window, only the pipe protocol
+    // elevated helper (Advanced sensors, Monitor detail): no window, only the pipe protocol
     #[cfg(windows)]
     if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
         std::process::exit(nfd_helper::run_helper(&args));
@@ -92,6 +92,7 @@ pub fn run() {
         .manage(commands::devcache::DevState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
+        .manage(commands::monitor::MonitorState::default())
         .manage(commands::diskhealth::HealthState::default())
         .setup(|app| {
             // the main window comes from tauri.conf.json ("create": false) so
@@ -192,6 +193,15 @@ pub fn run() {
             commands::update::update_check,
             commands::update::update_install,
             commands::update::update_open_releases,
+            commands::monitor::monitor_snapshot,
+            commands::monitor::monitor_chart,
+            commands::monitor::monitor_pause,
+            commands::monitor::monitor_detail,
+            commands::monitor::monitor_watch,
+            commands::monitor::monitor_configure,
+            commands::monitor::monitor_history,
+            commands::monitor::monitor_reveal,
+            tray::tray_monitor_text,
             commands::diskhealth::health_report,
             commands::diskhealth::health_elevated,
             commands::diskhealth::health_export,
@@ -202,6 +212,7 @@ pub fn run() {
         .run(|app, event| {
             if let tauri::RunEvent::Exit = event {
                 commands::hwmon::thermal_flush(app);
+                commands::monitor::monitor_flush(app);
             }
         });
 }

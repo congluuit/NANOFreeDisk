@@ -333,14 +333,14 @@ verified_on = 2026-10-16
         let home = dir.path().join("home");
         let local = home.join("AppData/Local");
         let roaming = home.join("AppData/Roaming");
-        write(&local.join("Mystery/cache/blob.bin"), 4096);
-        write(&local.join("Vendor/Tool/logs/a.log"), 4096);
-        write(&local.join("Known/Cache/x.bin"), 4096); // has a rule
-        write(&local.join("Plain/data.bin"), 4096); // no signal
-        write(&local.join("Microsoft/Cache/x.bin"), 4096); // ignored
-        write(&home.join(".weird-tool/stuff.bin"), 4096); // dot-folder
-        write(&home.join("Projects/cache/x.bin"), 4096); // not a dot-folder
-        write(&home.join(".ssh/id_ed25519"), 4096); // protected
+        write(&local.join("Mystery/cache/blob.bin"), 16_384);
+        write(&local.join("Vendor/Tool/logs/a.log"), 16_384);
+        write(&local.join("Known/Cache/x.bin"), 16_384); // has a rule
+        write(&local.join("Plain/data.bin"), 16_384); // no signal
+        write(&local.join("Microsoft/Cache/x.bin"), 16_384); // ignored
+        write(&home.join(".weird-tool/stuff.bin"), 16_384); // dot-folder
+        write(&home.join("Projects/cache/x.bin"), 16_384); // not a dot-folder
+        write(&home.join(".ssh/id_ed25519"), 16_384); // protected
         write(&roaming.join("Tiny/logs/x"), 1);
         let h = home.to_string_lossy().replace('\\', "/");
         let resolve = move |v: &str| match v {
@@ -351,8 +351,9 @@ verified_on = 2026-10-16
         };
         let gate = SafetyGate::new(&resolve);
         let packs = [pack(r#""${LOCALAPPDATA}/Known/Cache/**""#)];
+        // above one allocation block: a 1-byte file occupies 4 KiB on Unix file systems
         let opts = UnknownOptions {
-            min_bytes: 100,
+            min_bytes: 8192,
             max_entries: 1000,
         };
         let found = find(&packs, &resolve, &gate, opts);

@@ -239,6 +239,9 @@ export function paletteVars(colors: Palette, dark: boolean): Record<string, stri
   all["temp-ok"] = colors["risk-safe"];
   all["temp-warm"] = colors["risk-caution"];
   all["temp-hot"] = colors["risk-protected"];
+  // Monitor: read / write series and bars
+  all["io-read"] = colors["tm-3"];
+  all["io-write"] = colors["risk-advanced"];
   all["shadow"] = dark ? "0 8px 30px rgba(0,0,0,.45)" : "0 8px 30px rgba(15,23,42,.12)";
   return all;
 }
