@@ -18,6 +18,7 @@ nfd-core = { workspace = true }
 nfd-history = { workspace = true }
 nfd-hwinfo = { workspace = true }
 nfd-sensors = { workspace = true }
+nfd-tasks = { workspace = true }
 nfd-rules = { workspace = true }
 nfd-platform = { workspace = true }
 anyhow = { workspace = true }

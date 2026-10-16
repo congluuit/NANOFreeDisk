@@ -9,7 +9,7 @@
 
 **NANOFreeDisk** là phần mềm **Disk Usage / Disk Analyzer** mã nguồn mở, viết bằng **Rust**, ưu tiên **Windows 10/11 x64** trước, thiết kế sẵn lớp trừu tượng để port sang **macOS / Linux** sau.
 
-Năm trụ cột chức năng:
+Sáu trụ cột chức năng:
 
 | # | Trụ cột | Mô tả ngắn | Điểm khác biệt |
 |---|---------|------------|----------------|
@@ -18,8 +18,9 @@ Năm trụ cột chức năng:
 | 3 | **DevCache** | Kiểm soát thư mục tạm của AI/IDE/Agent (Claude, OpenAI Codex, Cursor, Copilot, Gemini CLI, Windsurf, JetBrains, Ollama, …) | Catalog riêng: cái nào xóa được, ảnh hưởng gì, cần đóng app nào, cái nào phải giữ |
 | 4 | **Monitor** | Giám sát Disk Activity theo thời gian thực: tiến trình nào đang đọc/ghi, throughput, queue, latency | Dựa trên ETW (Event Tracing for Windows), không cần driver |
 | 5 | **Health** | Sức khỏe & chẩn đoán phần cứng: S.M.A.R.T., NVMe log, nhiệt độ, TRIM, lỗi volume, cảnh báo | Diễn giải dễ hiểu, cảnh báo sớm trước khi ổ hỏng |
+| 6 | **Hardware** | Cấu hình máy, cảm biến (nhiệt độ / điện áp / công suất / xung / tải) và tab **Tasks** kiểu Task Manager — `docs/HARDWARE_MONITOR.md` | Chỉ đọc, không driver mặc định; PawnIO opt-in cho cảm biến CPU/mainboard (ADR 0002); End task chỉ khi người dùng bấm + xác nhận |
 
-Ngoài 5 trụ cột, **mục 13** liệt kê bản đồ tính năng mở rộng (Analyze+, Clean+/Privacy, Dev Workspace, Games, Apps & Startup, Health+, UX) để sản phẩm trở thành **Windows Workspace Manager** toàn diện; mỗi mục có phiên bản dự kiến ①②③.
+Ngoài 6 trụ cột, **mục 13** liệt kê bản đồ tính năng mở rộng (Analyze+, Clean+/Privacy, Dev Workspace, Games, Apps & Startup, Health+, UX) để sản phẩm trở thành **Windows Workspace Manager** toàn diện; mỗi mục có phiên bản dự kiến ①②③.
 
 Cam kết **an toàn tuyệt đối**: **không bao giờ** xóa file hệ thống / file đang được dùng / file quan trọng; mặc định xóa vào Recycle Bin hoặc Quarantine; có Undo; có audit log; có dry-run.
 
@@ -43,6 +44,7 @@ Sản phẩm phân phối: **bộ cài thương hiệu riêng** (`NANOFreeDisk-S
 - Duplicate finder (size → partial hash → full hash BLAKE3), xử lý: xóa / hardlink / di chuyển.
 - Disk Activity monitor (per-process I/O, throughput, IOPS, latency, top files đang bị ghi).
 - Health (SMART ATA + NVMe, nhiệt độ, TRIM, free-space trend, dự báo đầy ổ, cảnh báo tray).
+- Hardware: tổng quan cấu hình, cảm biến kiểu LibreHardwareMonitor, thẻ nhiệt độ Home, tab Tasks với End task có bảo vệ (`docs/HARDWARE_MONITOR.md`).
 - CLI `nfd` dùng chung core (scripting, CI, headless).
 - Installer thương hiệu + MSI + NSIS + portable, auto-update, winget.
 
@@ -381,6 +383,7 @@ Kèm: `SHA256SUMS.txt`, `SHA256SUMS.txt.minisig` (minisign), `sbom.cdx.json`, `C
 | **1 – Core Scanner + CLI** | 2–4 | `nfd-core` scanner (standard + MFT fast), model arena, `nfd scan` JSON/CSV, benchmark | Quét `C:\` 1 triệu file < 10 s (fast) / < 60 s (standard); test hardlink/junction |
 | **2 – GUI Analyze** | 5–7 | Tauri app: drive overview, treemap/sunburst/list, filter/search, mở Explorer, xóa thủ công vào Recycle Bin | Demo video; 60 fps treemap 50k rect; chốt Tauri vs egui |
 | **3 – Safety + Clean** | 8–9 | SafetyGate, Planner/Executor, Quarantine, Undo, rule engine, packs `windows-system`, `browsers`, `gpu-shader-cache` | 200+ safety tests xanh; `nfd clean --dry-run` |
+| **3B – Hardware + Tasks** | song song 8–10 | `nfd-hwinfo`, `nfd-sensors`, `nfd-tasks`, view Hardware (Tổng quan / Cảm biến / Tasks), `nfd hw` / `sensors` / `ps`; helper elevated + PawnIO opt-in (Intel → AMD → Super I/O) | ±2 °C / ±5 % so với LibreHardwareMonitor trên i9-13900HX + 1 máy AMD; lấy mẫu < 1 % CPU; test chặn cứng End task |
 | **4 – DevCache Manager** | 10 | Catalog + packs `ai-tools`, `ide-editors`, `package-managers`, `game-engines`, UI DevCache | Catalog ≥ 60 rule có impact text; phát hiện thư mục lạ |
 | **5 – Duplicates** | 11–12 | Dedupe pipeline, UI, hardlink action | 100 GB ảnh/video trong < 5 phút (SSD) |
 | **6 – Monitor** | 13–14 | ETW helper elevated, per-process I/O, realtime chart, cảnh báo | Overhead < 2 % CPU |
@@ -596,7 +599,7 @@ Ký hiệu phiên bản: **①** = v1.0 · **②** = v1.x · **③** = v2+. Cộ
 | F3 | **Surface scan read-only** (bad sector), **chkdsk scheduler**, **System Integrity wizard** (`sfc /scannow`, `DISM /RestoreHealth`) với giải thích log | Sửa lỗi hệ thống không cần Google | 🟡 | ② |
 | F4 | **SSD/HDD optimize**: TRIM (`defrag /O`), kiểm tra TRIM enabled, partition alignment 4K, cluster size, BitLocker, Fast Startup, write-cache policy | Hiệu năng đúng cách | 🟡 | ② |
 | F5 | **Backup status**: File History/Windows Backup last run, Macrium/Veeam agent nếu có, nhắc 3-2-1, phát hiện thư mục quan trọng chưa backup | Mất dữ liệu đáng sợ hơn đầy ổ | Đọc | ② |
-| F6 | **Resource overview** nhẹ: CPU/RAM/GPU/Net cạnh Disk để tìm thủ phạm "máy lag" (không thay Task Manager) | Một nơi nhìn | Đọc | ② |
+| F6 | **Hardware + Tasks** (trụ cột 6, `docs/HARDWARE_MONITOR.md`): cấu hình máy, cảm biến CPU/GPU/RAM/ổ/pin/mạng, thẻ nhiệt độ Home, tab Tasks (CPU/RAM/Disk/GPU theo tiến trình, End task do người dùng bấm, chặn cứng tiến trình hệ thống) — thay các lần mở nhanh HWiNFO / Task Manager | Một nơi nhìn | Đọc; End task 🟡 (xác nhận, không Undo) | ① |
 | F7 | **"Who touched this?"**: ETW file watcher trên thư mục chọn → process nào tạo/ghi/xóa/đổi tên file, timeline, cảnh báo | Bắt antivirus/indexer/sync/hành vi giống ransomware | Đọc | ② |
 | F8 | **Folder quota & alert**: cảnh báo khi Downloads > 20 GB, `.ollama` > 50 GB, ổ C < 10 % | Không bao giờ bất ngờ | Đọc | ① |
 | F9 | **Free-space forecast** ("ổ C đầy trong ~23 ngày") ①; **Boot time trend** (Event 100) ③ | Dự báo | Đọc | ①/③ |
@@ -628,9 +631,9 @@ Ký hiệu phiên bản: **①** = v1.0 · **②** = v1.x · **③** = v2+. Cộ
 | Driver updater | Nguồn driver không tin cậy, dễ gây BSOD; để Windows Update/vendor |
 | "RAM optimizer", "Game booster", "Internet booster" | Placebo, làm giảm uy tín sản phẩm |
 | Antivirus / malware removal | Ngoài chuyên môn; chỉ **cảnh báo hành vi** (F7) và gợi ý Defender scan |
-| Tự kill process / dừng service | Chỉ hiển thị và để người dùng tự làm |
+| Tự động kill process / dừng service | App không bao giờ tự kết thúc tiến trình (kể cả khi Clean gặp file bị khóa) và không dừng service. Tab Tasks chỉ kết thúc khi **người dùng bấm và xác nhận**, kiểm tra PID + CreationTime, chặn cứng tiến trình critical/protected/hệ thống (`docs/HARDWARE_MONITOR.md` §5) |
 | Chỉnh telemetry/privacy sâu Windows, gỡ Windows component | Để tool chuyên (O&O ShutUp, DISM); app chỉ hướng dẫn |
-| Kernel driver / minifilter | Chi phí ký driver, rủi ro ổn định; ETW đã đủ |
+| Kernel driver / minifilter của riêng mình | Chi phí ký driver, rủi ro ổn định; ETW đã đủ. Cảm biến CPU/mainboard dùng driver PawnIO có sẵn, opt-in, chỉ đọc (ADR 0002); không bao giờ WinRing0 |
 
 ### 13.4 Ảnh hưởng tới lộ trình
 

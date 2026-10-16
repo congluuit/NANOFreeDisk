@@ -1,7 +1,7 @@
 // Browser-only stand-in for the Hardware commands (`pnpm dev` without Tauri), shaped
 // like the reference machine (i9-13900HX laptop) so the views can be designed.
 
-import type { HwInventory, Sensor, SensorSnapshot } from "./types";
+import type { EndResult, HwInventory, Sensor, SensorSnapshot, Task, TaskSnapshot, TaskVerdict } from "./types";
 
 const GB = 2 ** 30;
 
@@ -151,7 +151,111 @@ function snapshot(): SensorSnapshot {
   };
 }
 
+const BLOCKED = ["system", "registry", "smss.exe", "csrss.exe", "wininit.exe", "winlogon.exe", "services.exe", "lsass.exe", "fontdrvhost.exe", "dwm.exe", "memory compression"];
+/** Paths are written with "/" here and shown with "\" like Windows does. */
+const win = (p: string) => p.replace(/\//g, "\\");
+const SYS = "C:/Windows/System32/";
+type Proto = [number, number, string, Task["group"], string | null, string | null, string | null];
+const PROCS: Proto[] = [
+  [4, 0, "System", "windows", null, null, null],
+  [128, 4, "Registry", "windows", null, null, null],
+  [612, 4, "smss.exe", "windows", SYS + "smss.exe", null, "Microsoft Windows"],
+  [860, 840, "csrss.exe", "windows", SYS + "csrss.exe", null, "Microsoft Windows"],
+  [952, 840, "wininit.exe", "windows", SYS + "wininit.exe", null, "Microsoft Windows"],
+  [1020, 952, "services.exe", "windows", SYS + "services.exe", null, "Microsoft Windows"],
+  [1040, 952, "lsass.exe", "windows", SYS + "lsass.exe", null, "Microsoft Windows"],
+  [1200, 1020, "svchost.exe", "windows", SYS + "svchost.exe", null, "Microsoft Windows"],
+  [1240, 1020, "svchost.exe", "windows", SYS + "svchost.exe", null, "Microsoft Windows"],
+  [1500, 900, "dwm.exe", "windows", SYS + "dwm.exe", null, "Microsoft Windows"],
+  [4400, 4300, "explorer.exe", "app", "C:/Windows/explorer.exe", "File Explorer", "Microsoft Windows"],
+  [6100, 4400, "brave.exe", "app", "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe", "NANOFreeDisk — GitHub", "Brave Software, Inc."],
+  [6120, 6100, "brave.exe", "app", "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe", null, "Brave Software, Inc."],
+  [6140, 6100, "brave.exe", "app", "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe", null, "Brave Software, Inc."],
+  [7200, 4400, "Code.exe", "app", "C:/Users/nano/AppData/Local/Programs/Microsoft VS Code/Code.exe", "main.rs — NANOFreeDisk", "Microsoft Corporation"],
+  [7300, 7200, "rust-analyzer.exe", "background", "C:/Users/nano/.rustup/toolchains/stable/bin/rust-analyzer.exe", null, null],
+  [8000, 4400, "nanofreedisk.exe", "app", "C:/Program Files/NANOFreeDisk/nanofreedisk.exe", "NANOFreeDisk", "Lưu Đức Thành Công"],
+  [8800, 1020, "MsMpEng.exe", "windows", "C:/ProgramData/Microsoft/Windows Defender/Platform/MsMpEng.exe", null, "Microsoft Corporation"],
+  [9100, 4400, "OneDrive.exe", "background", "C:/Users/nano/AppData/Local/Microsoft/OneDrive/OneDrive.exe", null, "Microsoft Corporation"],
+  [9300, 4400, "Steam.exe", "app", "C:/Program Files (x86)/Steam/steam.exe", "Steam", "Valve Corp."],
+];
+const ended = new Set<number>();
+
+function tasks(): TaskSnapshot {
+  const t = Date.now() / 1000;
+  const list: Task[] = PROCS.filter((p) => !ended.has(p[0])).map(([pid, ppid, name, group, path, title, publisher], i) => ({
+    pid, ppid, name, group, path: path && win(path), title, publisher,
+    create_time: String(133_700_000_000_000_000 + pid * 1000),
+    cpu: Math.max(0, wave(name === "brave.exe" ? 6 : 0.6, name === "Code.exe" ? 4 : 1, 3 + (i % 5), i)(t)),
+    memory: (20 + ((pid * 37) % 900)) * 2 ** 20,
+    io_read: Math.max(0, wave(20e3, 60e3, 4, i)(t)),
+    io_write: Math.max(0, wave(5e3, 20e3, 5, i)(t)),
+    gpu: name === "brave.exe" && pid === 6140 ? Math.max(0, wave(8, 6, 3)(t)) : name === "dwm.exe" ? 2.4 : 0,
+    threads: 4 + (pid % 60), handles: 100 + (pid % 2000), session: group === "windows" ? 0 : 1, priority: 8,
+    blocked: BLOCKED.includes(name.toLowerCase()) || name === "nanofreedisk.exe",
+  }));
+  return {
+    tasks: list,
+    summary: { cpu: 14 + 6 * Math.sin(t / 7), memory_used: 20.5 * GB, memory_total: 31.8 * GB, disk: 1.2e6, gpu: 8, processes: list.length, threads: 4100 },
+    elapsed_ms: 9.4,
+  };
+}
+
+function mockVerdict(pid: number): TaskVerdict {
+  const p = PROCS.find((x) => x[0] === pid);
+  if (!p || ended.has(pid)) return { verdict: "unavailable", reasons: { status: "changed" } };
+  const name = p[2].toLowerCase();
+  if (pid === 4) return { verdict: "blocked", reasons: "kernel" };
+  if (name === "nanofreedisk.exe") return { verdict: "blocked", reasons: "own" };
+  if (BLOCKED.includes(name)) return { verdict: "blocked", reasons: "system-core" };
+  if (name === "msmpeng.exe") return { verdict: "blocked", reasons: "protected" };
+  const warn: ("service-host" | "explorer" | "windows-component")[] = [];
+  if (name === "svchost.exe") warn.push("service-host");
+  if (name === "explorer.exe") warn.push("explorer");
+  if (p[4]?.toLowerCase().startsWith("c:/windows/")) warn.push("windows-component");
+  return warn.length ? { verdict: "warn", reasons: warn } : { verdict: "allowed" };
+}
+
+function mockEnd(pid: number, mode: string, confirmed: boolean): EndResult[] {
+  const name = PROCS.find((x) => x[0] === pid)?.[2] ?? "";
+  const v = mockVerdict(pid);
+  if (v.verdict === "blocked") return [{ pid, name, outcome: { status: "blocked", detail: v.reasons } }];
+  if (v.verdict === "unavailable") return [{ pid, name, outcome: { status: "changed" } }];
+  if (v.verdict === "warn" && !confirmed) return [{ pid, name, outcome: { status: "needs-confirm", detail: v.reasons } }];
+  if (mode === "close") {
+    const p = PROCS.find((x) => x[0] === pid);
+    if (!p?.[5]) return [{ pid, name, outcome: { status: "no-window" } }];
+    setTimeout(() => ended.add(pid), 1500);
+    return [{ pid, name, outcome: { status: "close-requested" } }];
+  }
+  const out: EndResult[] = [];
+  if (mode === "kill-tree") {
+    for (const c of PROCS.filter((x) => x[1] === pid)) {
+      ended.add(c[0]);
+      out.push({ pid: c[0], name: c[2], outcome: { status: "ended" } });
+    }
+  }
+  ended.add(pid);
+  out.push({ pid, name, outcome: { status: "ended" } });
+  return out;
+}
+
 export const hwHandlers: Record<string, (a: Record<string, any>) => unknown> = {
+  tasks_snapshot: () => tasks(),
+  task_verdict: ({ pid }) => mockVerdict(pid),
+  task_details: ({ pid }) => {
+    const p = PROCS.find((x) => x[0] === pid);
+    return {
+      command_line: p?.[4] ? `"${win(p[4])}"${p[2] === "svchost.exe" ? " -k netsvcs -p" : ""}` : null,
+      user: win(p?.[3] === "windows" ? "NT AUTHORITY/SYSTEM" : "NANO-PC/nano"),
+      publisher: p?.[6] ?? null,
+      verified: !!p?.[6],
+      services: p?.[2] === "svchost.exe" ? ["Background Intelligent Transfer Service", "Windows Update"] : [],
+      children: PROCS.filter((x) => x[1] === pid).length,
+    };
+  },
+  task_end: ({ pid, mode, confirmed }) => mockEnd(pid, mode, confirmed),
+  task_reveal: () => undefined,
+  open_task_manager: () => undefined,
   hw_inventory: () => ({ ...inventory, collected_at: Math.floor(Date.now() / 1000) }),
   hw_export: () => undefined,
   sensors_snapshot: () => snapshot(),

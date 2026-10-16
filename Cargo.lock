@@ -2186,6 +2186,7 @@ dependencies = [
  "nfd-platform",
  "nfd-rules",
  "nfd-sensors",
+ "nfd-tasks",
  "serde",
  "serde_json",
  "tauri",
@@ -2239,6 +2240,7 @@ dependencies = [
  "nfd-platform",
  "nfd-rules",
  "nfd-sensors",
+ "nfd-tasks",
  "serde_json",
 ]
 
@@ -2297,6 +2299,16 @@ name = "nfd-sensors"
 version = "0.1.0"
 dependencies = [
  "nfd-hwinfo",
+ "serde",
+ "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nfd-tasks"
+version = "0.1.0"
+dependencies = [
+ "nfd-sensors",
  "serde",
  "serde_json",
  "windows-sys 0.61.2",

@@ -10,8 +10,10 @@
 // the HTML report writer, the delete plan refusing a folder inside %SystemRoot% and
 // accepting a fixture file, an actual move of one fixture file to the Recycle Bin,
 // the new views / Ctrl+K palette, the scan history (two snapshots of the fixture,
-// "What changed?", find_path) and the Health Score. Nothing outside the fixture is
-// ever deleted; the fixture's history snapshots are forgotten at the end.
+// "What changed?", find_path), the Health Score and the Hardware view (inventory,
+// sensors, Tasks with its hard blocks). Nothing outside the fixture is ever deleted
+// and the only process ever ended is a `ping` the script starts itself; the
+// fixture's history snapshots are forgotten at the end.
 
 import { spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
@@ -65,6 +67,7 @@ writeFileSync(join(fixture, "ok.lnk"), lnk(join(fixture, "videos", "clip.mp4")))
 writeFileSync(join(fixture, "broken.lnk"), lnk(join(fixture, "gone.exe")));
 const FILES = 7;
 
+let pinger = null;
 const failures = [];
 const check = (name, ok, detail = "") => {
   console.log(`${ok ? "ok  " : "FAIL"} ${name}${detail ? ` — ${detail}` : ""}`);
@@ -273,7 +276,90 @@ try {
   await nav(0);
   for (let i = 0; i < 100 && !(await evaluate("!!document.querySelector('.health .num b')")); i++) await sleep(100);
   check("Home shows the health score", await evaluate("!!document.querySelector('.health .num b')"));
+  for (let i = 0; i < 50 && !(await evaluate("!!document.querySelector('.temps [data-temp=gpu]')")); i++) await sleep(100);
+  check("Home shows the temperature card", await evaluate("document.querySelectorAll('.temps [data-temp]').length === 3"));
   await shot("8-home-health");
+
+  // Hardware view (docs/HARDWARE_MONITOR.md): Overview, Sensors, Tasks. Tasks only
+  // ever ends a child process this script starts; system processes are checked only.
+  const inv = await invoke("hw_inventory");
+  check(
+    "hw inventory",
+    inv.schema === "nanofreedisk.hwinfo.v1" && inv.cpu.threads > 0 && inv.memory.total > 0,
+    `${inv.cpu.name}, ${inv.cpu.cores}C/${inv.cpu.threads}T, ${inv.gpus?.length} GPU, ${inv.disks?.length} disk(s)`,
+  );
+  check("hw inventory carries no serial numbers", !/serial/i.test(JSON.stringify(inv)));
+  const hwNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Hardware|Phần cứng/.test(b.innerText))");
+  check("Hardware is in the sidebar", hwNav >= 0);
+  await nav(hwNav);
+  await evaluate("document.querySelector('[data-hwtab=overview]')?.click()");
+  for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-sec=cpu]')")); i++) await sleep(150);
+  check("Overview shows the CPU card", await evaluate("document.querySelector('[data-sec=cpu]')?.innerText.includes(" + JSON.stringify(inv.cpu.name.split(" ").pop()) + ") ?? false"));
+  await shot("9-hw-overview");
+
+  await invoke("sensors_snapshot");
+  await sleep(1100);
+  const sens = await invoke("sensors_snapshot");
+  const cpuTotal = sens.sensors?.find((x) => x.id === "cpu/cpu-total");
+  check("sensors: CPU load", cpuTotal?.value >= 0 && cpuTotal.value <= 100, `${cpuTotal?.value?.toFixed(1)} %, ${sens.sensors?.length} sensors in ${sens.sample_ms?.toFixed(1)} ms`);
+  check("sensors: memory load", sens.sensors?.some((x) => x.id === "memory/mem-load" && x.value > 0));
+  check("sensors: CPU temperature explains PawnIO", sens.notes?.some((n) => n.device === "cpu" && n.reason === "needs-pawnio") || sens.sensors?.some((x) => x.device === "cpu" && x.kind === "temperature"));
+  check("sensors: reset min/max", (await invoke("sensors_reset_minmax"))?.__error === undefined);
+  await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
+  check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));
+  await shot("10-hw-sensors");
+
+  pinger = spawn("ping", ["-n", "120", "127.0.0.1"], { stdio: "ignore" });
+  const alive = (pid) => {
+    try {
+      process.kill(pid, 0);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  await invoke("tasks_snapshot");
+  await sleep(600);
+  const tasks = await invoke("tasks_snapshot");
+  const me = tasks.tasks?.find((x) => x.pid === pinger.pid);
+  check("tasks: list has the smoke's child", !!me && tasks.tasks.length > 20, `${tasks.tasks?.length} processes in ${tasks.elapsed_ms?.toFixed(1)} ms`);
+  if (me) {
+    const v = await invoke("task_verdict", { pid: me.pid, createTime: me.create_time });
+    check("tasks: ping.exe needs the second confirmation", v.verdict === "warn" && v.reasons.includes("windows-component"), JSON.stringify(v));
+    const stale = await invoke("task_end", { pid: me.pid, createTime: "116444736000000000", mode: "kill", confirmed: true });
+    check("tasks: wrong creation time ends nothing", stale[0]?.outcome?.status === "changed" && alive(me.pid), JSON.stringify(stale));
+    const once = await invoke("task_end", { pid: me.pid, createTime: me.create_time, mode: "kill", confirmed: false });
+    check("tasks: one confirmation is not enough", once[0]?.outcome?.status === "needs-confirm" && alive(me.pid), JSON.stringify(once));
+  }
+  for (const name of ["csrss.exe", "wininit.exe", "lsass.exe"]) {
+    const sys = tasks.tasks?.find((x) => x.name.toLowerCase() === name);
+    if (!sys) continue;
+    const v = await invoke("task_verdict", { pid: sys.pid, createTime: sys.create_time });
+    const r = await invoke("task_end", { pid: sys.pid, createTime: sys.create_time, mode: "kill", confirmed: true });
+    check(`tasks: ${name} is hard-blocked`, sys.blocked && v.verdict === "blocked" && r[0]?.outcome?.status === "blocked", JSON.stringify(r));
+  }
+  const self = tasks.tasks?.find((x) => x.pid === child.pid);
+  if (self) {
+    const r = await invoke("task_end", { pid: self.pid, createTime: self.create_time, mode: "kill", confirmed: true });
+    check("tasks: the app cannot end itself", r[0]?.outcome?.detail === "own", JSON.stringify(r));
+  }
+  await evaluate("document.querySelector('[data-hwtab=tasks]').click()");
+  for (let i = 0; i < 40 && !(await evaluate(`!!document.querySelector('[data-pid="${pinger.pid}"]')`)); i++) await sleep(150);
+  check("Tasks tab lists the child", await evaluate(`!!document.querySelector('[data-pid="${pinger.pid}"]')`));
+  await shot("11-hw-tasks");
+  // the real UI path: right-click → End process → confirm twice
+  await evaluate(`document.querySelector('[data-pid="${pinger.pid}"]').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 300, clientY: 300 }))`);
+  await sleep(300);
+  await evaluate("[...document.querySelectorAll('.menu button')].find((b) => b.classList.contains('danger'))?.click()");
+  for (let i = 0; i < 30 && !(await evaluate("!!document.querySelector('.dialog .extra input')")); i++) await sleep(100);
+  await shot("12-hw-end-dialog");
+  check("End dialog keeps the button disabled until acknowledged", await evaluate("document.querySelector('.dialog footer .danger')?.disabled === true"));
+  await evaluate("document.querySelector('.dialog .extra input').click()");
+  await sleep(150);
+  await evaluate("document.querySelector('.dialog footer .danger').click()");
+  for (let i = 0; i < 40 && alive(pinger.pid); i++) await sleep(100);
+  check("End process from the dialog ends the child", !alive(pinger.pid));
 } catch (e) {
   check("smoke run", false, e.message);
 } finally {
@@ -289,6 +375,7 @@ try {
     /* ignore */
   }
   child.kill();
+  pinger?.kill();
   await sleep(500);
   rmSync(fixture, { recursive: true, force: true });
 }

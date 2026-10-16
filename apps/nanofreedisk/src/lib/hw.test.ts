@@ -132,3 +132,41 @@ test("home card picks GPU / hottest disk and explains a missing CPU temperature"
   };
   assert.equal(homeTemps(asleep)[1].reason, "gpu-asleep");
 });
+
+import { filterTasks, groupTasks, sortTasks, treeRows } from "./hw/tasks.ts";
+import type { TaskSnapshot } from "./hw/types.ts";
+
+const tsnap = hwHandlers.tasks_snapshot({}) as TaskSnapshot;
+
+test("tasks sort, filter, group and build the parent tree", () => {
+  const byMem = sortTasks(tsnap.tasks, { key: "memory", desc: true });
+  assert.ok(byMem[0].memory >= byMem[byMem.length - 1].memory);
+  assert.deepEqual(filterTasks(tsnap.tasks, "BRAVE").map((t) => t.pid), [6100, 6120, 6140]);
+  assert.deepEqual(filterTasks(tsnap.tasks, "7300").map((t) => t.name), ["rust-analyzer.exe"]);
+  const g = groupTasks(tsnap.tasks);
+  assert.ok(g.app.length && g.background.length && g.windows.length);
+  const rows = treeRows(tsnap.tasks, { key: "pid", desc: false });
+  const brave = rows.findIndex((r) => r.task.pid === 6100);
+  assert.equal(rows[brave].parent, true);
+  assert.deepEqual(rows.slice(brave + 1, brave + 3).map((r) => [r.task.pid, r.depth]), [[6120, rows[brave].depth + 1], [6140, rows[brave].depth + 1]]);
+  const folded = treeRows(tsnap.tasks, { key: "pid", desc: false }, new Set([6100]));
+  assert.ok(!folded.some((r) => r.task.pid === 6120));
+  assert.equal(rows.length, tsnap.tasks.length, "every process appears once");
+});
+
+for (const lang of ["en", "vi"]) {
+  test(`every End-task reason and outcome has a ${lang} message`, () => {
+    const msgs = messages(lang);
+    const src = readFileSync(new URL("../../../../crates/nfd-tasks/src/safety.rs", import.meta.url), "utf8");
+    const enumNames = (name: string) => {
+      const start = src.indexOf(`pub enum ${name} {`);
+      const body = src.slice(start, src.indexOf("\n}", start));
+      return [...body.matchAll(/^\s{4}([A-Z]\w+),/gm)].map((m) => m[1].replace(/[A-Z]/g, (c, i) => (i ? "-" : "") + c.toLowerCase()));
+    };
+    for (const b of enumNames("BlockReason")) assert.ok(msgs.has(`task-block-${b}`), b);
+    for (const w of enumNames("WarnReason")) assert.ok(msgs.has(`task-warn-${w}`), w);
+    for (const o of ["changed", "access-denied", "no-window", "needs-confirm"]) assert.ok(msgs.has(`task-outcome-${o}`), o);
+    for (const m of ["close", "kill", "kill-tree"]) for (const p of ["title", "what", "confirm"]) assert.ok(msgs.has(`task-${p}-${m}`), `${p}-${m}`);
+    for (const g of ["app", "background", "windows"]) assert.ok(msgs.has(`task-group-${g}`));
+  });
+}

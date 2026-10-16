@@ -155,3 +155,76 @@ export interface SensorSnapshot {
   samples: number;
   sample_ms: number;
 }
+
+export type TaskGroup = "app" | "background" | "windows";
+
+export interface Task {
+  pid: number;
+  ppid: number;
+  name: string;
+  /** FILETIME as a decimal string; sent back with every action. */
+  create_time: string;
+  path: string | null;
+  title: string | null;
+  group: TaskGroup;
+  cpu: number;
+  memory: number;
+  io_read: number;
+  io_write: number;
+  gpu: number;
+  threads: number;
+  handles: number;
+  session: number;
+  priority: number;
+  publisher: string | null;
+  blocked: boolean;
+}
+
+export interface TaskSnapshot {
+  tasks: Task[];
+  summary: {
+    cpu: number;
+    memory_used: number;
+    memory_total: number;
+    disk: number;
+    gpu: number;
+    processes: number;
+    threads: number;
+  };
+  elapsed_ms: number;
+}
+
+export type BlockReason = "kernel" | "system-core" | "critical" | "protected" | "own";
+export type WarnReason = "service-host" | "explorer" | "windows-component";
+export type EndMode = "close" | "kill" | "kill-tree";
+
+export type TaskOutcome =
+  | { status: "ended" }
+  | { status: "close-requested" }
+  | { status: "no-window" }
+  | { status: "blocked"; detail: BlockReason }
+  | { status: "needs-confirm"; detail: WarnReason[] }
+  | { status: "changed" }
+  | { status: "access-denied" }
+  | { status: "failed"; detail: string };
+
+export type TaskVerdict =
+  | { verdict: "blocked"; reasons: BlockReason }
+  | { verdict: "warn"; reasons: WarnReason[] }
+  | { verdict: "allowed" }
+  | { verdict: "unavailable"; reasons: TaskOutcome };
+
+export interface EndResult {
+  pid: number;
+  name: string;
+  outcome: TaskOutcome;
+}
+
+export interface TaskDetails {
+  command_line: string | null;
+  user: string | null;
+  publisher: string | null;
+  verified: boolean;
+  services: string[];
+  children: number;
+}

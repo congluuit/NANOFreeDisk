@@ -102,6 +102,12 @@ pub fn run() {
             commands::hwmon::sensors_snapshot,
             commands::hwmon::sensors_reset_minmax,
             commands::hwmon::sensors_history,
+            commands::hwmon::tasks_snapshot,
+            commands::hwmon::task_verdict,
+            commands::hwmon::task_details,
+            commands::hwmon::task_end,
+            commands::hwmon::task_reveal,
+            commands::hwmon::open_task_manager,
         ])
         .run(tauri::generate_context!())
         .expect("error while running NANOFreeDisk");

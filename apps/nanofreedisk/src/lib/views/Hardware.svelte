@@ -4,6 +4,7 @@
   import Icon from "../components/Icon.svelte";
   import HardwareOverview from "./HardwareOverview.svelte";
   import HardwareSensors from "./HardwareSensors.svelte";
+  import HardwareTasks from "./HardwareTasks.svelte";
 
   const TABS: { id: HwTab; icon: string; label: string }[] = [
     { id: "overview", icon: "cpu", label: "hw-tab-overview" },
@@ -38,6 +39,8 @@
       <HardwareOverview />
     {:else if hw.tab === "sensors"}
       <HardwareSensors />
+    {:else}
+      <HardwareTasks />
     {/if}
   </div>
 </section>
