@@ -2217,6 +2217,7 @@ name = "nanofreedisk"
 version = "0.1.0"
 dependencies = [
  "nfd-core",
+ "nfd-devtools",
  "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",

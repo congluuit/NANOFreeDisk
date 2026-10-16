@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 pub mod clean;
+pub mod devcache;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
 use nfd_core::insights::OldLargeOptions;
