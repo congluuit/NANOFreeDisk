@@ -16,9 +16,11 @@ serde = { workspace = true }
 nfd-sensors = { workspace = true }
 nfd-tasks = { workspace = true }
 windows-sys = { workspace = true, features = [
+  "Win32_System_Console",
   "Win32_System_Diagnostics_Etw",
   "Win32_System_Performance",
   "Win32_System_Threading",
+  "Win32_System_Time",
 ] }
 
 [dev-dependencies]

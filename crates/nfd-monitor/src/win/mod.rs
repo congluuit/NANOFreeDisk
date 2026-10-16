@@ -1,6 +1,8 @@
 //! Windows sampling: the process list (`nfd_tasks::processes`, one kernel call),
 //! physical disk counters (PDH) and the engine that produces a [`Tick`].
 
+pub mod etw;
+
 use std::collections::{HashMap, HashSet};
 use std::time::Instant;
 

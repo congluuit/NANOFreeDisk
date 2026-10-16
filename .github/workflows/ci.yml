@@ -84,6 +84,27 @@ jobs:
           if ($bad.Count -gt 0) { $bad | Format-List; throw "protected items proposed" }
           "$($d.items.Count) item(s), none protected"
 
+  etw:
+    name: ETW monitor session (elevated runner)
+    # GitHub's Windows runners are elevated: the monitor's real kernel trace session
+    # (docs/PHASE6_MONITOR.md) is exercised here, not only on admin dev machines.
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p nfd-monitor --test etw_live -- --nocapture
+      - name: nfd monitor --source etw
+        shell: pwsh
+        run: |
+          cargo run -q -p nfd-cli -- monitor --source etw --seconds 3 --json | Out-File -Encoding utf8 monitor.jsonl
+          $lines = Get-Content monitor.jsonl | Where-Object { $_ }
+          $last = $lines[-1] | ConvertFrom-Json
+          if ($last.schema -ne 'nanofreedisk.monitor.v1') { throw "unexpected schema $($last.schema)" }
+          if ($last.source -ne 'etw') { throw "source is $($last.source)" }
+          "$($lines.Count) sample(s); last: $($last.processes.Count) process(es), $($last.files.Count) file(s), lost $($last.lost), undecoded $($last.undecoded)"
+          if (logman query -ets | Select-String 'NANOFreeDisk') { throw 'trace session left running' }
+
   deny:
     name: cargo-deny
     runs-on: ubuntu-latest
@@ -146,7 +167,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [fmt, clippy, test, rules, deny, msrv, frontend]
+    needs: [fmt, clippy, test, rules, etw, deny, msrv, frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs succeeded

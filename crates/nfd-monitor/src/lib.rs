@@ -16,6 +16,7 @@
 //! process. Ending a process is the Tasks view's guarded flow (`nfd_tasks::end_task`).
 
 pub mod chart;
+pub mod etw_parse;
 pub mod minute;
 pub mod rates;
 pub mod spam;
@@ -253,6 +254,29 @@ pub fn is_log_like(path: &str) -> bool {
         .iter()
         .any(|e| lower.ends_with(e))
         || lower.contains(".log.")
+}
+
+/// Safety net for the file-level sources: a trace session that delivers no file
+/// event for 10 s while the disks moved more than 1 MB is "silent" (blocked by
+/// security software, unknown event layouts…) and the caller falls back to the
+/// Counters engine.
+#[derive(Debug, Default)]
+pub struct SilentCheck {
+    quiet_ms: u64,
+    disk_bytes: f64,
+}
+
+impl SilentCheck {
+    pub fn observe(&mut self, tick: &Tick, disks: &[DiskStat]) -> bool {
+        if tick.events > 0 {
+            *self = Self::default();
+            return false;
+        }
+        self.quiet_ms += tick.elapsed_ms;
+        let rate: f64 = disks.iter().map(|d| d.read + d.write).sum();
+        self.disk_bytes += rate * tick.elapsed_ms as f64 / 1000.0;
+        self.quiet_ms >= 10_000 && self.disk_bytes >= 1024.0 * 1024.0
+    }
 }
 
 /// Turns ticks into snapshots; keeps the chart, the minute downsample and alerts.
@@ -551,6 +575,44 @@ mod tests {
         assert_eq!(s.files[0].path, r"C:\a.log");
         assert_eq!(s.files[0].write, 300.0);
         assert_eq!(s.files[0].process, "x.exe");
+    }
+
+    #[test]
+    fn silent_sessions_are_noticed_only_when_the_disks_were_busy() {
+        let disk = |rate: f64| DiskStat {
+            name: "0 C:".into(),
+            read: 0.0,
+            write: rate,
+            transfers: 0.0,
+            queue: 0.0,
+            latency_ms: 0.0,
+            idle: 100.0,
+        };
+        let quiet = Tick {
+            elapsed_ms: 1000,
+            ..Tick::default()
+        };
+        let mut s = SilentCheck::default();
+        for _ in 0..20 {
+            assert!(
+                !s.observe(&quiet, &[disk(10.0)]),
+                "idle disks: nothing to see"
+            );
+        }
+        let mut s = SilentCheck::default();
+        let mut silent = false;
+        for i in 0..10 {
+            silent = s.observe(&quiet, &[disk(1e6)]);
+            assert!(!silent || i == 9);
+        }
+        assert!(silent);
+        let busy = Tick {
+            elapsed_ms: 1000,
+            events: 5,
+            ..Tick::default()
+        };
+        assert!(!s.observe(&busy, &[disk(1e6)]));
+        assert!(!s.observe(&quiet, &[disk(1e6)]), "counting starts over");
     }
 
     #[test]

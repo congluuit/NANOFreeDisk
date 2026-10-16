@@ -4,7 +4,17 @@
 use std::process::ExitCode;
 use std::time::Duration;
 
-use clap::Args;
+use clap::{Args, ValueEnum};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum SourceArg {
+    /// ETW when this process runs elevated, otherwise the I/O counters.
+    Auto,
+    /// Kernel trace session: per-file detail (needs an elevated prompt).
+    Etw,
+    /// Per-process I/O counters (no admin rights needed, no files).
+    Counters,
+}
 
 #[derive(Args, Debug)]
 pub struct MonitorArgs {
@@ -20,6 +30,13 @@ pub struct MonitorArgs {
     /// One JSON object per sample (`nanofreedisk.monitor.v1`, JSON Lines).
     #[arg(long)]
     json: bool,
+    /// Where the numbers come from.
+    #[arg(long, value_enum, default_value = "auto")]
+    source: SourceArg,
+    /// Report who creates, writes, renames and deletes files in this folder
+    /// ("Who touched this?"; needs ETW).
+    #[arg(long)]
+    watch: Option<std::path::PathBuf>,
 }
 
 pub(crate) fn rate(b: f64) -> String {
@@ -95,6 +112,22 @@ pub(crate) fn print_snapshot(s: &nfd_monitor::Snapshot, top: usize) {
             d.idle
         );
     }
+    for t in &s.touches {
+        println!(
+            "  {:<6} {}{}  ({}, PID {})",
+            serde_json::to_value(t.op)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_owned))
+                .unwrap_or_default(),
+            t.path,
+            t.target
+                .as_deref()
+                .map(|x| format!(" -> {x}"))
+                .unwrap_or_default(),
+            t.process,
+            t.pid
+        );
+    }
     for a in &s.alerts {
         if let Ok(j) = serde_json::to_string(a) {
             println!("  ALERT {j}");
@@ -104,8 +137,39 @@ pub(crate) fn print_snapshot(s: &nfd_monitor::Snapshot, top: usize) {
 
 #[cfg(windows)]
 pub fn run(args: MonitorArgs) -> anyhow::Result<ExitCode> {
+    use nfd_monitor::Source;
+    use nfd_monitor::win::etw::EtwSession;
+    let elevated = nfd_monitor::win::is_elevated();
+    let want_etw = match args.source {
+        SourceArg::Etw => true,
+        SourceArg::Counters => false,
+        SourceArg::Auto => elevated || args.watch.is_some(),
+    };
+    let watch = args
+        .watch
+        .as_ref()
+        .map(|w| w.to_string_lossy().into_owned());
+    let mut etw = if want_etw {
+        match EtwSession::start(watch.as_deref()) {
+            Ok(s) => {
+                nfd_monitor::win::etw::stop_on_ctrl_c();
+                Some(s)
+            }
+            Err(e) if args.source == SourceArg::Auto && args.watch.is_none() => {
+                eprintln!("note: ETW unavailable ({e:?}); using I/O counters");
+                None
+            }
+            Err(nfd_monitor::win::etw::EtwError::AccessDenied) => anyhow::bail!(
+                "ETW needs an elevated prompt (run as administrator), or use --source counters"
+            ),
+            Err(e) => anyhow::bail!("could not start the ETW session: {e:?}"),
+        }
+    } else {
+        None
+    };
     let mut sampler = nfd_monitor::win::Sampler::new();
     let mut mon = nfd_monitor::Monitor::new();
+    let mut silent = nfd_monitor::SilentCheck::default();
     let interval = Duration::from_secs(args.interval.max(1));
     let rounds = if args.seconds == 0 {
         u64::MAX
@@ -115,7 +179,14 @@ pub fn run(args: MonitorArgs) -> anyhow::Result<ExitCode> {
     let size = |p: &str| std::fs::metadata(p).ok().map(|m| m.len());
     for _ in 0..rounds {
         std::thread::sleep(interval);
-        let s = sampler.sample(None);
+        let external = etw.as_mut().map(|e| (Source::Etw, e.take()));
+        let s = sampler.sample(external);
+        if etw.is_some() && silent.observe(&s.tick, &s.disks) {
+            eprintln!(
+                "note: the ETW session reports no file events (etw-silent); using I/O counters"
+            );
+            etw = None;
+        }
         let snap = mon.ingest(unix_ms(), s.source, &s.tick, &s.procs, s.disks, &size);
         if args.json {
             println!("{}", serde_json::to_string(&snap)?);
