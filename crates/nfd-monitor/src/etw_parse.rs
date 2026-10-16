@@ -84,6 +84,8 @@ pub enum Event {
         object: u64,
         key: u64,
         size: u32,
+        /// IRP flags (`IRP_PAGING_IO`…).
+        flags: u32,
     },
     Close {
         object: u64,
@@ -233,12 +235,14 @@ pub fn decode(h: &Header, data: &[u8]) -> Result<Option<Event>, Undecoded> {
                         (t, o, r.ptr()?)
                     };
                     let size = r.u32()?;
+                    let flags = r.u32()?;
                     Ok(Some(Event::Rw {
                         write: h.opcode == 68,
                         tid,
                         object,
                         key,
                         size,
+                        flags,
                     }))
                 }
                 65 | 66 => {
@@ -375,8 +379,9 @@ const MAX_TOUCHES: usize = 500;
 #[derive(Debug, Default)]
 pub struct Collector {
     devices: Devices,
-    /// Lowercase device path of the watched folder.
-    watch: Option<String>,
+    /// Lowercase device paths of the watched folder (its long name, and the
+    /// spellings a process may open it by, such as an 8.3 short name).
+    watch: Vec<String>,
     by_key: HashMap<u64, Arc<str>>,
     by_object: HashMap<u64, Arc<str>>,
     threads: HashMap<u32, u32>,
@@ -388,19 +393,34 @@ pub struct Collector {
     undecoded: u64,
 }
 
+/// `IRP_PAGING_IO`: the cache or memory manager moving pages (a flush, a mapped
+/// view, a page fault), not a request of the process — counting it would count a
+/// flushed write twice.
+const IRP_PAGING_IO: u32 = 0x2;
+
+fn under(prefix: &str, device_path: &str) -> bool {
+    device_path.len() > prefix.len()
+        && device_path.is_char_boundary(prefix.len())
+        && device_path[..prefix.len()].eq_ignore_ascii_case(prefix)
+        && device_path.as_bytes()[prefix.len()] == b'\\'
+}
+
 impl Collector {
-    pub fn new(devices: Devices, watch: Option<&str>) -> Self {
-        let watch = watch.and_then(|w| devices.to_device(w));
+    /// `watch`: Win32 spellings of one folder (see [`Collector::watch`]).
+    pub fn new(devices: Devices, watch: &[String]) -> Self {
+        let mut w: Vec<String> = watch.iter().filter_map(|w| devices.to_device(w)).collect();
+        w.sort();
+        w.dedup();
         Self {
             devices,
-            watch,
+            watch: w,
             ..Self::default()
         }
     }
 
     /// Watching a folder ("Who touched this?")?
     pub fn watching(&self) -> bool {
-        self.watch.is_some()
+        !self.watch.is_empty()
     }
 
     fn pid(&self, h: &Header, tid: u32) -> Option<u32> {
@@ -411,12 +431,7 @@ impl Collector {
     }
 
     fn under_watch(&self, device_path: &str) -> bool {
-        self.watch.as_deref().is_some_and(|w| {
-            device_path.len() > w.len()
-                && device_path.is_char_boundary(w.len())
-                && device_path[..w.len()].eq_ignore_ascii_case(w)
-                && device_path.as_bytes()[w.len()] == b'\\'
-        })
+        self.watch.iter().any(|w| under(w, device_path))
     }
 
     fn touch(&mut self, now_ms: u64, pid: u32, op: TouchOp, path: &str, target: Option<&str>) {
@@ -495,9 +510,13 @@ impl Collector {
                 object,
                 key,
                 size,
+                flags,
             } => {
                 let Some(pid) = self.pid(h, tid) else { return };
                 self.events += 1;
+                if flags & IRP_PAGING_IO != 0 {
+                    return;
+                }
                 let c = match self.name_of(key, object) {
                     Some(name) => self.files.entry((pid, name)).or_default(),
                     None => self.pending.entry((pid, key, object)).or_default(),
@@ -516,7 +535,7 @@ impl Collector {
                 object,
                 key,
             } => {
-                if self.watch.is_none() || op == InfoOp::SetInfo {
+                if self.watch.is_empty() || op == InfoOp::SetInfo {
                     return;
                 }
                 let (Some(pid), Some(name)) = (self.pid(h, tid), self.name_of(key, object)) else {
@@ -571,21 +590,17 @@ impl Collector {
                 .clone();
             let Some(path) = path else { continue };
             procs.entry(pid).or_default().add(&c);
-            if c.write > 0 && self.watch.is_some() && write_touches.len() < MAX_TOUCHES {
-                let w = self.watch.as_deref().unwrap_or_default();
-                if dev.len() > w.len()
-                    && dev.is_char_boundary(w.len())
-                    && dev[..w.len()].eq_ignore_ascii_case(w)
-                    && dev.as_bytes()[w.len()] == b'\\'
-                {
-                    write_touches.push(Touch {
-                        at: now_ms,
-                        pid,
-                        op: TouchOp::Write,
-                        path: path.clone(),
-                        target: None,
-                    });
-                }
+            if c.write > 0
+                && write_touches.len() < MAX_TOUCHES
+                && self.watch.iter().any(|w| under(w, &dev))
+            {
+                write_touches.push(Touch {
+                    at: now_ms,
+                    pid,
+                    op: TouchOp::Write,
+                    path: path.clone(),
+                    target: None,
+                });
             }
             files.push(FileCounts {
                 pid,
@@ -593,7 +608,7 @@ impl Collector {
                 counts: c,
             });
         }
-        let mut touches = std::mem::take(&mut self.touches);
+        let mut touches = dedup_touches(std::mem::take(&mut self.touches));
         touches.extend(write_touches);
         touches.sort_by_key(|t| t.at);
         let mut procs: Vec<ProcCounts> = procs
@@ -615,6 +630,31 @@ impl Collector {
             undecoded: self.undecoded,
         }
     }
+}
+
+/// Windows 10+ logs a delete or rename twice (the request, then the path
+/// operation with the new name): keep one of each, the one with the new name.
+fn dedup_touches(mut v: Vec<Touch>) -> Vec<Touch> {
+    let named: std::collections::HashSet<(u32, String)> = v
+        .iter()
+        .filter(|t| t.op == TouchOp::Rename && t.target.is_some())
+        .map(|t| (t.pid, t.path.to_ascii_lowercase()))
+        .collect();
+    v.retain(|t| {
+        !(t.op == TouchOp::Rename
+            && t.target.is_none()
+            && named.contains(&(t.pid, t.path.to_ascii_lowercase())))
+    });
+    let mut seen = std::collections::HashSet::new();
+    v.retain(|t| {
+        seen.insert((
+            t.pid,
+            t.op,
+            t.path.to_ascii_lowercase(),
+            t.target.as_deref().map(str::to_ascii_lowercase),
+        ))
+    });
+    v
 }
 
 #[cfg(test)]
@@ -693,7 +733,8 @@ mod tests {
                 tid: 77,
                 object: 0x10,
                 key: 0x20,
-                size: 512
+                size: 512,
+                flags: 0
             }))
         );
         let v2 = B::default()
@@ -703,7 +744,7 @@ mod tests {
             .p(0x10)
             .p(0x20)
             .d(100)
-            .d(0)
+            .d(0x43)
             .0;
         assert_eq!(
             decode(&hdr(Provider::FileIo, 67, 2, 1), &v2),
@@ -712,7 +753,8 @@ mod tests {
                 tid: 88,
                 object: 0x10,
                 key: 0x20,
-                size: 100
+                size: 100,
+                flags: 0x43
             }))
         );
     }
@@ -824,7 +866,7 @@ mod tests {
 
     #[test]
     fn collector_attributes_io_to_files_and_processes() {
-        let mut c = Collector::new(devices(), None);
+        let mut c = Collector::new(devices(), &[]);
         let (h, d) = name(0x20, r"\Device\HarddiskVolume3\logs\a.log");
         c.event(&h, &d, 0);
         for _ in 0..3 {
@@ -861,7 +903,7 @@ mod tests {
 
     #[test]
     fn missing_header_pid_falls_back_to_the_thread_map() {
-        let mut c = Collector::new(devices(), None);
+        let mut c = Collector::new(devices(), &[]);
         let th = B::default().d(42).d(77).0;
         c.event(&hdr(Provider::Thread, 1, 3, u32::MAX), &th, 0);
         let (h, d) = name(0x20, r"\Device\HarddiskVolume3\f");
@@ -875,7 +917,7 @@ mod tests {
 
     #[test]
     fn watched_folder_gets_create_write_delete_rename() {
-        let mut c = Collector::new(devices(), Some(r"C:\work"));
+        let mut c = Collector::new(devices(), &[r"C:\work".into()]);
         assert!(c.watching());
         let create = |path: &str, disposition: u32| {
             B::default()
@@ -930,6 +972,74 @@ mod tests {
         assert_eq!(t.touches[1].target.as_deref(), Some(r"C:\work\renamed.txt"));
     }
 
+    #[test]
+    fn paging_io_is_not_counted_twice() {
+        let mut c = Collector::new(devices(), &[]);
+        let (h, d) = name(0x20, r"\Device\HarddiskVolume3\f.bin");
+        c.event(&h, &d, 0);
+        let (h, d) = rw_v3(true, 0x10, 0x20, 4096);
+        c.event(&h, &d, 0);
+        // the flush of the same bytes by the cache manager (IRP_PAGING_IO | NOCACHE)
+        let (h, mut d) = rw_v3(true, 0x10, 0x20, 4096);
+        let n = d.len();
+        d[n - 4..].copy_from_slice(&0x43u32.to_le_bytes());
+        c.event(&h, &d, 0);
+        let t = c.take(1000, 0, 0);
+        assert_eq!(t.events, 2);
+        assert_eq!(t.procs[0].counts.write, 4096);
+        assert_eq!(t.procs[0].counts.write_ops, 1);
+    }
+
+    #[test]
+    fn a_folder_opened_by_its_short_name_is_still_watched() {
+        let mut c = Collector::new(
+            devices(),
+            &[r"C:\Users\runneradmin".into(), r"C:\Users\RUNNER~1".into()],
+        );
+        let create = B::default()
+            .p(1)
+            .p(0x10)
+            .d(77)
+            .d(5 << 24) // OVERWRITE_IF: CreateFile(CREATE_ALWAYS)
+            .d(0)
+            .d(0)
+            .s(r"\Device\HarddiskVolume3\Users\RUNNER~1\AppData\x.bin")
+            .0;
+        c.event(&hdr(Provider::FileIo, 64, 3, 9), &create, 1);
+        let t = c.take(1000, 0, 2);
+        assert_eq!(t.touches.len(), 1);
+        assert_eq!(t.touches[0].op, TouchOp::Create);
+        assert_eq!(t.touches[0].path, r"C:\Users\RUNNER~1\AppData\x.bin");
+    }
+
+    #[test]
+    fn double_logged_renames_and_deletes_are_reported_once() {
+        let t = |op, path: &str, target: Option<&str>| Touch {
+            at: 1,
+            pid: 5,
+            op,
+            path: path.into(),
+            target: target.map(Into::into),
+        };
+        let v = dedup_touches(vec![
+            t(TouchOp::Rename, r"C:\w\a", None),
+            t(TouchOp::Rename, r"C:\w\a", Some(r"C:\w\b")),
+            t(TouchOp::Delete, r"C:\w\b", None),
+            t(TouchOp::Delete, r"C:\W\B", None),
+            t(TouchOp::Rename, r"C:\w\c", None),
+        ]);
+        let ops: Vec<(TouchOp, &str)> = v.iter().map(|x| (x.op, x.path.as_str())).collect();
+        assert_eq!(
+            ops,
+            vec![
+                (TouchOp::Rename, r"C:\w\a"),
+                (TouchOp::Delete, r"C:\w\b"),
+                (TouchOp::Rename, r"C:\w\c"),
+            ]
+        );
+        assert!(v[0].target.is_some());
+    }
+
     proptest::proptest! {
         #[test]
         fn random_payloads_never_panic(
@@ -939,7 +1049,7 @@ mod tests {
             thread in proptest::prelude::any::<bool>(),
         ) {
             let provider = if thread { Provider::Thread } else { Provider::FileIo };
-            let mut c = Collector::new(devices(), Some(r"C:\w"));
+            let mut c = Collector::new(devices(), &[r"C:\w".into()]);
             c.event(&hdr(provider, opcode, version, 1), &data, 0);
             let _ = c.take(1000, 0, 0);
         }

@@ -68,6 +68,10 @@ fn etw_attributes_file_writes_to_this_process() {
         written >= 4 << 20,
         "saw {written} bytes written by this process"
     );
+    assert!(
+        written < 6 << 20,
+        "{written} bytes: the flush (paging I/O) must not count the data twice"
+    );
     assert!(file_seen, "the written file is listed with its path");
     let ops: Vec<TouchOp> = touches.iter().map(|t| t.op).collect();
     for op in [

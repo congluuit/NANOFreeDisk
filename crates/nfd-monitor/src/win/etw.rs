@@ -174,6 +174,36 @@ pub fn devices() -> Devices {
     Devices::new(list)
 }
 
+/// The ways a folder appears in file events: as given, its long name with links
+/// resolved (what Name events carry) and its 8.3 short name (what a process that
+/// opened it by that name puts in Create events).
+fn spellings(folder: &str) -> Vec<String> {
+    use windows_sys::Win32::Storage::FileSystem::{GetLongPathNameW, GetShortPathNameW};
+    let mut out = vec![folder.trim_end_matches('\\').to_owned()];
+    if let Ok(p) = std::fs::canonicalize(folder) {
+        let s = p.to_string_lossy().into_owned();
+        out.push(s.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(s));
+    }
+    let w = wide(folder);
+    for long in [true, false] {
+        let mut buf = vec![0u16; 1024];
+        // SAFETY: NUL-terminated input, buffer length in characters.
+        let n = unsafe {
+            if long {
+                GetLongPathNameW(w.as_ptr(), buf.as_mut_ptr(), buf.len() as u32)
+            } else {
+                GetShortPathNameW(w.as_ptr(), buf.as_mut_ptr(), buf.len() as u32)
+            }
+        } as usize;
+        if n > 0 && n < buf.len() {
+            out.push(String::from_utf16_lossy(&buf[..n]));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
 struct Shared {
     collector: Mutex<Collector>,
 }
@@ -267,17 +297,9 @@ impl EtwSession {
     /// Start the session. `watch`: a folder whose file events are reported
     /// ("Who touched this?").
     pub fn start(watch: Option<&str>) -> Result<Self, EtwError> {
-        // events carry long names: resolve 8.3 names and links of the watched folder
-        let watch = watch.map(|w| {
-            std::fs::canonicalize(w)
-                .map(|p| {
-                    let s = p.to_string_lossy().into_owned();
-                    s.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(s)
-                })
-                .unwrap_or_else(|_| w.to_owned())
-        });
+        let watch = watch.map(spellings).unwrap_or_default();
         let shared = Arc::new(Shared {
-            collector: Mutex::new(Collector::new(devices(), watch.as_deref())),
+            collector: Mutex::new(Collector::new(devices(), &watch)),
         });
         start_session(
             SESSION,
