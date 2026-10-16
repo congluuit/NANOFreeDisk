@@ -571,7 +571,8 @@ NANOFreeDisk/
 - [x] Updater (`tauri-plugin-updater`, minisign pubkey, `latest.json`; portable / bản thương hiệu chỉ thông báo); khóa ngoài repo, lệnh `gh secret set` trong tài liệu
 - [x] `release.yml`: 4 gói, `dry_run` qua `workflow_dispatch` (không tag, không Release), ký SignPath tự bỏ qua khi chưa có secret, SHA256SUMS + `latest.json`; `smoke-test.ps1` kiểm không sót tệp / registry / shortcut / menu
 - [x] DoD trên máy dev (người dùng thường, không admin): `scripts/smoke-test.ps1` — portable, NSIS, bộ cài thương hiệu cài → chạy → gỡ silent, không sót tệp / registry / shortcut / menu Explorer / thư mục dữ liệu
-- [ ] MSI và bộ cài "Mọi người" cần admin → kiểm trong `release.yml` (dry run trên `windows-latest`); **VM Win10/11 sạch chưa kiểm** (không có VM) — người dùng chạy `scripts/smoke-test.ps1` trên VM; WebView2 bootstrap chỉ kiểm được trên máy thiếu WebView2
+- [x] MSI và bộ cài "Mọi người" (cần admin): `release.yml` dry run trên `windows-latest` (run 38949675585) — cài/chạy/gỡ silent, không sót gì
+- [ ] **VM Win10/11 sạch chưa kiểm** (không có VM) — người dùng chạy `scripts/smoke-test.ps1` trên VM; WebView2 bootstrap chỉ kiểm được trên máy thiếu WebView2
 - [ ] Ký số: chờ SignPath Foundation (bước ký trong `release.yml` tự bỏ qua khi chưa có secret); đưa khóa updater lên GitHub (`gh secret set`, xem `docs/PHASE8_INSTALLERS.md` §2.5)
 
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
