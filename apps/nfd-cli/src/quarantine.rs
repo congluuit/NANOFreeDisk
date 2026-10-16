@@ -102,7 +102,16 @@ pub fn confirm(plan: &CleanPlan, yes: bool) -> anyhow::Result<bool> {
         true
     } else {
         let to_bin = plan.selected().all(|i| i.mode == DeleteMode::RecycleBin);
-        let answer = ask(&if to_bin {
+        let to_links = plan
+            .selected()
+            .all(|i| matches!(i.mode, DeleteMode::Hardlink | DeleteMode::Clone));
+        let answer = ask(&if to_links {
+            format!(
+                "Replace {selected} duplicate(s) ({}) by links to the copies kept? The originals stay in the quarantine for {} days. [y/N] ",
+                format_size(bytes),
+                exec::QUARANTINE_TTL_DAYS
+            )
+        } else if to_bin {
             format!(
                 "Move {} in {selected} item(s) to the Recycle Bin? [y/N] ",
                 format_size(bytes)

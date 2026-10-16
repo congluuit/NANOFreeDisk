@@ -90,7 +90,7 @@ export interface OperationItem {
   n: number;
   path: string;
   ruleId: string | null;
-  mode: "recycle-bin" | "quarantine" | "permanent";
+  mode: "recycle-bin" | "quarantine" | "permanent" | "hardlink" | "clone";
   isDir: boolean;
   bytes: number;
   files: number;

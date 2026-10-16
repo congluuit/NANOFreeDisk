@@ -12,7 +12,8 @@ const HOME = "C:\\Users\\nano";
 const PLAIN: CopyFlags = { cloud: false, git: false, appDir: false, readonly: false };
 
 function copy(path: string, age: number, flags: Partial<CopyFlags> = {}): FileCopy {
-  return { path, mtime: now() - age * DAY, volume: "00000000a1b2c3d4", fileId: null, flags: { ...PLAIN, ...flags } };
+  const volume = path.startsWith("D:") ? "00000000d0d0d0d0" : "00000000c0c0c0c0";
+  return { path, mtime: now() - age * DAY, volume, fileId: null, flags: { ...PLAIN, ...flags }, link: "hardlink" };
 }
 
 function group(id: number, size: number, copies: FileCopy[]): DupeGroup {

@@ -7,7 +7,7 @@ import { formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
 import { app, fail, toast } from "../state.svelte";
 import { dupesApi } from "./api";
-import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, KeepStrategy, Scope, Selection } from "./types";
+import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, KeepStrategy, LinkKind, Scope, Selection } from "./types";
 
 /** Extensions of each file-kind filter (lower case, no dot). */
 export const KINDS: Record<Exclude<FileKind, "all">, string[]> = {
@@ -17,6 +17,58 @@ export const KINDS: Record<Exclude<FileKind, "all">, string[]> = {
   documents: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "epub"],
   archives: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "iso", "img", "cab"],
 };
+
+/** Hard-linked without asking: rarely edited in place (mirror of `nfd_dupes::plan::LINK_EXTS`). */
+export const LINK_EXTS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tif", "tiff", "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2",
+  "mp4", "mkv", "mov", "avi", "wmv", "webm", "m4v", "mts", "m2ts", "3gp", "mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma",
+  "exe", "msi", "msix", "appx", "iso", "img", "vhd", "vhdx", "zip", "7z", "rar", "tar", "gz", "xz", "bz2", "zst", "cab",
+  "gguf", "safetensors", "ckpt", "onnx", "pt", "pth",
+]);
+
+/** How `copy` can become a link to `keeper`, or why not (mirror of `can_link`). */
+export function canLink(keeper: FileCopy, copy: FileCopy): LinkKind | string {
+  if (keeper.volume !== copy.volume) return "other-volume";
+  if (!copy.link) return "no-link-support";
+  if (keeper.flags.cloud || copy.flags.cloud) return "cloud-sync";
+  if (keeper.flags.git || copy.flags.git) return "git";
+  if (keeper.flags.appDir || copy.flags.appDir) return "app-folder";
+  return copy.link;
+}
+
+const extOf = (p: string) => (/\.([^.\\/]+)$/.exec(p)?.[1] ?? "").toLowerCase();
+
+/** The selected copies a "replace with links" carries out, and what stays as is. */
+export function linkPlan(otherTypes: boolean): { selections: Selection[]; files: number; bytes: number; kinds: Set<LinkKind>; skipped: number; otherTypes: number } {
+  const selections: Selection[] = [];
+  const kinds = new Set<LinkKind>();
+  let files = 0;
+  let bytes = 0;
+  let skipped = 0;
+  let others = 0;
+  for (const g of dupes.report?.groups ?? []) {
+    const p = dupes.picks[g.id];
+    if (!p?.remove.length) continue;
+    const keeper = g.copies.find((c) => c.path === p.keep);
+    if (!keeper) continue;
+    const remove: string[] = [];
+    for (const c of g.copies.filter((x) => p.remove.includes(x.path))) {
+      const k = canLink(keeper, c);
+      if (k !== "hardlink" && k !== "clone") {
+        skipped++;
+      } else if (k === "hardlink" && !otherTypes && !LINK_EXTS.has(extOf(c.path))) {
+        others++;
+      } else {
+        remove.push(c.path);
+        kinds.add(k);
+        files++;
+        bytes += g.size;
+      }
+    }
+    if (remove.length) selections.push({ group: g.id, keep: p.keep, remove });
+  }
+  return { selections, files, bytes, kinds, skipped, otherTypes: others };
+}
 
 export interface Pick {
   keep: string;
@@ -179,9 +231,9 @@ export async function openStartupDupes(): Promise<void> {
   }
 }
 
-/** Remove the selected copies (already confirmed). */
-export async function runDupes(action: DupeAction): Promise<void> {
-  const sel = selections();
+/** Remove (or replace by links) the selected copies (already confirmed). */
+export async function runDupes(action: DupeAction, only?: Selection[]): Promise<void> {
+  const sel = only ?? selections();
   if (dupes.running || !sel.length) return;
   dupes.running = { done: 0, total: 0, freed: 0, path: "" };
   dupes.last = null;
@@ -231,6 +283,6 @@ export function cliCommand(action?: DupeAction): string {
   if (dupes.includeAppDirs) parts.push("--include-app-dirs");
   if (dupes.paranoid) parts.push("--paranoid");
   parts.push(`--keep ${dupes.strategy}`);
-  if (action) parts.push(`--action ${action}`, "--apply");
+  if (action) parts.push(`--action ${action === "link" ? "hardlink" : action}`, "--apply");
   return parts.join(" ");
 }

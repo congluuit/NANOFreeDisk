@@ -21,6 +21,7 @@ fn copy(path: &str, mtime: i64, flags: CopyFlags) -> FileCopy {
         file_id: None,
         links: Vec::new(),
         flags,
+        link: None,
     }
 }
 
@@ -400,4 +401,150 @@ fn a_deleted_keeper_never_lets_the_last_copy_go() {
     assert_eq!(op.count(ItemStatus::Done), 0, "{op:#?}");
     assert!(data.join("Downloads/orig.bin").exists());
     assert!(data.join("Downloads/orig (1).bin").exists());
+}
+
+// ---------------------------------------------------------------- links
+
+fn linkable(path: &str, flags: CopyFlags) -> FileCopy {
+    let mut c = copy(path, 1, flags);
+    c.link = Some(nfd_dupes::LinkKind::Hardlink);
+    c
+}
+
+#[test]
+fn only_same_volume_plain_copies_become_links() {
+    use nfd_dupes::LinkKind;
+    use nfd_dupes::plan::can_link;
+    let keeper = linkable("D:/k.mp4", PLAIN);
+    assert_eq!(
+        can_link(&keeper, &linkable("D:/a.mp4", PLAIN)),
+        Ok(LinkKind::Hardlink)
+    );
+    let mut other = linkable("E:/a.mp4", PLAIN);
+    other.volume = 2;
+    assert_eq!(can_link(&keeper, &other), Err("other-volume"));
+    let mut fat = copy("D:/a.mp4", 1, PLAIN);
+    fat.link = None;
+    assert_eq!(can_link(&keeper, &fat), Err("no-link-support"));
+    for (flags, why) in [
+        (
+            CopyFlags {
+                cloud: true,
+                ..PLAIN
+            },
+            "cloud-sync",
+        ),
+        (CopyFlags { git: true, ..PLAIN }, "git"),
+        (
+            CopyFlags {
+                app_dir: true,
+                ..PLAIN
+            },
+            "app-folder",
+        ),
+    ] {
+        assert_eq!(can_link(&keeper, &linkable("D:/a.mp4", flags)), Err(why));
+        assert_eq!(
+            can_link(&linkable("D:/k.mp4", flags), &linkable("D:/a.mp4", PLAIN)),
+            Err(why)
+        );
+    }
+}
+
+#[test]
+fn hard_links_are_preselected_for_media_only() {
+    use nfd_dupes::plan::link_selection;
+    let groups = vec![
+        group(
+            1,
+            vec![linkable("D:/k.mp4", PLAIN), linkable("D:/a.mp4", PLAIN)],
+        ),
+        group(
+            2,
+            vec![linkable("D:/k.docx", PLAIN), linkable("D:/a.docx", PLAIN)],
+        ),
+    ];
+    let sel = vec![
+        Selection {
+            group: 1,
+            keep: "D:/k.mp4".into(),
+            remove: vec!["D:/a.mp4".into()],
+        },
+        Selection {
+            group: 2,
+            keep: "D:/k.docx".into(),
+            remove: vec!["D:/a.docx".into()],
+        },
+    ];
+    let media = link_selection(&groups, &sel, false);
+    assert_eq!(media.len(), 1);
+    assert_eq!(media[0].group, 1);
+    assert_eq!(link_selection(&groups, &sel, true).len(), 2);
+    // block clones are independent copies: any type
+    let mut cloned = groups.clone();
+    for c in &mut cloned[1].copies {
+        c.link = Some(nfd_dupes::LinkKind::Clone);
+    }
+    assert_eq!(link_selection(&cloned, &sel, false).len(), 2);
+    // the planner turns them into link items and refuses what cannot be linked
+    let p = plan(&groups, &sel, Action::Link).expect("plan");
+    assert!(
+        p.items
+            .iter()
+            .all(|i| i.mode == nfd_core::plan::DeleteMode::Hardlink)
+    );
+    assert_eq!(
+        plan(&cloned, &sel, Action::Link).expect("plan").items[1].mode,
+        nfd_core::plan::DeleteMode::Clone
+    );
+    let mut cloud = groups.clone();
+    cloud[0].copies[1].flags.cloud = true;
+    assert!(matches!(
+        plan(&cloud, &sel, Action::Link),
+        Err(PlanError::CannotLink {
+            group: 1,
+            why: "cloud-sync",
+            ..
+        })
+    ));
+}
+
+#[test]
+fn copies_become_links_and_come_back() {
+    let (dir, data, bytes) = setup();
+    let report = search(&data);
+    let g = &report.groups[0];
+    if g.copies.iter().any(|c| c.link.is_none()) {
+        return; // the temp folder is on a drive without hard links
+    }
+    let sel = auto_select(&report.groups, &KeepStrategy::Auto);
+    // `.bin` is not a media type: tick other types explicitly
+    assert!(nfd_dupes::plan::link_selection(&report.groups, &sel, false).is_empty());
+    let sel = nfd_dupes::plan::link_selection(&report.groups, &sel, true);
+    let p = plan(&report.groups, &sel, Action::Link).expect("plan");
+    let gate = SafetyGate::new(&|_: &str| None);
+    let mut verifier = Verifier::new(&LiveSource, report.groups.clone());
+    let op = exec::execute_verified(
+        &p,
+        &gate,
+        &LiveProbe,
+        &opts(dir.path()),
+        &mut |item| verifier.check(item),
+        &mut |_, _, _| true,
+    );
+    assert_eq!(op.count(ItemStatus::Done), 2, "{op:#?}");
+    for r in &op.items {
+        assert_eq!(fs::read(&r.path).expect("still readable"), bytes);
+    }
+    for r in &op.items {
+        let (status, msg) = exec::restore(&r.path, r.stored.as_deref(), r.mode, op.started_at);
+        assert_eq!(status, RestoreStatus::Restored, "{msg:?}");
+        assert_eq!(fs::read(&r.path).expect("restored"), bytes);
+    }
+    // independent again: changing the keeper leaves the restored copies alone
+    fs::write(data.join("orig.bin"), b"new").expect("write");
+    assert_eq!(
+        fs::read(data.join("Downloads/orig.bin")).expect("read"),
+        bytes
+    );
 }

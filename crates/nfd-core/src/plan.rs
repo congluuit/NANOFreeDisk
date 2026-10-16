@@ -26,6 +26,13 @@ pub enum DeleteMode {
     Quarantine,
     /// Gone for good. Expert only, 🟢 Safe items only, double confirmation.
     Permanent,
+    /// Duplicates: replaced by a hard link to the copy that stays (NTFS); the
+    /// original goes to the quarantine (restorable for 7 days).
+    Hardlink,
+    /// Duplicates: replaced by a block clone of the copy that stays (ReFS, Dev
+    /// Drive): copy-on-write, the two files stay independent; the original goes to
+    /// the quarantine.
+    Clone,
 }
 
 impl DeleteMode {
@@ -35,7 +42,16 @@ impl DeleteMode {
             Self::RecycleBin => "recycle-bin",
             Self::Quarantine => "quarantine",
             Self::Permanent => "permanent",
+            Self::Hardlink => "hardlink",
+            Self::Clone => "clone",
         }
+    }
+
+    /// The original is kept in the quarantine (plain quarantine or a replaced
+    /// duplicate).
+    #[must_use]
+    pub const fn uses_quarantine(self) -> bool {
+        matches!(self, Self::Quarantine | Self::Hardlink | Self::Clone)
     }
 }
 

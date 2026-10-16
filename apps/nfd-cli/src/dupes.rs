@@ -17,7 +17,7 @@ use nfd_core::units::{format_count, format_size, parse_size};
 use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::LiveSource;
 use nfd_dupes::keep::{KeepStrategy, auto_select};
-use nfd_dupes::plan::{Action, Verifier, plan};
+use nfd_dupes::plan::{Action, Verifier, link_selection, plan};
 use nfd_dupes::{DupeOptions, DupeReport, Phase, Progress, flag_text, write_csv};
 use nfd_platform::Platform;
 
@@ -77,10 +77,19 @@ pub struct DupesArgs {
     #[arg(long, default_value = "auto", value_name = "STRATEGY")]
     keep: KeepStrategy,
 
-    /// What to do with the other copies: list (default), recycle (Recycle Bin) or
-    /// quarantine (restorable for 7 days). Nothing happens without --apply.
+    /// What to do with the other copies: list (default), recycle (Recycle Bin),
+    /// quarantine (restorable for 7 days) or hardlink (replace each copy by a link
+    /// to the one kept: block clone on ReFS / Dev Drive, hard link on NTFS, same
+    /// drive only; the originals stay in the quarantine for 7 days). Nothing happens
+    /// without --apply.
     #[arg(long, value_enum, default_value_t = DupeAction::List)]
     action: DupeAction,
+
+    /// With --action hardlink: also hard-link file types that may be edited in place
+    /// (by default only photos, videos, music, installers, disk images, archives and
+    /// AI models are).
+    #[arg(long)]
+    link_other_types: bool,
 
     /// Carry out --action (after a confirmation unless --yes).
     #[arg(long)]
@@ -96,6 +105,7 @@ pub enum DupeAction {
     List,
     Recycle,
     Quarantine,
+    Hardlink,
 }
 
 fn parse_size_arg(s: &str) -> Result<u64, String> {
@@ -226,9 +236,13 @@ fn scan(path: &Path) -> anyhow::Result<ScanTree> {
 fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
     let action = match args.action {
         DupeAction::Quarantine => Action::Quarantine,
+        DupeAction::Hardlink => Action::Link,
         _ => Action::Recycle,
     };
-    let selections = auto_select(&report.groups, &args.keep);
+    let mut selections = auto_select(&report.groups, &args.keep);
+    if action == Action::Link {
+        selections = link_selection(&report.groups, &selections, args.link_other_types);
+    }
     let plan: CleanPlan = plan(&report.groups, &selections, action)?;
     if !args.json {
         for s in &selections {
@@ -245,6 +259,7 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
     let target = match action {
         Action::Recycle => "the Recycle Bin",
         Action::Quarantine => "the quarantine",
+        Action::Link => "the quarantine and replace them by links to the copies kept",
     };
     if !args.apply {
         if args.json {
@@ -368,6 +383,7 @@ mod tests {
             file_id: Some(7),
             links: Vec::new(),
             flags,
+            link: None,
         }
     }
 

@@ -168,6 +168,16 @@ pub struct CopyFlags {
     pub readonly: bool,
 }
 
+/// How a copy can be replaced by a link to the copy that stays (same volume only).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LinkKind {
+    /// NTFS hard link: one file, two names (shared contents, attributes, times).
+    Hardlink,
+    /// ReFS / Dev Drive block clone: copy-on-write, the files stay independent.
+    Clone,
+}
+
 /// One copy of the duplicated contents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -184,6 +194,9 @@ pub struct FileCopy {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<PathBuf>,
     pub flags: CopyFlags,
+    /// How its volume can replace a duplicate by a link (`None`: FAT, network…).
+    #[serde(default)]
+    pub link: Option<LinkKind>,
 }
 
 /// Files with identical contents.
@@ -479,6 +492,13 @@ pub fn find(
     }
 
     // report
+    let mut link_modes: HashMap<u64, Option<LinkKind>> = HashMap::new();
+    for &u in groups.iter().flatten() {
+        let c = &cands[units[u].cand];
+        link_modes
+            .entry(c.volume)
+            .or_insert_with(|| source.link_mode(&c.path));
+    }
     let mut out: Vec<DupeGroup> = groups
         .iter()
         .map(|g| {
@@ -500,6 +520,7 @@ pub fn find(
                         file_id: c.file_id,
                         links,
                         flags: c.flags,
+                        link: link_modes.get(&c.volume).copied().flatten(),
                     }
                 })
                 .collect();

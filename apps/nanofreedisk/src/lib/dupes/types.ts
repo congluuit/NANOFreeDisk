@@ -20,7 +20,11 @@ export interface FileCopy {
   /** Other names of the same file (hard links). */
   links?: string[];
   flags: CopyFlags;
+  /** How its drive can replace a duplicate by a link (null: FAT, network…). */
+  link?: LinkKind | null;
 }
+
+export type LinkKind = "hardlink" | "clone";
 
 export interface DupeGroup {
   id: number;
@@ -86,7 +90,7 @@ export interface Selection {
 }
 
 export type KeepStrategy = "auto" | "oldest" | "newest" | "shortest";
-export type DupeAction = "recycle" | "quarantine";
+export type DupeAction = "recycle" | "quarantine" | "link";
 /** Which folders to search: the Analyze scan, or folders picked here. */
 export type Scope = "current" | "folders";
 export type FileKind = "all" | "images" | "videos" | "music" | "documents" | "archives";

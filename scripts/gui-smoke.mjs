@@ -26,7 +26,7 @@
 // snapshots and journal entries are forgotten at the end.
 
 import { execFileSync, spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from "node:fs";
 import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
@@ -618,6 +618,37 @@ try {
   );
   const healthDupes = await invoke("health");
   check("health mentions the duplicates found", healthDupes.findings?.some((f) => f.kind === "duplicates" && f.fix === "duplicates"), JSON.stringify(healthDupes.findings?.map((f) => f.kind)));
+  // replace a duplicate by a hard link (NTFS temp folder), then undo it
+  const linkDir = join(dupeFixture, "links");
+  mkdirSync(join(linkDir, "Downloads"), { recursive: true });
+  const disk = randomBytes(1100 * 1024);
+  writeFileSync(join(linkDir, "setup.iso"), disk);
+  writeFileSync(join(linkDir, "Downloads", "setup.iso"), disk);
+  utimesSync(join(linkDir, "setup.iso"), yearAgo, yearAgo);
+  const linkFound = await invoke("dupes_find", { paths: [linkDir], options: noCache });
+  const linkGroup = linkFound.groups?.[0];
+  if (linkGroup?.copies.every((c) => c.link === "hardlink")) {
+    const linked = await invoke("dupes_run", {
+      selections: [{ group: linkGroup.id, keep: join(linkDir, "setup.iso"), remove: [join(linkDir, "Downloads", "setup.iso")] }],
+      action: "link",
+    });
+    if (linked.id) operations.push(linked.id);
+    check(
+      "dupes: a copy becomes a hard link to the one kept",
+      linked.done === 1 && statSync(join(linkDir, "Downloads", "setup.iso")).nlink === 2 && readFileSync(join(linkDir, "Downloads", "setup.iso")).equals(disk),
+      JSON.stringify(linked),
+    );
+    if (linked.id) {
+      const back = await invoke("activity_restore", { id: linked.id, items: null });
+      check(
+        "dupes: restore puts the original back, two independent files again",
+        back[0]?.status === "restored" && statSync(join(linkDir, "Downloads", "setup.iso")).nlink === 1 && statSync(join(linkDir, "setup.iso")).nlink === 1,
+        JSON.stringify(back),
+      );
+    }
+  } else {
+    check("dupes: temp drive supports links", false, JSON.stringify(linkGroup?.copies.map((c) => c.link)));
+  }
   // the view: search the current scan of the fixture from the UI
   await scan(dupeFixture, false);
   const dupNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Duplicates|Tệp trùng/.test(b.innerText))");
@@ -631,6 +662,11 @@ try {
   await evaluate("document.querySelector('[data-recycle]')?.click()");
   await sleep(300);
   check("Duplicates asks before moving anything", await evaluate("!!document.querySelector('.dialog [data-confirm]')"));
+  await evaluate("document.querySelector('.dialog footer .btn').click()");
+  await sleep(200);
+  await evaluate("document.querySelector('[data-link]')?.click()");
+  await sleep(300);
+  check("Replace with links explains the shared content first", await evaluate("!!document.querySelector('.dialog [data-confirm]') && document.querySelector('.dialog').innerText.length > 80"));
   await evaluate("document.querySelector('.dialog footer .btn').click()");
 
   // G4: every control that changes something explains what happens

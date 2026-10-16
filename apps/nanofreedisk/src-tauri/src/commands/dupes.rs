@@ -506,6 +506,7 @@ mod tests {
             file_id: None,
             links: Vec::new(),
             flags: CopyFlags::default(),
+            link: None,
         };
         let mut r = DupeReport {
             groups: vec![

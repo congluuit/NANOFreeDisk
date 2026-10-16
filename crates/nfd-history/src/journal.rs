@@ -92,6 +92,8 @@ impl ItemRow {
         match self.mode.as_str() {
             "quarantine" => DeleteMode::Quarantine,
             "permanent" => DeleteMode::Permanent,
+            "hardlink" => DeleteMode::Hardlink,
+            "clone" => DeleteMode::Clone,
             _ => DeleteMode::RecycleBin,
         }
     }
@@ -353,7 +355,7 @@ impl History {
         let ids: Vec<String> = {
             let mut stmt = self.conn.prepare(
                 "SELECT DISTINCT o.id FROM operations o JOIN operation_items i ON i.op_id = o.id
-                 WHERE o.state != 'purged' AND o.started_at < ?1 AND i.mode = 'quarantine'
+                 WHERE o.state != 'purged' AND o.started_at < ?1 AND i.mode IN ('quarantine', 'hardlink', 'clone')
                    AND i.restored = 0 AND i.stored IS NOT NULL",
             )?;
             stmt.query_map([cutoff], |r| r.get(0))?
@@ -416,7 +418,7 @@ impl History {
         let n = self.conn.execute(
             "DELETE FROM operations WHERE started_at < ?1 AND (state IN ('purged', 'restored')
              OR NOT EXISTS (SELECT 1 FROM operation_items i WHERE i.op_id = operations.id
-                 AND i.mode = 'quarantine' AND i.restored = 0 AND i.stored IS NOT NULL))",
+                 AND i.mode IN ('quarantine', 'hardlink', 'clone') AND i.restored = 0 AND i.stored IS NOT NULL))",
             [now - days * 86_400],
         )?;
         Ok(n)

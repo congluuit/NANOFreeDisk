@@ -16,6 +16,7 @@
     cliCommand,
     dupes,
     findDupes,
+    linkPlan,
     loadThumb,
     runDupes,
     selectedTotals,
@@ -46,6 +47,12 @@
     return selectedTotals();
   });
   let acknowledged = $state(false);
+  /** "Replace with links": also hard-link types that may be edited in place. */
+  let otherTypes = $state(false);
+  const links = $derived.by(() => {
+    void dupes.picks;
+    return linkPlan(otherTypes);
+  });
 
   async function addFolder() {
     const p = await pickFolder(t("dupes-pick-folder"));
@@ -92,12 +99,14 @@
   }
   function ask(action: DupeAction) {
     acknowledged = false;
+    otherTypes = false;
     dupes.confirm = action;
   }
   async function go() {
     const action = dupes.confirm;
     dupes.confirm = null;
-    if (action) await runDupes(action);
+    if (action === "link") await runDupes("link", links.selections);
+    else if (action) await runDupes(action);
   }
   async function exportAs(format: "json" | "csv") {
     try {
@@ -294,6 +303,7 @@
     <div class="card footer">
       <span>{t("dupes-selected", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</span>
       <span class="grow"></span>
+      <button class="btn" data-link disabled={!totals.files || !!dupes.running} onclick={() => ask("link")} data-effect title={t("dupes-link-hint")}><Icon name="link" size={16} />{t("dupes-link")}</button>
       {#if expert()}
         <button class="btn" disabled={!totals.files || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
       {/if}
@@ -309,10 +319,21 @@
   {@const action = dupes.confirm}
   <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (dupes.confirm = null)} onkeydown={(e) => e.key === "Escape" && (dupes.confirm = null)}>
     <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="dupes-confirm-title">
-      <h2 id="dupes-confirm-title"><Icon name={action === "recycle" ? "trash" : "shield"} size={20} />{t(`dupes-confirm-${action}`)}</h2>
-      <p>{t("dupes-confirm-body", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</p>
-      <p class="muted small">{t("dupes-confirm-note")}</p>
-      {#if totals.risky.length}
+      <h2 id="dupes-confirm-title"><Icon name={action === "recycle" ? "trash" : action === "link" ? "link" : "shield"} size={20} />{t(`dupes-confirm-${action}`)}</h2>
+      {#if action === "link"}
+        <p>{t("dupes-link-body", { files: links.files, size: formatSize(links.bytes, loc) })}</p>
+        {#if links.kinds.has("hardlink")}<p class="warn small"><Icon name="alert" size={16} />{t("dupes-link-hardlink-note")}</p>{/if}
+        {#if links.kinds.has("clone")}<p class="muted small">{t("dupes-link-clone-note")}</p>{/if}
+        {#if links.skipped}<p class="muted small">{t("dupes-link-skipped", { count: links.skipped })}</p>{/if}
+        {#if links.otherTypes || otherTypes}
+          <label class="small other"><input type="checkbox" bind:checked={otherTypes} data-effect title={t("dupes-link-other-types-hint")} />{t("dupes-link-other-types")}</label>
+        {/if}
+        <p class="muted small">{t("dupes-link-undo")}</p>
+      {:else}
+        <p>{t("dupes-confirm-body", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</p>
+        <p class="muted small">{t("dupes-confirm-note")}</p>
+      {/if}
+      {#if totals.risky.length && action !== "link"}
         <div class="warn">
           <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: totals.risky.length })}</p>
           <ul>
@@ -326,8 +347,15 @@
       <CliHint command={cliCommand(action)} />
       <footer>
         <button class="btn" onclick={() => (dupes.confirm = null)}>{t("delete-cancel")}</button>
-        <button class="btn danger" data-confirm onclick={go} disabled={totals.risky.length > 0 && !acknowledged} data-effect title={t("dupes-confirm-note")}>
-          <Icon name={action === "recycle" ? "trash" : "shield"} size={16} />{t(`dupes-go-${action}`)}
+        <button
+          class="btn danger"
+          data-confirm
+          onclick={go}
+          disabled={action === "link" ? !links.files : totals.risky.length > 0 && !acknowledged}
+          data-effect
+          title={t(action === "link" ? "dupes-link-undo" : "dupes-confirm-note")}
+        >
+          <Icon name={action === "recycle" ? "trash" : action === "link" ? "link" : "shield"} size={16} />{t(`dupes-go-${action}`)}
         </button>
       </footer>
     </div>
@@ -614,9 +642,15 @@
     align-items: center;
     min-width: 0;
   }
-  .warn label {
+  .warn label,
+  .other {
     display: flex;
     gap: 6px;
     align-items: center;
+  }
+  p.warn {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
   }
 </style>

@@ -162,7 +162,7 @@ nfd devcache [list|clean --vendor anthropic --level safe|unknown]
 nfd toolchains [--json]
 nfd repos <root> [--keep-recent 7] [--json]   ·   nfd repos clean <root> [--apply]
 nfd stores [--json]   ·   nfd stores run npm-cache-clean
-nfd dupes <path...> [--min-size 1MB] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine] [--apply]
+nfd dupes <path...> [--min-size 1MB] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
 nfd watch [--interval 1s] [--top 20]
 nfd health [--json] [--watch]
 nfd quarantine [list|restore <id>|purge --older 7d]

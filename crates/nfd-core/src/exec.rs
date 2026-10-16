@@ -12,6 +12,12 @@
 //! * **Recycle Bin** (hand-picked items): the Windows shell; restored by reading the
 //!   bin's `$I` records (`nfd_platform::trash::find_recycled`).
 //! * **Permanent**: removed for good (Expert, 🟢 Safe only — decided by the planner).
+//! * **Hard link / block clone** (Duplicates): a link to the copy that stays is made
+//!   under a temporary name next to the duplicate, the duplicate is moved to the
+//!   quarantine, then the link takes its name. A failure at any step undoes the
+//!   steps before it, so no file is ever lost. [`restore`] puts the original back
+//!   and sends the link to the Recycle Bin (or simply removes a hard link whose data
+//!   still has another name).
 //!
 //! One item failing never stops the plan; the caller can cancel between items.
 
@@ -390,6 +396,46 @@ fn act(
             }
         }
         DeleteMode::RecycleBin => recycle(item, result, opts),
+        DeleteMode::Hardlink | DeleteMode::Clone => {
+            let Some(keeper) = item.keeper.as_deref() else {
+                result.status = ItemStatus::Failed;
+                result.reason = Some("no-keeper".into());
+                return;
+            };
+            let Some(root) = opts.roots.root_for(&item.path) else {
+                result.status = ItemStatus::Failed;
+                result.reason = Some("no-quarantine".into());
+                return;
+            };
+            let make: &dyn Fn(&Path, &Path) -> io::Result<()> = if item.mode == DeleteMode::Clone {
+                &|from, to| nfd_platform::link::clone_file(from, to)
+            } else {
+                &|from, to| {
+                    let links = nfd_platform::fsinfo::file_info(from)?.link_count;
+                    if links.is_some_and(|n| n >= nfd_platform::link::MAX_HARD_LINKS) {
+                        return Err(io::Error::other("too many hard links"));
+                    }
+                    nfd_platform::link::hard_link(from, to)
+                }
+            };
+            match replace_with_link(
+                item,
+                result.n,
+                keeper,
+                &root,
+                opts,
+                op_dirs,
+                make,
+                &|a, b| fs::rename(a, b),
+            ) {
+                Ok(stored) => {
+                    result.stored = Some(stored);
+                    result.status = ItemStatus::Done;
+                    result.freed = item.bytes;
+                }
+                Err(e) => fail(result, &e),
+            }
+        }
         DeleteMode::Quarantine => {
             let Some(root) = opts.roots.root_for(&item.path) else {
                 recycle(item, result, opts);
@@ -509,6 +555,61 @@ fn quarantine(
     Ok((stored, moved, complete))
 }
 
+/// Replace the file `item` by a link to `keeper` (see the module documentation):
+/// `make(keeper, tmp)` creates the link under a temporary name, the original moves
+/// into the quarantine (with its manifest line), then `finish(tmp, item)` gives the
+/// link the original name. Returns where the original is stored. Any failure undoes
+/// what was done before it.
+#[allow(clippy::too_many_arguments)]
+fn replace_with_link(
+    item: &PlanItem,
+    n: usize,
+    keeper: &Path,
+    root: &Path,
+    opts: &ExecOptions,
+    op_dirs: &mut Vec<(PathBuf, fs::File)>,
+    make: &dyn Fn(&Path, &Path) -> io::Result<()>,
+    finish: &dyn Fn(&Path, &Path) -> io::Result<()>,
+) -> io::Result<PathBuf> {
+    if item.is_dir {
+        return Err(io::Error::new(io::ErrorKind::InvalidInput, "not a file"));
+    }
+    let parent = item
+        .path
+        .parent()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no parent folder"))?;
+    let name = item
+        .path
+        .file_name()
+        .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?;
+    let mut tmp_name = std::ffi::OsString::from(".");
+    tmp_name.push(name);
+    tmp_name.push(format!(".nfd-{}-{n}.tmp", opts.op_id));
+    let tmp = parent.join(tmp_name);
+    make(keeper, &tmp)?;
+    let (stored, _, complete) = match quarantine(item, n, root, opts, op_dirs) {
+        Ok(r) if r.2 => r,
+        Ok(r) => {
+            let _ = fs::rename(&r.0, &item.path);
+            let _ = fs::remove_file(&tmp);
+            return Err(io::Error::other("the duplicate could not be moved"));
+        }
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
+    };
+    debug_assert!(complete);
+    if let Err(e) = finish(&tmp, &item.path) {
+        // put the original back where it was; the link was only a second name
+        if fs::rename(&stored, &item.path).is_ok() {
+            let _ = fs::remove_file(&tmp);
+        }
+        return Err(e);
+    }
+    Ok(stored)
+}
+
 /// Move the contents of directory `src` into `dst` one entry at a time (links are
 /// moved as links, never followed), then remove `src` if it ended up empty. Returns
 /// (bytes moved, everything moved).
@@ -581,6 +682,7 @@ pub fn restore(
 ) -> (RestoreStatus, Option<String>) {
     match mode {
         DeleteMode::Permanent => (RestoreStatus::NotRestorable, None),
+        DeleteMode::Hardlink | DeleteMode::Clone => restore_linked(original, stored),
         DeleteMode::RecycleBin => {
             let found = match nfd_platform::trash::find_recycled(original) {
                 Ok(f) => f,
@@ -625,6 +727,60 @@ pub fn restore(
                 Err(e) => (RestoreStatus::Failed, Some(e.to_string())),
             }
         }
+    }
+}
+
+/// Undo a replaced duplicate: the link steps aside, the original comes back from
+/// the quarantine, and the link leaves — removed outright when it is a hard link
+/// whose data still has another name (nothing is lost), else to the Recycle Bin.
+fn restore_linked(original: &Path, stored: Option<&Path>) -> (RestoreStatus, Option<String>) {
+    let Some(stored) = stored else {
+        return (RestoreStatus::Missing, None);
+    };
+    if stored.symlink_metadata().is_err() {
+        return (RestoreStatus::Missing, None);
+    }
+    let aside = original.symlink_metadata().is_ok().then(|| {
+        let mut name = original.as_os_str().to_owned();
+        name.push(format!(".nfd-restore-{}", unix_now()));
+        PathBuf::from(name)
+    });
+    if let Some(aside) = &aside {
+        if let Err(e) = fs::rename(original, aside) {
+            return (RestoreStatus::Failed, Some(e.to_string()));
+        }
+    }
+    if let Err(e) = fs::rename(stored, original) {
+        if let Some(aside) = &aside {
+            let _ = fs::rename(aside, original);
+        }
+        return (RestoreStatus::Failed, Some(e.to_string()));
+    }
+    if let Some(slot) = stored.parent() {
+        let _ = fs::remove_dir(slot);
+    }
+    let Some(aside) = aside else {
+        return (RestoreStatus::Restored, None);
+    };
+    let shared = nfd_platform::fsinfo::file_info(&aside)
+        .ok()
+        .and_then(|i| i.link_count)
+        .is_some_and(|n| n >= 2);
+    let gone = if shared {
+        fs::remove_file(&aside).is_ok()
+    } else {
+        matches!(
+            nfd_platform::trash::recycle(&aside, 0),
+            Ok(nfd_platform::trash::Recycled::Done)
+        )
+    };
+    if gone {
+        (RestoreStatus::Restored, None)
+    } else {
+        (
+            RestoreStatus::Restored,
+            Some(format!("the link was left at {}", aside.display())),
+        )
     }
 }
 
@@ -864,5 +1020,151 @@ mod tests {
             );
         }
         assert_eq!(volume_key(Path::new("relative")), None);
+    }
+
+    /// A duplicate `dup` of `keeper` (same bytes), as the Duplicates planner makes it.
+    fn linked_item(dup: &Path, keeper: &Path, mode: DeleteMode) -> PlanItem {
+        let mut i = item(dup, RiskLevel::Safe);
+        i.origin = Origin::Duplicate { group: 1 };
+        i.rule_id = None;
+        i.mode = mode;
+        i.keeper = Some(keeper.to_path_buf());
+        i
+    }
+
+    fn links(p: &Path) -> Option<u32> {
+        nfd_platform::fsinfo::file_info(p).expect("info").link_count
+    }
+
+    #[test]
+    fn hard_link_replace_and_restore() {
+        let (dir, gate, opts) = setup();
+        let keeper = dir.path().join("photo.jpg");
+        let dup = dir.path().join("photo (copy).jpg");
+        let bytes: Vec<u8> = (0..50_000u32).map(|i| (i % 253) as u8).collect();
+        fs::write(&keeper, &bytes).expect("write");
+        fs::write(&dup, &bytes).expect("write");
+        let before = fs::metadata(&dup).expect("meta").modified().expect("mtime");
+        let plan = CleanPlan {
+            items: vec![linked_item(&dup, &keeper, DeleteMode::Hardlink)],
+        };
+        let op = execute(&plan, &gate, &LiveProbe, &opts, &mut |_, _, _| true);
+        let r = &op.items[0];
+        assert_eq!(r.status, ItemStatus::Done, "{r:#?}");
+        assert_eq!(r.mode, DeleteMode::Hardlink);
+        assert_eq!(fs::read(&dup).expect("read"), bytes);
+        if links(&dup).is_some() {
+            assert_eq!(links(&dup), Some(2), "one file, two names");
+        }
+        let stored = r.stored.clone().expect("stored");
+        assert_eq!(fs::read(&stored).expect("original kept"), bytes);
+        // no temporary name left behind
+        assert!(
+            fs::read_dir(dir.path())
+                .expect("ls")
+                .flatten()
+                .all(|e| !e.file_name().to_string_lossy().ends_with(".tmp"))
+        );
+
+        let (status, msg) = restore(&r.path, r.stored.as_deref(), r.mode, op.started_at);
+        assert_eq!(status, RestoreStatus::Restored, "{msg:?}");
+        assert_eq!(fs::read(&dup).expect("read"), bytes);
+        let after = fs::metadata(&dup).expect("meta").modified().expect("mtime");
+        assert_eq!(before, after, "the original came back, times included");
+        if links(&dup).is_some() {
+            assert_eq!(links(&dup), Some(1), "independent again");
+            assert_eq!(links(&keeper), Some(1));
+        }
+        // writing one no longer changes the other
+        fs::write(&dup, b"changed").expect("write");
+        assert_eq!(fs::read(&keeper).expect("read"), bytes);
+        assert!(!stored.exists());
+    }
+
+    #[test]
+    fn a_failure_halfway_loses_nothing() {
+        let (dir, _gate, opts) = setup();
+        let keeper = dir.path().join("a.bin");
+        let dup = dir.path().join("b.bin");
+        fs::write(&keeper, b"same bytes").expect("write");
+        fs::write(&dup, b"same bytes").expect("write");
+        let item = linked_item(&dup, &keeper, DeleteMode::Hardlink);
+        let root = opts.roots.system.clone().expect("root");
+        let mut dirs = Vec::new();
+        // the link cannot take the original name
+        let err = replace_with_link(
+            &item,
+            0,
+            &keeper,
+            &root,
+            &opts,
+            &mut dirs,
+            &|a, b| nfd_platform::link::hard_link(a, b),
+            &|_, _| Err(io::Error::other("simulated failure")),
+        );
+        assert!(err.is_err());
+        assert_eq!(fs::read(&dup).expect("original back"), b"same bytes");
+        assert_eq!(fs::read(&keeper).expect("keeper"), b"same bytes");
+        if links(&dup).is_some() {
+            assert_eq!(links(&dup), Some(1));
+            assert_eq!(links(&keeper), Some(1), "the temporary link is gone");
+        }
+        let names: Vec<_> = fs::read_dir(dir.path())
+            .expect("ls")
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(!names.iter().any(|n| n.ends_with(".tmp")), "{names:?}");
+        // the link cannot even be made: nothing moves
+        let err = replace_with_link(
+            &item,
+            1,
+            &dir.path().join("gone.bin"),
+            &root,
+            &opts,
+            &mut dirs,
+            &|a, b| nfd_platform::link::hard_link(a, b),
+            &|a, b| fs::rename(a, b),
+        );
+        assert!(err.is_err());
+        assert_eq!(fs::read(&dup).expect("untouched"), b"same bytes");
+    }
+
+    #[test]
+    fn block_clone_when_the_volume_has_it() {
+        let (dir, gate, opts) = setup();
+        if nfd_platform::link::mode(dir.path()) != Some(nfd_platform::link::LinkMode::Clone) {
+            return; // NTFS: covered by the hard-link tests
+        }
+        let keeper = dir.path().join("model.gguf");
+        let dup = dir.path().join("model-copy.gguf");
+        fs::write(&keeper, vec![9u8; 200_000]).expect("write");
+        fs::write(&dup, vec![9u8; 200_000]).expect("write");
+        let plan = CleanPlan {
+            items: vec![linked_item(&dup, &keeper, DeleteMode::Clone)],
+        };
+        let op = execute(&plan, &gate, &LiveProbe, &opts, &mut |_, _, _| true);
+        assert_eq!(op.items[0].status, ItemStatus::Done, "{op:#?}");
+        fs::write(&dup, b"edited").expect("write");
+        assert_eq!(fs::read(&keeper).expect("read"), vec![9u8; 200_000]);
+    }
+
+    #[test]
+    fn links_need_a_keeper() {
+        let (dir, gate, opts) = setup();
+        let dup = dir.path().join("x.bin");
+        fs::write(&dup, b"x").expect("write");
+        let mut i = linked_item(&dup, &dup, DeleteMode::Hardlink);
+        i.keeper = None;
+        let op = execute(
+            &CleanPlan { items: vec![i] },
+            &gate,
+            &LiveProbe,
+            &opts,
+            &mut |_, _, _| true,
+        );
+        assert_eq!(op.items[0].status, ItemStatus::Failed);
+        assert_eq!(op.items[0].reason.as_deref(), Some("no-keeper"));
+        assert!(dup.exists());
     }
 }

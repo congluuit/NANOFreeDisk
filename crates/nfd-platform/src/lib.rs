@@ -6,11 +6,13 @@
 //! [`fsinfo`], the per-entry metadata query used by the scanner; Phase 2 adds
 //! [`volumes`] (drive overview), [`trash`] (Recycle Bin) and [`appearance`] (accent
 //! color); Phase 3 adds [`locks`] (Restart Manager: which process holds a file);
-//! Phase 5 adds [`io`] (low-priority sequential reads for the duplicate finder).
+//! Phase 5 adds [`io`] (low-priority sequential reads for the duplicate finder) and
+//! [`link`] (hard links and ReFS block clones that replace duplicates).
 
 pub mod appearance;
 pub mod fsinfo;
 pub mod io;
+pub mod link;
 pub mod locks;
 pub mod owner;
 pub mod private_dir;

@@ -55,6 +55,10 @@ pub trait Source: Sync {
     fn open(&self, path: &Path) -> io::Result<Box<dyn ReadSeek>>;
     /// `Some(true)` for a spinning disk (read one file at a time).
     fn seek_penalty(&self, path: &Path) -> Option<bool>;
+    /// How a duplicate on the volume of `path` can be replaced by a link.
+    fn link_mode(&self, _path: &Path) -> Option<crate::LinkKind> {
+        None
+    }
 }
 
 /// The real filesystem (`nfd_platform::fsinfo` + `nfd_platform::io`).
@@ -83,6 +87,13 @@ impl Source for LiveSource {
 
     fn seek_penalty(&self, path: &Path) -> Option<bool> {
         nfd_platform::volumes::seek_penalty(path)
+    }
+
+    fn link_mode(&self, path: &Path) -> Option<crate::LinkKind> {
+        nfd_platform::link::mode(path).map(|m| match m {
+            nfd_platform::link::LinkMode::Clone => crate::LinkKind::Clone,
+            nfd_platform::link::LinkMode::Hardlink => crate::LinkKind::Hardlink,
+        })
     }
 }
 

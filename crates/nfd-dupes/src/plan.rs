@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::hash::{self, Ctx, Source};
 use crate::keep::Selection;
-use crate::{DupeGroup, FileCopy};
+use crate::{DupeGroup, FileCopy, LinkKind};
 
 /// What happens to the copies that go.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -28,16 +28,141 @@ pub enum Action {
     Recycle,
     /// The app's quarantine, restorable for 7 days (Expert; faster for many files).
     Quarantine,
+    /// Replaced by a link to the copy that stays: a block clone on ReFS / Dev
+    /// Drive, else a hard link on NTFS; the original is quarantined for 7 days.
+    Link,
 }
 
-impl Action {
-    #[must_use]
-    pub const fn mode(self) -> DeleteMode {
-        match self {
-            Self::Recycle => DeleteMode::RecycleBin,
-            Self::Quarantine => DeleteMode::Quarantine,
-        }
+/// File types replaced by a hard link without asking: rarely edited in place
+/// (photos, videos, music, installers, disk images, archives, AI models). Other
+/// types must be ticked by hand; block clones are independent copies and fine for
+/// any type.
+pub const LINK_EXTS: &[&str] = &[
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+    "bmp",
+    "heic",
+    "heif",
+    "tif",
+    "tiff",
+    "dng",
+    "cr2",
+    "cr3",
+    "nef",
+    "arw",
+    "raf",
+    "orf",
+    "rw2",
+    "mp4",
+    "mkv",
+    "mov",
+    "avi",
+    "wmv",
+    "webm",
+    "m4v",
+    "mts",
+    "m2ts",
+    "3gp",
+    "mp3",
+    "flac",
+    "wav",
+    "m4a",
+    "aac",
+    "ogg",
+    "opus",
+    "wma",
+    "exe",
+    "msi",
+    "msix",
+    "appx",
+    "iso",
+    "img",
+    "vhd",
+    "vhdx",
+    "zip",
+    "7z",
+    "rar",
+    "tar",
+    "gz",
+    "xz",
+    "bz2",
+    "zst",
+    "cab",
+    "gguf",
+    "safetensors",
+    "ckpt",
+    "onnx",
+    "pt",
+    "pth",
+];
+
+/// How `copy` can become a link to `keeper`, or why not.
+///
+/// # Errors
+/// `other-volume`, `no-link-support` (FAT, network…), `cloud-sync` (sync clients do
+/// not keep hard links), `git` or `app-folder`.
+pub fn can_link(keeper: &FileCopy, copy: &FileCopy) -> Result<LinkKind, &'static str> {
+    if keeper.volume != copy.volume {
+        return Err("other-volume");
     }
+    let kind = copy.link.ok_or("no-link-support")?;
+    if keeper.flags.cloud || copy.flags.cloud {
+        return Err("cloud-sync");
+    }
+    if keeper.flags.git || copy.flags.git {
+        return Err("git");
+    }
+    if keeper.flags.app_dir || copy.flags.app_dir {
+        return Err("app-folder");
+    }
+    Ok(kind)
+}
+
+/// `true` when `path` is of a type [`LINK_EXTS`] lists.
+#[must_use]
+pub fn link_by_default(path: &Path) -> bool {
+    path.extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .is_some_and(|e| LINK_EXTS.contains(&e.as_str()))
+}
+
+/// The part of `selections` that [`Action::Link`] can carry out: copies that can be
+/// linked to their keeper, and — for hard links — only of the types in
+/// [`LINK_EXTS`] unless `other_types`.
+#[must_use]
+pub fn link_selection(
+    groups: &[DupeGroup],
+    selections: &[Selection],
+    other_types: bool,
+) -> Vec<Selection> {
+    let by_id: HashMap<u32, &DupeGroup> = groups.iter().map(|g| (g.id, g)).collect();
+    selections
+        .iter()
+        .filter_map(|s| {
+            let g = by_id.get(&s.group)?;
+            let keeper = &g.copies[copy_index(g, &s.keep)?];
+            let remove: Vec<PathBuf> = s
+                .remove
+                .iter()
+                .filter(|p| {
+                    copy_index(g, p).is_some_and(|i| match can_link(keeper, &g.copies[i]) {
+                        Ok(LinkKind::Clone) => true,
+                        Ok(LinkKind::Hardlink) => other_types || link_by_default(p),
+                        Err(_) => false,
+                    })
+                })
+                .cloned()
+                .collect();
+            (!remove.is_empty()).then(|| Selection {
+                group: s.group,
+                keep: s.keep.clone(),
+                remove,
+            })
+        })
+        .collect()
 }
 
 /// Why a selection cannot become a plan.
@@ -51,6 +176,12 @@ pub enum PlanError {
     NotInGroup { group: u32, path: PathBuf },
     #[error("group {0} would lose every copy: one must stay")]
     NothingKept(u32),
+    #[error("{path} cannot become a link to the copy that stays ({why})")]
+    CannotLink {
+        group: u32,
+        path: PathBuf,
+        why: &'static str,
+    },
 }
 
 /// Index of the copy `path` names (its path or one of its hard links).
@@ -108,6 +239,21 @@ pub fn plan(
         let keeper = g.copies[keep].path.clone();
         for i in remove {
             let c = &g.copies[i];
+            let mode = match action {
+                Action::Recycle => DeleteMode::RecycleBin,
+                Action::Quarantine => DeleteMode::Quarantine,
+                Action::Link => match can_link(&g.copies[keep], c) {
+                    Ok(LinkKind::Hardlink) => DeleteMode::Hardlink,
+                    Ok(LinkKind::Clone) => DeleteMode::Clone,
+                    Err(why) => {
+                        return Err(PlanError::CannotLink {
+                            group: g.id,
+                            path: c.path.clone(),
+                            why,
+                        });
+                    }
+                },
+            };
             for (n, path) in std::iter::once(&c.path).chain(&c.links).enumerate() {
                 items.push(PlanItem {
                     path: path.clone(),
@@ -119,7 +265,7 @@ pub fn plan(
                     size: g.size,
                     mtime: c.mtime,
                     requires_closed: Vec::new(),
-                    mode: action.mode(),
+                    mode,
                     selected: true,
                     keeper: Some(keeper.clone()),
                 });
