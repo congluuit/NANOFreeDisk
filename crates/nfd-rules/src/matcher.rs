@@ -13,6 +13,10 @@
 //! or an unreadable sub-folder. Then it is split and only what may go is proposed.
 //! Every candidate is checked with the lexical [`SafetyGate`] right away; refused ones
 //! are counted, never proposed.
+//!
+//! The paths of 🔴 Protected rules ("🔒 Keep": config, credentials, extensions,
+//! memories…) are an `exclude` of **every** rule, so a broad cache rule can never
+//! sweep up something another rule promises to keep.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -199,6 +203,8 @@ struct CompiledRule {
 #[derive(Debug, Clone)]
 pub struct Matcher {
     rules: Vec<CompiledRule>,
+    /// Paths of 🔴 Protected rules, excluded from every rule.
+    keep: Vec<GlobMatcher>,
     gate: SafetyGate,
 }
 
@@ -262,6 +268,7 @@ impl Matcher {
     #[must_use]
     pub fn new(packs: &[Pack], resolve: &impl Fn(&str) -> Option<String>, platform: &str) -> Self {
         let mut rules = Vec::new();
+        let mut keep = Vec::new();
         for pack in packs {
             for rule in &pack.rules {
                 if !rule.platform.iter().any(|p| p == platform) {
@@ -273,6 +280,14 @@ impl Matcher {
                     .filter_map(|p| expand(p, resolve))
                     .filter_map(|p| compile_path(&p))
                     .collect();
+                if rule.level == RiskLevel::Protected {
+                    keep.extend(
+                        rule.paths
+                            .iter()
+                            .filter_map(|p| expand(p, resolve))
+                            .filter_map(|p| glob(&p.replace('\\', "/"), true)),
+                    );
+                }
                 let exclude = rule
                     .exclude
                     .iter()
@@ -289,6 +304,7 @@ impl Matcher {
         }
         Self {
             rules,
+            keep,
             gate: SafetyGate::new(resolve),
         }
     }
@@ -339,6 +355,7 @@ impl Matcher {
             }
             let mut walk = Walk {
                 rule: compiled,
+                keep: &self.keep,
                 opts,
                 gate: &self.gate,
                 cutoff: opts.now - i64::from(rule.min_age_days) * 86_400,
@@ -435,6 +452,7 @@ fn match_parts(parts: &[Part], names: &[&str]) -> bool {
 
 struct Walk<'a> {
     rule: &'a CompiledRule,
+    keep: &'a [GlobMatcher],
     opts: &'a MatchOptions,
     gate: &'a SafetyGate,
     cutoff: i64,
@@ -549,7 +567,11 @@ impl Walk<'_> {
 
     fn excluded(&self, path: &Path) -> bool {
         let text = slash(path);
-        self.rule.exclude.iter().any(|e| e.is_match(&text))
+        self.rule
+            .exclude
+            .iter()
+            .chain(self.keep)
+            .any(|e| e.is_match(&text))
     }
 
     /// Propose `path` (a match): as a whole if possible, else split.
@@ -842,6 +864,33 @@ verified_on = 2026-10-16
         assert_eq!(names(&report, root), ["D/sub/b.bin"]);
         fs::remove_dir(&link).expect("rm link");
         fs::remove_dir(&inner).expect("rm link");
+    }
+
+    #[test]
+    fn protected_rules_are_kept_out_of_every_rule() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write(&root.join("A/cache/x.bin"), 1);
+        write(&root.join("A/settings.json"), 1);
+        write(&root.join("A/memory/notes.md"), 1);
+        let mut packs = vec![pack(r#""${LOCALAPPDATA}/A/**""#, "")];
+        let mut keep = packs[0].rules[0].clone();
+        keep.id = "t.keep".into();
+        keep.level = RiskLevel::Protected;
+        keep.paths = vec![
+            "${LOCALAPPDATA}/A/settings.json".into(),
+            "${LOCALAPPDATA}/A/memory/**".into(),
+        ];
+        packs[0].rules.push(keep);
+        let root_text = slash(root);
+        let resolve = move |v: &str| (v == "LOCALAPPDATA").then(|| root_text.clone());
+        let report = Matcher::new(&packs, &resolve, std::env::consts::OS).scan(
+            &|_, _| true,
+            &MatchOptions::default(),
+            &[],
+        );
+        assert_eq!(names(&report, root), ["A/cache"]);
+        assert!(report.rules[0].skipped >= 2);
     }
 
     #[test]

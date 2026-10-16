@@ -1,0 +1,183 @@
+# NANOFreeDisk rule pack: game engines (machine-wide caches)
+# Schema: see docs/DEVTOOL_CACHE_CATALOG.md §4.1 and crates/nfd-rules/src/lib.rs
+# Per-project folders (Unity Library/Temp, Unreal Intermediate/DerivedDataCache, Godot
+# .godot) are found by marker files in nfd-devtools::artifacts (C9), not by rules.
+# Installed editors are 🔴: uninstall them from Unity Hub / Epic Games Launcher.
+
+[pack]
+id          = "game-engines"
+name        = "Game engines"
+version     = "0.1.0"
+description = "Machine-wide caches and logs of Unity, Unity Hub, Unreal Engine, the Epic Games Launcher and Godot."
+devcache    = true
+
+# ───────────────────────────── Unity ─────────────────────────────
+
+[[rule]]
+id              = "unity.editor.logs"
+vendor          = "Unity"
+app             = "Unity Editor"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Unity/Editor/*.log", "${LOCALAPPDATA}/Unity/Editor/Crashes/**"]
+exclude         = ["${LOCALAPPDATA}/Unity/Editor/Editor.log"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["Unity.exe"]
+impact          = "Editor logs and crash reports; only material for bug reports is lost."
+impact_vi       = "Nhật ký và báo cáo lỗi của Editor; chỉ mất tư liệu để báo lỗi."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "unity.cache"
+vendor          = "Unity"
+app             = "Unity Editor"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Unity/cache/**", "${LOCALAPPDATA}/Unity/Caches/**"]
+level           = "caution"
+requires_closed = ["Unity.exe", "Unity Hub.exe"]
+impact          = "Global package and GI caches shared by all projects. Packages are resolved and lighting data rebuilt again on the next open (slower once)."
+impact_vi       = "Bộ đệm package và GI dùng chung cho mọi dự án. Lần mở sau phải resolve package và dựng lại dữ liệu ánh sáng (chậm hơn một lần)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "unity.asset-store"
+vendor          = "Unity"
+app             = "Unity Editor"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Unity/Asset Store-5.x/**"]
+level           = "caution"
+requires_closed = ["Unity.exe"]
+impact          = "Asset Store packages you downloaded. Projects keep their imported copies; you download a package again from My Assets to import it elsewhere."
+impact_vi       = "Gói Asset Store bạn đã tải. Dự án vẫn giữ bản đã import; muốn import vào dự án khác phải tải lại từ My Assets."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "unity.hub.cache"
+vendor          = "Unity"
+app             = "Unity Hub"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/UnityHub/Cache/**", "${APPDATA}/UnityHub/Code Cache/**", "${APPDATA}/UnityHub/GPUCache/**",
+  "${APPDATA}/UnityHub/DawnCache/**", "${APPDATA}/UnityHub/logs/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Unity Hub.exe"]
+impact          = "Electron caches and logs of Unity Hub; your project list and installed editors are kept."
+impact_vi       = "Bộ đệm Electron và nhật ký của Unity Hub; giữ nguyên danh sách dự án và Editor đã cài."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "unity.keep"
+vendor          = "Unity"
+app             = "Unity Editor"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Unity/Editor-5.x/**", "${APPDATA}/UnityHub/*.json", "${PROGRAMDATA}/Unity/**", "${LOCALAPPDATA}/Unity/Editor/Editor.log"]
+level           = "protected"
+impact          = "Editor preferences, Hub settings, licenses and the log of the running editor. Uninstall editors from Unity Hub."
+impact_vi       = "Tùy chọn Editor, thiết lập Hub, giấy phép và nhật ký của Editor đang chạy. Gỡ Editor trong Unity Hub."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Unreal / Epic ─────────────────────────────
+
+[[rule]]
+id              = "epic.unreal.ddc"
+vendor          = "Epic Games"
+app             = "Unreal Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/UnrealEngine/Common/DerivedDataCache/**"]
+level           = "caution"
+requires_closed = ["UnrealEditor.exe", "UE4Editor.exe", "ShaderCompileWorker.exe"]
+impact          = "The shared local Derived Data Cache (compiled shaders, cooked assets) of every project. Opening a project compiles everything again (can take hours)."
+impact_vi       = "Derived Data Cache cục bộ dùng chung (shader đã biên dịch, asset đã cook) của mọi dự án. Mở dự án sẽ phải biên dịch lại tất cả (có thể mất hàng giờ)."
+docs            = "https://dev.epicgames.com/documentation/en-us/unreal-engine/derived-data-cache"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "epic.unreal.zen"
+vendor          = "Epic Games"
+app             = "Unreal Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/UnrealEngine/Common/Zen/Data/**"]
+level           = "caution"
+requires_closed = ["UnrealEditor.exe", "zenserver.exe"]
+impact          = "The Zen storage server's cache (UE 5.4+ DDC). Shaders and cooked data are rebuilt on the next open."
+impact_vi       = "Bộ đệm của Zen storage server (DDC từ UE 5.4). Shader và dữ liệu cook được dựng lại ở lần mở sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "epic.unreal.logs"
+vendor          = "Epic Games"
+app             = "Unreal Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/UnrealEngine/*/Saved/Logs/**", "${LOCALAPPDATA}/UnrealEngine/*/Saved/Crashes/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["UnrealEditor.exe", "UE4Editor.exe"]
+impact          = "Engine-wide logs and crash reports."
+impact_vi       = "Nhật ký và báo cáo lỗi của engine."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "epic.unreal.config"
+vendor          = "Epic Games"
+app             = "Unreal Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/UnrealEngine/*/Saved/Config/**", "${LOCALAPPDATA}/UnrealEngine/Common/Zen/Install/**"]
+level           = "protected"
+impact          = "Editor preferences and the Zen server installation. Uninstall engine versions from the Epic Games Launcher."
+impact_vi       = "Tùy chọn Editor và bản cài Zen server. Gỡ phiên bản engine trong Epic Games Launcher."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "epic.launcher.cache"
+vendor          = "Epic Games"
+app             = "Epic Games Launcher"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/EpicGamesLauncher/Saved/webcache*/**", "${LOCALAPPDATA}/EpicGamesLauncher/Saved/Logs/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["EpicGamesLauncher.exe", "EpicWebHelper.exe"]
+impact          = "Web cache and logs of the launcher; it downloads its pages again (a common fix for a blank launcher)."
+impact_vi       = "Bộ đệm web và nhật ký của launcher; launcher tải lại trang (cách sửa thường dùng khi launcher trắng trang)."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Godot ─────────────────────────────
+
+[[rule]]
+id              = "godot.cache"
+vendor          = "Godot"
+app             = "Godot Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Godot/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Godot.exe"]
+impact          = "Editor cache (thumbnails, shader cache); rebuilt by the editor."
+impact_vi       = "Bộ đệm Editor (ảnh thu nhỏ, shader cache); Editor tự tạo lại."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "godot.keep"
+vendor          = "Godot"
+app             = "Godot Engine"
+category        = "game-engine"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Godot/**"]
+level           = "protected"
+impact          = "Editor settings, export templates and the save data of games run from the editor (app_userdata)."
+impact_vi       = "Thiết lập Editor, export template và dữ liệu lưu của game chạy từ Editor (app_userdata)."
+verified_on     = 2026-10-16

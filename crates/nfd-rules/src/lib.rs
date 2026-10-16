@@ -38,6 +38,10 @@ pub struct PackMeta {
     pub version: String,
     #[serde(default)]
     pub description: String,
+    /// Developer caches (AI tools, IDEs, package managers, game engines): shown in the
+    /// DevCache view grouped by vendor (PHASE4_DEVCACHE §2.1).
+    #[serde(default)]
+    pub devcache: bool,
 }
 
 /// One rule: a set of path templates plus everything the UI needs to explain it.
@@ -169,14 +173,30 @@ pub const BUILTIN_PACK_FILES: &[(&str, &str)] = &[
         include_str!("../../../rules/browsers.toml"),
     ),
     (
+        "game-engines.toml",
+        include_str!("../../../rules/game-engines.toml"),
+    ),
+    (
         "gpu-shader-cache.toml",
         include_str!("../../../rules/gpu-shader-cache.toml"),
+    ),
+    (
+        "ide-editors.toml",
+        include_str!("../../../rules/ide-editors.toml"),
+    ),
+    (
+        "package-managers.toml",
+        include_str!("../../../rules/package-managers.toml"),
     ),
     (
         "windows-system.toml",
         include_str!("../../../rules/windows-system.toml"),
     ),
 ];
+
+/// The DevCache catalog (packs with `devcache = true`) must keep at least this many
+/// rules (PLAN §8, Phase 4 DoD).
+pub const DEVCACHE_MIN_RULES: usize = 60;
 
 /// Parse the [`BUILTIN_PACK_FILES`].
 ///
@@ -521,6 +541,86 @@ verified_on = 2026-10-16
                 .iter()
                 .all(|r| r.level == RiskLevel::Safe && r.regenerates)
         );
+    }
+
+    fn devcache_rules() -> Vec<Rule> {
+        builtin_packs()
+            .expect("builtin")
+            .into_iter()
+            .filter(|p| p.pack.devcache)
+            .flat_map(|p| p.rules)
+            .collect()
+    }
+
+    /// PHASE4_DEVCACHE DoD: the DevCache catalog has at least 60 rules.
+    #[test]
+    fn devcache_catalog_has_sixty_rules() {
+        let packs = builtin_packs().expect("builtin");
+        let ids: Vec<&str> = packs
+            .iter()
+            .filter(|p| p.pack.devcache)
+            .map(|p| p.pack.id.as_str())
+            .collect();
+        for want in [
+            "ai-tools",
+            "ide-editors",
+            "package-managers",
+            "game-engines",
+        ] {
+            assert!(ids.contains(&want), "{want} is not a devcache pack");
+        }
+        let rules = devcache_rules();
+        assert!(rules.len() >= DEVCACHE_MIN_RULES, "{} rules", rules.len());
+        // every vendor keeps something visible (🔒) or offers something to clean
+        assert!(rules.iter().any(|r| r.level == RiskLevel::Protected));
+    }
+
+    /// No DevCache rule that deletes anything may reach config, credentials, installed
+    /// extensions or toolchains: those are 🔴 Protected rules ("kept").
+    #[test]
+    fn devcache_rules_spare_config_and_credentials() {
+        const NEVER: &[&str] = &[
+            "settings.json",
+            "keybindings",
+            "credentials",
+            "auth.json",
+            "token",
+            "/extensions/",
+            "/.ssh",
+            "config.toml",
+            "config.json",
+            "mcp",
+            "/memory",
+            "/bin/",
+            "toolchains",
+            "/envs/",
+            "state.vscdb",
+            "keystore",
+            "adbkey",
+            "/.git/",
+            "conversations",
+            "threads",
+        ];
+        for rule in devcache_rules() {
+            if !rule.level.is_deletable() {
+                continue;
+            }
+            for path in &rule.paths {
+                let lower = path.to_lowercase();
+                assert!(
+                    !NEVER.iter().any(|n| lower.contains(n)),
+                    "{}: {path} reaches something users keep",
+                    rule.id
+                );
+            }
+            if rule.level == RiskLevel::Safe {
+                assert!(
+                    rule.regenerates,
+                    "{} is safe but does not regenerate",
+                    rule.id
+                );
+            }
+        }
     }
 
     /// The real rule packs shipped in `rules/` must always validate.
