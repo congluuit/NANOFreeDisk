@@ -41,6 +41,9 @@ use crate::plan::CleanPlan;
 pub enum Origin {
     /// Picked by hand (Analyze, Old & Large, Tidy up).
     Manual,
+    /// A copy of duplicated contents (Duplicates view, `nfd dupes`): held to the
+    /// hand-picked standard, except that cloud placeholders are always refused.
+    Duplicate { group: u32 },
     /// Proposed by a rule of the given level.
     Rule { level: RiskLevel },
 }
@@ -388,7 +391,7 @@ impl SafetyGate {
         }
         let mut warnings = Vec::new();
         if facts.cloud {
-            if rule {
+            if rule || matches!(origin, Origin::Duplicate { .. }) {
                 return Err(Blocked::CloudFile);
             }
             warnings.push(Warning::CloudPlaceholder);

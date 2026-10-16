@@ -268,6 +268,28 @@ pub fn execute(
     opts: &ExecOptions,
     progress: &mut dyn FnMut(usize, usize, &ItemResult) -> bool,
 ) -> Operation {
+    execute_verified(plan, gate, probe, opts, &mut |_| Ok(()), progress)
+}
+
+/// Why a feature-specific check refused an item right before it was acted on
+/// (stable `code` for the journal and the UI, and a message).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Refusal {
+    pub code: &'static str,
+    pub message: String,
+}
+
+/// [`execute`] with one more check per item, run after the SafetyGate and
+/// immediately before the item is touched (Duplicates: the keeper and the copy
+/// still hold the same bytes). A refused item is skipped with the refusal's code.
+pub fn execute_verified(
+    plan: &CleanPlan,
+    gate: &SafetyGate,
+    probe: &dyn Probe,
+    opts: &ExecOptions,
+    verify: &mut dyn FnMut(&PlanItem) -> Result<(), Refusal>,
+    progress: &mut dyn FnMut(usize, usize, &ItemResult) -> bool,
+) -> Operation {
     let total = plan.items.len();
     let keys: Vec<Option<String>> = plan.items.iter().map(|i| comparable(&i.path)).collect();
     let mut op = Operation {
@@ -319,7 +341,14 @@ pub fn execute(
                     }
                     Ok(warnings) => {
                         result.warnings = warnings;
-                        act(item, &mut result, opts, &mut op_dirs);
+                        match verify(item) {
+                            Ok(()) => act(item, &mut result, opts, &mut op_dirs),
+                            Err(refusal) => {
+                                result.status = ItemStatus::Skipped;
+                                result.reason = Some(refusal.code.into());
+                                result.message = Some(refusal.message);
+                            }
+                        }
                     }
                 }
             }
@@ -670,6 +699,7 @@ mod tests {
             requires_closed: Vec::new(),
             mode: DeleteMode::Quarantine,
             selected: true,
+            keeper: None,
         }
     }
 

@@ -10,11 +10,14 @@ use std::time::Duration;
 use anyhow::Context;
 use clap::Args;
 use indicatif::{ProgressBar, ProgressStyle};
+use nfd_core::plan::CleanPlan;
 use nfd_core::safety::SafetyGate;
 use nfd_core::scanner::{self, ScanEvent, ScanOptions, ScanTree};
 use nfd_core::units::{format_count, format_size, parse_size};
 use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::LiveSource;
+use nfd_dupes::keep::{KeepStrategy, auto_select};
+use nfd_dupes::plan::{Action, Verifier, plan};
 use nfd_dupes::{CopyFlags, DupeOptions, DupeReport, Phase, Progress};
 use nfd_platform::Platform;
 
@@ -62,9 +65,37 @@ pub struct DupesArgs {
     #[arg(long)]
     no_cache: bool,
 
-    /// History database holding the hash cache [default: the desktop app's].
+    /// History database holding the hash cache and the undo journal [default: the
+    /// desktop app's].
     #[arg(long, value_name = "FILE")]
     db: Option<PathBuf>,
+
+    /// Which copy stays: auto (outside Downloads/Temp/Desktop, then the oldest),
+    /// oldest, newest, shortest, or prefer:<dir>[;<dir>…]. Copies in cloud-sync
+    /// folders, git working trees, application folders and read-only files are kept
+    /// and never removed by this command.
+    #[arg(long, default_value = "auto", value_name = "STRATEGY")]
+    keep: KeepStrategy,
+
+    /// What to do with the other copies: list (default), recycle (Recycle Bin) or
+    /// quarantine (restorable for 7 days). Nothing happens without --apply.
+    #[arg(long, value_enum, default_value_t = DupeAction::List)]
+    action: DupeAction,
+
+    /// Carry out --action (after a confirmation unless --yes).
+    #[arg(long)]
+    apply: bool,
+
+    /// Do not ask for confirmation.
+    #[arg(long, requires = "apply")]
+    yes: bool,
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DupeAction {
+    List,
+    Recycle,
+    Quarantine,
 }
 
 fn parse_size_arg(s: &str) -> Result<u64, String> {
@@ -73,6 +104,9 @@ fn parse_size_arg(s: &str) -> Result<u64, String> {
 
 pub fn run(args: DupesArgs) -> anyhow::Result<ExitCode> {
     let report = search(&args)?;
+    if args.action != DupeAction::List {
+        return act(&args, &report);
+    }
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout.lock());
     let written = if args.json {
@@ -186,6 +220,74 @@ fn scan(path: &Path) -> anyhow::Result<ScanTree> {
         .join()
         .map_err(|_| anyhow::anyhow!("scan thread panicked"))?
         .with_context(|| format!("scanning {}", path.display()))
+}
+
+/// The plan for `--action`, printed (dry run) or carried out (`--apply`).
+fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
+    let action = match args.action {
+        DupeAction::Quarantine => Action::Quarantine,
+        _ => Action::Recycle,
+    };
+    let selections = auto_select(&report.groups, &args.keep);
+    let plan: CleanPlan = plan(&report.groups, &selections, action)?;
+    if !args.json {
+        for s in &selections {
+            println!("\n#{} keep {}", s.group, s.keep.display());
+            for p in &s.remove {
+                println!("   remove {}", p.display());
+            }
+        }
+    }
+    if plan.items.is_empty() {
+        println!("Nothing to remove.");
+        return Ok(ExitCode::SUCCESS);
+    }
+    let target = match action {
+        Action::Recycle => "the Recycle Bin",
+        Action::Quarantine => "the quarantine",
+    };
+    if !args.apply {
+        if args.json {
+            let v = serde_json::json!({
+                "schema": nfd_dupes::SCHEMA,
+                "report": report,
+                "selections": selections,
+                "plan": plan,
+            });
+            println!("{}", serde_json::to_string_pretty(&v)?);
+        } else {
+            println!(
+                "\nDry run: would move {} in {} file(s) to {target}, keeping one copy of {} group(s). Add --apply to do it.",
+                format_size(plan.selected_bytes()),
+                plan.items.len(),
+                selections.len()
+            );
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    if !crate::quarantine::confirm(&plan, args.yes)? {
+        return Ok(ExitCode::FAILURE);
+    }
+    // every copy and its keeper are hashed again right before the move
+    let mut verifier = Verifier::new(&LiveSource, &report.groups);
+    let (op, journal_ok) = crate::quarantine::execute_verified(
+        &plan,
+        "dupes",
+        args.db.clone(),
+        args.json,
+        &mut |item| verifier.check(item),
+    );
+    if args.json {
+        let v = serde_json::json!({
+            "schema": nfd_dupes::SCHEMA,
+            "selections": selections,
+            "operation": op,
+        });
+        println!("{}", serde_json::to_string_pretty(&v)?);
+    } else {
+        crate::quarantine::print_outcome(&op, journal_ok);
+    }
+    Ok(crate::quarantine::exit_code(&op))
 }
 
 /// Short markers for a copy's flags.

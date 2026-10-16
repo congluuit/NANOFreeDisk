@@ -59,6 +59,10 @@ pub struct PlanItem {
     pub requires_closed: Vec<String>,
     pub mode: DeleteMode,
     pub selected: bool,
+    /// Duplicates: the copy that stays, checked again (and, for links, linked to)
+    /// right before this one is acted on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub keeper: Option<PathBuf>,
 }
 
 impl PlanItem {
@@ -77,6 +81,7 @@ impl PlanItem {
             requires_closed: Vec::new(),
             mode: DeleteMode::RecycleBin,
             selected: true,
+            keeper: None,
         }
     }
 
@@ -84,7 +89,7 @@ impl PlanItem {
     #[must_use]
     pub const fn level(&self) -> RiskLevel {
         match self.origin {
-            Origin::Manual => RiskLevel::Safe,
+            Origin::Manual | Origin::Duplicate { .. } => RiskLevel::Safe,
             Origin::Rule { level } => level,
         }
     }
@@ -169,7 +174,7 @@ pub fn build(candidates: Vec<PlanItem>, opts: PlanOptions) -> CleanPlan {
         .filter_map(|mut c| {
             let key = comparable(&c.path)?;
             c.selected = match c.origin {
-                Origin::Manual => true,
+                Origin::Manual | Origin::Duplicate { .. } => true,
                 Origin::Rule { level } => match level {
                     RiskLevel::Safe => true,
                     RiskLevel::Caution => opts.include_caution,
@@ -177,7 +182,7 @@ pub fn build(candidates: Vec<PlanItem>, opts: PlanOptions) -> CleanPlan {
                 },
             };
             c.mode = match c.origin {
-                Origin::Manual => DeleteMode::RecycleBin,
+                Origin::Manual | Origin::Duplicate { .. } => DeleteMode::RecycleBin,
                 Origin::Rule {
                     level: RiskLevel::Safe,
                 } if opts.permanent && opts.expert => DeleteMode::Permanent,
@@ -233,6 +238,7 @@ mod tests {
             requires_closed: Vec::new(),
             mode: DeleteMode::RecycleBin,
             selected: false,
+            keeper: None,
         }
     }
 

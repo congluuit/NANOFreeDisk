@@ -101,11 +101,19 @@ pub fn confirm(plan: &CleanPlan, yes: bool) -> anyhow::Result<bool> {
     } else if yes {
         true
     } else {
-        let answer = ask(&format!(
-            "Move {} in {selected} item(s) to the quarantine (restorable for {} days)? [y/N] ",
-            format_size(bytes),
-            exec::QUARANTINE_TTL_DAYS
-        ))?;
+        let to_bin = plan.selected().all(|i| i.mode == DeleteMode::RecycleBin);
+        let answer = ask(&if to_bin {
+            format!(
+                "Move {} in {selected} item(s) to the Recycle Bin? [y/N] ",
+                format_size(bytes)
+            )
+        } else {
+            format!(
+                "Move {} in {selected} item(s) to the quarantine (restorable for {} days)? [y/N] ",
+                format_size(bytes),
+                exec::QUARANTINE_TTL_DAYS
+            )
+        })?;
         matches!(answer.to_lowercase().as_str(), "y" | "yes" | "c" | "co")
     };
     if !ok {
@@ -122,6 +130,17 @@ pub fn execute(
     kind: &str,
     db: Option<PathBuf>,
     quiet: bool,
+) -> (Operation, bool) {
+    execute_verified(plan, kind, db, quiet, &mut |_| Ok(()))
+}
+
+/// [`execute`] with a last feature-specific check per item (Duplicates).
+pub fn execute_verified(
+    plan: &CleanPlan,
+    kind: &str,
+    db: Option<PathBuf>,
+    quiet: bool,
+    verify: &mut dyn FnMut(&nfd_core::plan::PlanItem) -> Result<(), exec::Refusal>,
 ) -> (Operation, bool) {
     let platform = nfd_platform::Native;
     let gate = SafetyGate::new(&platform.resolver());
@@ -147,7 +166,7 @@ pub fn execute(
         ProgressStyle::with_template("{bar:30} {pos}/{len} {wide_msg}")
             .unwrap_or_else(|_| ProgressStyle::default_bar()),
     );
-    let op = exec::execute(plan, &gate, &LiveProbe, &opts, &mut |done, _, r| {
+    let op = exec::execute_verified(plan, &gate, &LiveProbe, &opts, verify, &mut |done, _, r| {
         bar.set_position(done as u64);
         bar.set_message(r.path.display().to_string());
         true

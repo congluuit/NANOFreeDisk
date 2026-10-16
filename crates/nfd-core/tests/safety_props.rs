@@ -197,6 +197,7 @@ proptest! {
                     requires_closed: Vec::new(),
                     mode: DeleteMode::Quarantine,
                     selected: false,
+        keeper: None,
                 }
             })
             .collect();

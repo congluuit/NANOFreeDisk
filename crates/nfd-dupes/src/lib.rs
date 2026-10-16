@@ -16,12 +16,17 @@
 //! 5. **Paranoid** (optional) — byte-by-byte comparison within each group.
 //!
 //! Hashes are cached in the history database ([`cache`]) by volume, file id, size
-//! and last write, so a second run reads almost nothing. Nothing here deletes
-//! anything.
+//! and last write, so a second run reads almost nothing.
+//!
+//! Nothing here deletes anything: [`keep`] picks the copy that stays, [`plan`]
+//! turns a selection into a `CleanPlan` for the Phase 3 path (SafetyGate → Executor
+//! → UndoJournal) and checks keeper and copy again right before each item.
 
 pub mod cache;
 pub mod collect;
 pub mod hash;
+pub mod keep;
+pub mod plan;
 
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroUsize;

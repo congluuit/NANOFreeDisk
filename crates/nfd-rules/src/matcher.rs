@@ -67,6 +67,7 @@ impl Candidate {
             requires_closed: requires_closed.to_vec(),
             mode: DeleteMode::Quarantine,
             selected: false,
+            keeper: None,
         }
     }
 }

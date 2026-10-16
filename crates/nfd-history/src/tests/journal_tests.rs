@@ -47,6 +47,7 @@ fn item(path: &Path) -> PlanItem {
         requires_closed: Vec::new(),
         mode: DeleteMode::Quarantine,
         selected: true,
+        keeper: None,
     }
 }
 

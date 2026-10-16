@@ -711,6 +711,29 @@ fn live_cloud_placeholder_warns_for_manual() {
     );
 }
 
+#[test]
+fn live_cloud_placeholder_refused_for_duplicates() {
+    let fake = Fake::default().file(DL, 1, 1).with(DL, |f| f.cloud = true);
+    assert_eq!(
+        live_code(&fake, Origin::Duplicate { group: 3 }, DL),
+        "cloud-file"
+    );
+}
+
+#[test]
+fn duplicates_follow_the_hand_picked_rules() {
+    let dupe = Origin::Duplicate { group: 1 };
+    assert_eq!(code(dupe, r"C:\Users\nano\Downloads\x.jpg"), "ok");
+    assert_eq!(code(dupe, r"C:\Users\nano\Documents\x.jpg"), "ok");
+    assert_eq!(code(dupe, r"C:\Windows\Web\x.jpg"), "system-dir");
+    assert_eq!(code(dupe, r"C:\Program Files\App\x.dll"), "protected");
+    assert_eq!(
+        code(dupe, r"C:\Users\nano\.claude\projects\p\s.jsonl"),
+        "protected"
+    );
+    assert_eq!(code(dupe, r"C:\Users\nano\Documents"), "contains-protected");
+}
+
 fn exp(is_dir: bool, size: u64, mtime: i64) -> Option<Expected> {
     Some(Expected {
         is_dir,
@@ -841,6 +864,7 @@ fn item(path: &str, origin: Origin, bytes: u64) -> PlanItem {
         requires_closed: Vec::new(),
         mode: DeleteMode::Quarantine,
         selected: true,
+        keeper: None,
     }
 }
 

@@ -203,6 +203,7 @@ fn the_executor_never_moves_a_transcript() {
             requires_closed: Vec::new(),
             mode,
             selected: true,
+            keeper: None,
         }
     };
     let plan = CleanPlan {
