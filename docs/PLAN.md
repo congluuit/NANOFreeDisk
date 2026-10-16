@@ -547,7 +547,7 @@ NANOFreeDisk/
 
 **Phase 6 — Monitor (Disk Activity)** (chi tiết: `docs/PHASE6_MONITOR.md`)
 
-- [ ] Crate `nfd-monitor`: model, rates từ `IO_COUNTERS` (PID + create time), aggregator, chart 600 × 1 s, downsample phút, `SpamWatch` (C8) + tệp log > 1 GB; PDH theo ổ vật lý; `nfd monitor` (Counters), schema `nanofreedisk.monitor.v1`
+- [x] Crate `nfd-monitor`: model, rates từ `IO_COUNTERS` (PID + create time; tiến trình mới giữa hai mẫu tính từ 0), `Monitor::ingest`, chart 600 × 1 s, downsample phút, `SpamWatch` (C8, vượt ngưỡng liên tục, cho phép hụt ≤ 5 s, báo lại sau 1 phút yên) + tệp log > 1 GB; PDH theo ổ vật lý (đọc/ghi, transfers, hàng đợi, độ trễ, % rảnh); `nfd monitor [--seconds] [--interval] [--top] [--json]` (Counters), schema `nanofreedisk.monitor.v1`; `nfd-tasks` lộ `processes()` + số thao tác đọc/ghi
 - [ ] ETW: phiên SystemTraceProvider riêng (`FILE_IO_INIT`, `DISK_FILE_IO`, `THREAD`), parser FileIo v2/v3 + Thread (test bản ghi tổng hợp), map thiết bị → ổ, dừng phiên mồ côi, lưới an toàn `etw-silent`; `nfd monitor --source etw [--watch]`; test ETW thật khi admin (CI)
 - [ ] Helper protocol 2 (`MonitorStart/Poll/Stop`), kết nối dùng chung với Advanced sensors; `MonitorState` + lệnh Tauri; lịch sử 24 h (`monitor_minutes`); cảnh báo log spam nền + thông báo
 - [ ] View **Monitor**: biểu đồ 60 s / 10 phút, ổ đĩa, bảng tiến trình + tệp, top tệp bị ghi, Mở / Phân tích thư mục, End task qua dialog có bảo vệ, cảnh báo, 24 h; Settings → Monitor; `locales/{en,vi}/monitor.ftl`; mock; `gui-smoke`

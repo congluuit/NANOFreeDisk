@@ -99,7 +99,7 @@ unsafe fn pwstr(p: *const u16) -> String {
 }
 
 /// Every process, from one kernel call.
-pub(crate) fn processes() -> Vec<RawProcess> {
+pub fn processes() -> Vec<RawProcess> {
     let mut size = 512 * 1024usize;
     for _ in 0..6 {
         let mut buf = vec![0u64; size / 8];
@@ -160,6 +160,15 @@ fn image_path(h: &Handle) -> Option<String> {
     (unsafe { QueryFullProcessImageNameW(h.0, PROCESS_NAME_WIN32, buf.as_mut_ptr(), &mut len) }
         != 0)
         .then(|| String::from_utf16_lossy(&buf[..len as usize]))
+}
+
+/// Full image path of a live process (query-limited access; `None` for protected
+/// or exited processes).
+pub fn image_path_of(pid: u32) -> Option<String> {
+    if pid == 0 || pid == 4 {
+        return None;
+    }
+    Handle::open(pid, PROCESS_QUERY_LIMITED_INFORMATION).and_then(|h| image_path(&h))
 }
 
 fn critical(h: &Handle) -> bool {

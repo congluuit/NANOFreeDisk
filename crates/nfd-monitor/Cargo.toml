@@ -1,0 +1,30 @@
+[package]
+name = "nfd-monitor"
+description = "NANOFreeDisk disk activity monitor: per-process and per-file I/O (ETW or I/O counters), physical disk counters — read-only"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+nfd-sensors = { workspace = true }
+nfd-tasks = { workspace = true }
+windows-sys = { workspace = true, features = [
+  "Win32_System_Diagnostics_Etw",
+  "Win32_System_Performance",
+  "Win32_System_Threading",
+] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

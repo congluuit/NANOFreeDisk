@@ -17,7 +17,9 @@ use serde::Serialize;
 
 pub use safety::{BlockReason, Facts, Verdict, WarnReason};
 #[cfg(windows)]
-pub use win::{TaskDetails, TaskMonitor, details, end_task, publisher_label, verdict};
+pub use win::{
+    TaskDetails, TaskMonitor, details, end_task, image_path_of, processes, publisher_label, verdict,
+};
 
 /// One process as the kernel reports it.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -35,8 +37,12 @@ pub struct RawProcess {
     pub handles: u32,
     pub session: u32,
     pub base_priority: i32,
+    /// `IO_COUNTERS` transfer bytes (every I/O: files, network, pipes).
     pub io_read: u64,
     pub io_write: u64,
+    /// `IO_COUNTERS` operation counts.
+    pub io_read_ops: u64,
+    pub io_write_ops: u64,
 }
 
 fn rd<const N: usize>(b: &[u8], o: usize) -> [u8; N] {
@@ -82,6 +88,8 @@ pub fn parse_process_info(buf: &[u8], name_at: &dyn Fn(usize, usize) -> String) 
             base_priority: i32::from_le_bytes(rd(e, 72)),
             io_read: u64::from_le_bytes(rd(e, 232)),
             io_write: u64::from_le_bytes(rd(e, 240)),
+            io_read_ops: u64::from_le_bytes(rd(e, 208)),
+            io_write_ops: u64::from_le_bytes(rd(e, 216)),
         });
         if next == 0 {
             break;
@@ -269,6 +277,8 @@ mod tests {
         e[88..96].copy_from_slice(&ppid.to_le_bytes());
         e[96..100].copy_from_slice(&42u32.to_le_bytes());
         e[100..104].copy_from_slice(&1u32.to_le_bytes());
+        e[208..216].copy_from_slice(&3u64.to_le_bytes());
+        e[216..224].copy_from_slice(&5u64.to_le_bytes());
         e[232..240].copy_from_slice(&4096u64.to_le_bytes());
         e[240..248].copy_from_slice(&8192u64.to_le_bytes());
         e
@@ -290,6 +300,7 @@ mod tests {
             (7, 42, 1, 8)
         );
         assert_eq!((p.io_read, p.io_write), (4096, 8192));
+        assert_eq!((p.io_read_ops, p.io_write_ops), (3, 5));
         assert_eq!(p.create_time, 133_000_000_000_001_234);
         assert!(parse_process_info(&buf[..100], &|_, _| String::new()).is_empty());
     }

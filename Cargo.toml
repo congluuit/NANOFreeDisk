@@ -26,6 +26,7 @@ nfd-tasks = { path = "crates/nfd-tasks", version = "0.1.0" }
 nfd-helper = { path = "crates/nfd-helper", version = "0.1.0" }
 nfd-devtools = { path = "crates/nfd-devtools", version = "0.1.0" }
 nfd-dupes = { path = "crates/nfd-dupes", version = "0.1.0" }
+nfd-monitor = { path = "crates/nfd-monitor", version = "0.1.0" }
 
 # external
 serde = { version = "1", features = ["derive"] }

@@ -2313,6 +2313,7 @@ dependencies = [
  "nfd-dupes",
  "nfd-history",
  "nfd-hwinfo",
+ "nfd-monitor",
  "nfd-platform",
  "nfd-rules",
  "nfd-sensors",
@@ -2390,6 +2391,19 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "nfd-monitor"
+version = "0.1.0"
+dependencies = [
+ "nfd-sensors",
+ "nfd-tasks",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tempfile",
  "windows-sys 0.61.2",
 ]
 
