@@ -2378,6 +2378,7 @@ dependencies = [
 name = "nfd-helper"
 version = "0.1.0"
 dependencies = [
+ "nfd-health",
  "nfd-sensors",
  "serde",
  "serde_json",

@@ -1,6 +1,6 @@
 # Phase 7 — Health: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** — lát 1 ✅ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`, `docs/health-validation.md`), lát 2 ⏳ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ⏳ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
+> Trạng thái: **đang làm** — lát 1 ✅ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`, `docs/health-validation.md`), lát 2 ✅ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ⏳ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
 
 ## 1. Mục tiêu & DoD
 

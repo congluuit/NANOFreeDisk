@@ -298,6 +298,37 @@ impl RemoteProvider {
     pub fn connected(&self) -> bool {
         self.pipe.is_some()
     }
+
+    /// Administrator-only drive reads (Phase 7).
+    pub fn health(
+        &mut self,
+        drives: &[(u32, bool)],
+        volumes: &[String],
+    ) -> Option<nfd_health::Privileged> {
+        let req = Request::Health {
+            protocol: PROTOCOL,
+            drives: drives
+                .iter()
+                .map(|&(index, usb)| crate::HealthDrive { index, usb })
+                .collect(),
+            volumes: volumes.to_vec(),
+        };
+        match self.ask(&req)? {
+            Response::Health { privileged } => Some(privileged),
+            _ => None,
+        }
+    }
+}
+
+/// Start the helper (one UAC prompt), do the drive reads, and close it again.
+pub fn health_once(
+    drives: &[(u32, bool)],
+    volumes: &[String],
+) -> Result<nfd_health::Privileged, StartError> {
+    let mut helper = start()?;
+    helper
+        .health(drives, volumes)
+        .ok_or(StartError::NoConnection)
 }
 
 impl Drop for RemoteProvider {
@@ -436,6 +467,24 @@ pub fn run_helper(args: &[String]) -> i32 {
                     }
                 }
             },
+            Request::Health { protocol, .. } if protocol != PROTOCOL => Response::Error {
+                message: format!("protocol {protocol} != {PROTOCOL}"),
+            },
+            Request::Health {
+                drives, volumes, ..
+            } => {
+                // bounded: no more drives / volumes than a PC can have
+                let drives: Vec<(u32, bool)> = drives
+                    .iter()
+                    .filter(|d| d.index < 64)
+                    .take(64)
+                    .map(|d| (d.index, d.usb))
+                    .collect();
+                let volumes: Vec<String> = volumes.into_iter().take(26).collect();
+                Response::Health {
+                    privileged: nfd_health::privileged_for(&drives, &volumes),
+                }
+            }
             Request::Sample => {
                 let mut values = Vec::new();
                 let mut buf = Vec::new();

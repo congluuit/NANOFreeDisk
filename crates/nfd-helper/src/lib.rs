@@ -2,8 +2,10 @@
 //!
 //! The app stays unelevated. When the user turns on Advanced sensors it starts its
 //! own executable with `--elevated-helper <pipe> <app pid>` through UAC; the helper
-//! connects back to a named pipe the app created and then answers exactly three
-//! requests — [`Request::Discover`], [`Request::Sample`], [`Request::Shutdown`].
+//! connects back to a named pipe the app created and then answers exactly four
+//! requests — [`Request::Discover`], [`Request::Sample`], [`Request::Shutdown`] and
+//! [`Request::Health`] (Phase 7: SMART thresholds, SMART through USB bridges and the
+//! volume dirty bit — the fixed read commands of `nfd_health::cmd`, nothing else).
 //! There is no request that runs code, opens files or writes hardware.
 //!
 //! Both ends check each other: the app only accepts the PID UAC started, the helper
@@ -18,14 +20,31 @@ pub use nfd_sensors::{Device, Kind, Note};
 pub const HELPER_FLAG: &str = "--elevated-helper";
 
 /// Wire version; both ends refuse a mismatch (stale helper after an update).
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
 pub enum Request {
-    Discover { protocol: u32 },
+    Discover {
+        protocol: u32,
+    },
     Sample,
     Shutdown,
+    /// Administrator-only drive reads for these drives / volumes (indices and roots
+    /// only — never command bytes).
+    Health {
+        protocol: u32,
+        drives: Vec<HealthDrive>,
+        volumes: Vec<String>,
+    },
+}
+
+/// A drive the app wants the helper to read.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HealthDrive {
+    pub index: u32,
+    /// Read through SCSI / ATA Translation (USB bridge) instead of `SMART_RCV_DRIVE_DATA`.
+    pub usb: bool,
 }
 
 /// A sensor as sent over the pipe.
@@ -52,6 +71,9 @@ pub enum Response {
     },
     Sample {
         values: Vec<(usize, f64)>,
+    },
+    Health {
+        privileged: nfd_health::Privileged,
     },
     /// Advanced sensors are not available in the helper (PawnIO missing…).
     Unavailable {
@@ -98,7 +120,7 @@ pub fn helper_args(args: &[String]) -> Option<(String, u32)> {
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{RemoteProvider, StartError, run_helper, start};
+pub use win::{RemoteProvider, StartError, health_once, run_helper, start};
 
 #[cfg(test)]
 mod tests {
@@ -120,7 +142,46 @@ mod tests {
         assert_eq!(
             decode::<Request>(b"{\"op\":\"run\",\"cmd\":\"calc\"}"),
             None,
-            "only the three requests exist"
+            "only the four requests exist"
+        );
+    }
+
+    #[test]
+    fn health_round_trip() {
+        let r = Request::Health {
+            protocol: PROTOCOL,
+            drives: vec![HealthDrive {
+                index: 2,
+                usb: true,
+            }],
+            volumes: vec![r"C:\".into()],
+        };
+        assert_eq!(decode::<Request>(&encode(&r)[4..]), Some(r));
+        let p = nfd_health::Privileged {
+            smart: vec![nfd_health::PrivilegedSmart {
+                disk: 2,
+                data: vec![1; 512],
+                thresholds: None,
+                via: nfd_health::Source::Sat,
+            }],
+            volumes: vec![nfd_health::PrivilegedVolume {
+                root: r"C:\".into(),
+                dirty: false,
+            }],
+            sat_failed: vec![3],
+        };
+        let resp = Response::Health { privileged: p };
+        let frame = encode(&resp);
+        assert!(frame.len() < MAX_FRAME);
+        assert_eq!(decode::<Response>(&frame[4..]), Some(resp));
+        // a request carrying command bytes does not parse
+        assert_eq!(
+            decode::<Request>(
+                br#"{"op":"health","protocol":2,"drives":[],"volumes":[],"cdb":[133]}"#
+            )
+            .map(|r| matches!(r, Request::Health { .. })),
+            Some(true),
+            "unknown fields are ignored, never executed"
         );
     }
 

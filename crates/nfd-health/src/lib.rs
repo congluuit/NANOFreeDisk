@@ -478,33 +478,59 @@ pub fn collect(opts: Options) -> HealthReport {
 /// Fails quietly (empty lists) without rights.
 #[must_use]
 pub fn privileged(report: &HealthReport) -> Privileged {
+    let (drives, volumes) = privileged_targets(report);
+    privileged_for(&drives, &volumes)
+}
+
+/// What [`privileged`] would read for `report`: (drive index, behind a USB bridge)
+/// for every drive without an NVMe log, and every volume root.
+#[must_use]
+pub fn privileged_targets(report: &HealthReport) -> (Vec<(u32, bool)>, Vec<String>) {
+    (
+        report
+            .drives
+            .iter()
+            .filter(|d| d.source != Source::Nvme)
+            .map(|d| (d.index, is_usb(&d.bus)))
+            .collect(),
+        report.volumes.iter().map(|v| v.root.clone()).collect(),
+    )
+}
+
+/// [`privileged`] for explicit targets (what the elevated helper receives).
+#[must_use]
+pub fn privileged_for(drives: &[(u32, bool)], volumes: &[String]) -> Privileged {
     #[cfg(windows)]
     {
         let mut p = Privileged::default();
-        for d in report.drives.iter().filter(|d| d.source != Source::Nvme) {
-            if is_usb(&d.bus) {
-                match win::sat_smart(d.index) {
+        for &(index, usb) in drives {
+            if usb {
+                match win::sat_smart(index) {
                     Some((data, thresholds)) => p.smart.push(PrivilegedSmart {
-                        disk: d.index,
+                        disk: index,
                         data,
                         thresholds,
                         via: Source::Sat,
                     }),
-                    None => p.sat_failed.push(d.index),
+                    None => p.sat_failed.push(index),
                 }
-            } else if let Some((data, thresholds)) = win::ata_smart(d.index) {
+            } else if let Some((data, thresholds)) = win::ata_smart(index) {
                 p.smart.push(PrivilegedSmart {
-                    disk: d.index,
+                    disk: index,
                     data,
                     thresholds,
                     via: Source::AtaSmart,
                 });
             }
         }
-        for v in &report.volumes {
-            if let Some(dirty) = win::volume_dirty(&v.root) {
+        for root in volumes {
+            // drive letters only (`C:\`): nothing else is opened
+            let ok = root.len() == 3
+                && root.as_bytes()[0].is_ascii_alphabetic()
+                && root.ends_with(":\\");
+            if let Some(dirty) = ok.then(|| win::volume_dirty(root)).flatten() {
                 p.volumes.push(PrivilegedVolume {
-                    root: v.root.clone(),
+                    root: root.clone(),
                     dirty,
                 });
             }
@@ -513,7 +539,7 @@ pub fn privileged(report: &HealthReport) -> Privileged {
     }
     #[cfg(not(windows))]
     {
-        let _ = (report, is_usb);
+        let _ = (drives, volumes);
         Privileged::default()
     }
 }
