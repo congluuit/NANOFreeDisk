@@ -136,14 +136,18 @@ Grab the latest build from the [Releases page](https://github.com/congluuit/NANO
 
 | Package | File | Notes |
 |---|---|---|
-| ★ **Branded setup** (recommended) | `NANOFreeDisk-Setup-<ver>-x64.exe` | NANO-branded installer written in Rust. Per-user (no admin) or all-users. Silent: `/S /D=C:\Apps\NANOFreeDisk /ALLUSERS` |
-| MSI | `NANOFreeDisk-<ver>-x64.msi` | Standard Windows Installer for IT/GPO/Intune. Silent: `msiexec /i NANOFreeDisk-<ver>-x64.msi /qn` |
-| Classic EXE | `NANOFreeDisk-<ver>-x64-setup.exe` | Standard NSIS wizard. Silent: `/S` |
-| Portable | `NANOFreeDisk-<ver>-x64-portable.zip` | Unzip and run; config lives next to the exe. Includes `nfd.exe` CLI. |
+| ★ **Branded setup** (recommended) | `NANOFreeDisk-Setup-<ver>-x64.exe` | NANO-branded installer written in Rust (English/Vietnamese). For me (no admin, `%LOCALAPPDATA%\Programs\NANOFreeDisk`) or for everyone (UAC). Silent: `/S [/ALLUSERS] [/DESKTOP] [/SHELLMENU] [/D=C:\Apps\NANOFreeDisk]` (`/D=` last). Uninstall: Settings → Apps, or `uninstall.exe --uninstall /S [/REMOVEDATA]` |
+| MSI | `NANOFreeDisk-<ver>-x64.msi` (`-vi-VN.msi` in Vietnamese) | Windows Installer for IT/GPO/Intune, installs for everyone (admin). Silent: `msiexec /i NANOFreeDisk-<ver>-x64.msi /qn`, `msiexec /x … /qn`. A quiet uninstall keeps user data. |
+| Classic EXE | `NANOFreeDisk-<ver>-x64-setup.exe` | NSIS wizard, installs for the current user (`%LOCALAPPDATA%\NANOFreeDisk`, no admin). Silent: `/S`; uninstall `uninstall.exe /S [/REMOVEDATA]` |
+| Portable | `NANOFreeDisk-<ver>-x64-portable.zip` | Unzip and run. Settings, history, quarantine and the WebView2 profile stay in `data\` next to the exe (`portable.flag`); nothing is written to your profile or the registry. Includes `nfd.exe`. |
+
+Every package ships the app and the `nfd.exe` CLI. **Uninstalling never deletes files silently:** if NANOFreeDisk's quarantine still holds cleaned files you are asked whether to put them back or delete them; your data (scan history, settings, logs) is removed only when you tick "remove my data" (or pass `/REMOVEDATA`). The Explorer menu, shortcuts and registry entries always go. The optional PawnIO driver (Advanced sensors) is shared with other apps and stays installed.
+
+**Updates:** Settings → Updates checks GitHub on request. The MSI and classic EXE update in place (the update is verified with the project's signing key); the branded setup and portable copies link to the new release.
 
 Also (after 1.0): `winget install NANODev.NANOFreeDisk` · `scoop install nanofreedisk` · `cargo install nfd-cli`
 
-**Verify a download:** every release includes `SHA256SUMS.txt` and a minisign signature `SHA256SUMS.txt.minisig`.
+**Verify a download:** the packages are not code-signed yet (SignPath Foundation is pending), so Windows SmartScreen may say "unknown publisher". Every release includes `SHA256SUMS.txt` (and a minisign signature `SHA256SUMS.txt.minisig` when available) — compare the hash before running an installer:
 
 ```powershell
 Get-FileHash .\NANOFreeDisk-Setup-1.0.0-x64.exe -Algorithm SHA256

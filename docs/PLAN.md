@@ -390,7 +390,7 @@ Kèm: `SHA256SUMS.txt`, `SHA256SUMS.txt.minisig` (minisign), `sbom.cdx.json`, `C
 | **5 – Duplicates** | 11–12 | Dedupe pipeline, UI, hardlink action | 100 GB ảnh/video trong < 5 phút (SSD) |
 | **6 – Monitor** | 13–14 | ETW helper elevated, per-process I/O, realtime chart, cảnh báo | Overhead < 2 % CPU |
 | **7 – Health** | 15–16 | SMART ATA/NVMe, WMI reliability, trend, tray alert, export | Khớp CrystalDiskInfo trên ≥ 5 ổ mẫu (SATA SSD, NVMe, HDD, USB) |
-| **8 – Installers** | 17 | Custom setup (egui), MSI, NSIS, portable, updater, ký số | Cài/gỡ sạch trên VM Win10/11; silent OK |
+| **8 – Installers** ✅ | 17 | Custom setup (egui), MSI, NSIS, portable, updater, ký số | Cài/gỡ sạch trên VM Win10/11; silent OK |
 | **9 – Release 1.0** | 18 | Screenshots thật, docs, website, winget, release-check | `v1.0.0` trên GitHub Releases |
 | **10 – Cross-platform** | sau 1.0 | macOS (IOKit SMART, FSEvents, `fs_usage`), Linux (`/proc/diskstats`, fanotify, libatasmart/smartctl), bundler DMG/AppImage/deb | `nfd` CLI đủ 3 OS → GUI |
 | **11 – v1.x** | — | Perceptual dedupe ảnh, scheduled clean, theme tùy chỉnh, i18n (vi/en/…), rule packs từ community | — |
@@ -545,14 +545,16 @@ NANOFreeDisk/
 - [x] Thư mục trùng (`nfd_dupes::folders`): khi bật, mọi tệp không rỗng đều được băm (ngưỡng size / loại tệp chỉ lọc danh sách nhóm tệp); chữ ký thư mục = BLAKE3 của các con sắp theo tên (`f tên size hash` / `d tên chữ ký`), thư mục có tệp bị loại hoặc tệp nội dung duy nhất không tham gia, nhóm mà mọi thư mục đều nằm trong thư mục của nhóm khác bị bỏ (chỉ cấp cao nhất); thư mục bị SafetyGate chặn (vd. `Documents`) được ưu tiên giữ và không bao giờ xóa; `plan_folders` (Recycle Bin / Quarantine nguyên thư mục, không link), Verifier tính lại chữ ký trên đĩa (đọc toàn bộ) ngay trước khi chuyển — thư mục được giữ hay bản xóa đổi nội dung → bỏ qua; tab **Thư mục** + ô "Tìm cả thư mục trùng"; `nfd dupes --folders [--action recycle|quarantine --apply]`; schema thêm `folderGroups`; test + `gui-smoke`
 - [x] DoD: 100 GB media < 5 phút (SSD) — **ngoại suy** từ 17,7 GiB thật đo trên laptop tham chiếu (1,2 GiB/s đọc toàn bộ, Defender bật → ≈ 78 s cho 100 GB, `docs/dupes-benchmark.md`); quét lại có cache < 30 s (lần 2 không đọc byte nào); 0 báo nhầm (nhóm chỉ khi full BLAKE3 trùng, đọc lại ngay trước khi hành động, kiểm size/mtime trước và sau khi đọc); không đọc cloud placeholder (test `cloud_placeholders_are_never_opened`, `offline_attribute_from_the_scan_is_honoured`)
 
-**Phase 8 — Installers** (chi tiết: `docs/PHASE8_INSTALLERS.md`; 5 lát cắt)
+**Phase 8 — Installers** (chi tiết: `docs/PHASE8_INSTALLERS.md`; xong 5 lát cắt 2026-10-17 — còn kiểm trên VM sạch)
 
-- [ ] Gói Tauri MSI + NSIS kèm `nfd.exe` + `rules/` (`tauri.bundle.conf.json`); `nanofreedisk.exe --uninstall-cleanup` (Quarantine: khôi phục / xóa vĩnh viễn / để lại, có hộp thoại EN/VI; `--remove-data`); NSIS hooks (`/REMOVEDATA`, gỡ verb Explorer, khóa ngôn ngữ), WiX custom action khi gỡ có UI
-- [ ] Portable: `portable.flag` → mọi dữ liệu (kể cả WebView2) trong `<exe>\data\`, dùng chung app + CLI; zip có app + CLI
-- [ ] Bộ cài thương hiệu `apps/nanofreedisk-setup` (egui, không WebView2): wizard EN/VI, Chỉ tôi / Mọi người (UAC), payload zstd, WebView2 bootstrap có kiểm chữ ký, registry Uninstall, shortcut, menu Explorer, uninstaller, silent `/S /D= /ALLUSERS`
-- [ ] Updater (`tauri-plugin-updater`, minisign pubkey, `latest.json`; portable / bản thương hiệu chỉ thông báo); khóa ngoài repo, lệnh `gh secret set` trong tài liệu
-- [ ] `release.yml`: 4 gói, `dry_run` qua `workflow_dispatch` (không tag, không Release), ký SignPath tự bỏ qua khi chưa có secret, SHA256SUMS + `latest.json`; `smoke-test.ps1` kiểm không sót tệp / registry / shortcut / menu
-- [ ] DoD: cài → chạy → gỡ sạch + silent trên máy dev (per-user); **VM Win10/11 sạch: chưa kiểm** (CI `windows-latest` hoặc người dùng)
+- [x] Gói Tauri MSI + NSIS kèm `nfd.exe` + `rules/` (`tauri.bundle.conf.json`); `nanofreedisk.exe --uninstall-cleanup` (Quarantine: khôi phục / xóa vĩnh viễn / để lại, có hộp thoại EN/VI; `--remove-data`); NSIS hooks (`/REMOVEDATA`, gỡ verb Explorer, khóa ngôn ngữ), WiX custom action khi gỡ có UI
+- [x] Portable: `portable.flag` → mọi dữ liệu (kể cả WebView2) trong `<exe>\data\`, dùng chung app + CLI; zip có app + CLI
+- [x] Bộ cài thương hiệu `apps/nanofreedisk-setup` (egui, không WebView2): wizard EN/VI, Chỉ tôi / Mọi người (UAC), payload zstd, WebView2 bootstrap có kiểm chữ ký, registry Uninstall, shortcut, menu Explorer, uninstaller, silent `/S /D= /ALLUSERS`
+- [x] Updater (`tauri-plugin-updater`, minisign pubkey, `latest.json`; portable / bản thương hiệu chỉ thông báo); khóa ngoài repo, lệnh `gh secret set` trong tài liệu
+- [x] `release.yml`: 4 gói, `dry_run` qua `workflow_dispatch` (không tag, không Release), ký SignPath tự bỏ qua khi chưa có secret, SHA256SUMS + `latest.json`; `smoke-test.ps1` kiểm không sót tệp / registry / shortcut / menu
+- [x] DoD trên máy dev (người dùng thường, không admin): `scripts/smoke-test.ps1` — portable, NSIS, bộ cài thương hiệu cài → chạy → gỡ silent, không sót tệp / registry / shortcut / menu Explorer / thư mục dữ liệu
+- [ ] MSI và bộ cài "Mọi người" cần admin → kiểm trong `release.yml` (dry run trên `windows-latest`); **VM Win10/11 sạch chưa kiểm** (không có VM) — người dùng chạy `scripts/smoke-test.ps1` trên VM; WebView2 bootstrap chỉ kiểm được trên máy thiếu WebView2
+- [ ] Ký số: chờ SignPath Foundation (bước ký trong `release.yml` tự bỏ qua khi chưa có secret); đưa khóa updater lên GitHub (`gh secret set`, xem `docs/PHASE8_INSTALLERS.md` §2.5)
 
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 

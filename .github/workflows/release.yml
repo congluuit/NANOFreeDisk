@@ -1,6 +1,9 @@
 name: Release
 
-# Triggered by pushing a semver tag: v1.2.3, v1.2.3-rc.1, v1.2.3-beta.2
+# Pushing a semver tag (v1.2.3, v1.2.3-rc.1) builds, checks and publishes a release.
+# workflow_dispatch builds the four packages and runs the smoke test from any ref;
+# with dry_run (the default) it creates no tag, no GitHub Release and no winget PR.
+# See docs/PHASE8_INSTALLERS.md section 2.6.
 on:
   push:
     tags:
@@ -8,8 +11,14 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Existing tag to (re)build, e.g. v0.1.0"
-        required: true
+        description: "Existing tag to (re)build, e.g. v0.1.0 (empty = the selected branch)"
+        required: false
+        default: ""
+      dry_run:
+        description: "Build and smoke-test only: no GitHub Release, no winget"
+        type: boolean
+        required: false
+        default: true
 
 permissions:
   contents: write
@@ -18,6 +27,8 @@ env:
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: 0
   APP_NAME: NANOFreeDisk
+  # tag push: always a real release; manual run: only when dry_run is unticked
+  DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && 'true' || 'false' }}
 
 jobs:
   # ─────────────────────────────────────────────────────────────
@@ -33,43 +44,51 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
 
-      - name: Derive version from tag
+      - name: Derive version
         id: ver
         shell: bash
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
-          VERSION="${TAG#v}"
+          TAG="${{ inputs.tag || github.ref_name }}"
+          if [[ "$TAG" == v[0-9]* ]]; then
+            VERSION="${TAG#v}"
+          elif [[ "$DRY_RUN" == "true" ]]; then
+            # dry run from a branch: the workspace version
+            VERSION=$(grep -m1 -E '^version\s*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          else
+            echo "::error::a release needs a v* tag (got '$TAG')"; exit 1
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           if [[ "$VERSION" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
-          echo "Releasing $VERSION (prerelease=$([[ "$VERSION" == *-* ]] && echo true || echo false))"
+          echo "Building $VERSION (dry run: $DRY_RUN)"
 
-      - name: Workspace version must match tag
+      - name: Workspace version must match
         shell: bash
         run: |
           WS=$(grep -m1 -E '^version\s*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
           echo "Cargo.toml workspace.package.version = $WS"
           [[ "$WS" == "${{ steps.ver.outputs.version }}" ]] || { echo "::error::Cargo.toml version ($WS) != tag (${{ steps.ver.outputs.version }})"; exit 1; }
 
-      - name: tauri.conf.json / package.json versions must match (when present)
+      - name: tauri.conf.json / package.json versions must match
         shell: bash
         run: |
           V="${{ steps.ver.outputs.version }}"
-          if [[ -f apps/nanofreedisk/src-tauri/tauri.conf.json ]]; then
-            TV=$(jq -r .version apps/nanofreedisk/src-tauri/tauri.conf.json)
-            [[ "$TV" == "$V" ]] || { echo "::error::tauri.conf.json version ($TV) != $V"; exit 1; }
-          fi
-          if [[ -f apps/nanofreedisk/package.json ]]; then
-            PV=$(jq -r .version apps/nanofreedisk/package.json)
-            [[ "$PV" == "$V" ]] || { echo "::error::package.json version ($PV) != $V"; exit 1; }
-          fi
+          TV=$(jq -r .version apps/nanofreedisk/src-tauri/tauri.conf.json)
+          [[ "$TV" == "$V" ]] || { echo "::error::tauri.conf.json version ($TV) != $V"; exit 1; }
+          PV=$(jq -r .version apps/nanofreedisk/package.json)
+          [[ "$PV" == "$V" ]] || { echo "::error::package.json version ($PV) != $V"; exit 1; }
 
       - name: CHANGELOG must contain an entry for this version
         shell: bash
         run: |
-          grep -qE "^## \[${{ steps.ver.outputs.version }}\]" CHANGELOG.md \
-            || { echo "::error::CHANGELOG.md has no '## [${{ steps.ver.outputs.version }}]' section"; exit 1; }
+          V="${{ steps.ver.outputs.version }}"
+          if grep -qE "^## \[$V\]" CHANGELOG.md; then exit 0; fi
+          if [[ "$DRY_RUN" == "true" ]]; then
+            echo "::warning::CHANGELOG.md has no '## [$V]' section yet (allowed in a dry run)"
+          else
+            echo "::error::CHANGELOG.md has no '## [$V]' section"; exit 1
+          fi
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -95,7 +114,7 @@ jobs:
         run: cargo deny --all-features check || { echo "::error::cargo deny reported problems"; exit 1; }
 
   # ─────────────────────────────────────────────────────────────
-  # 2. build-windows — CLI, app bundles (MSI/NSIS) and branded setup
+  # 2. build-windows — the four packages, signing, smoke test
   # ─────────────────────────────────────────────────────────────
   build-windows:
     name: build (windows x64)
@@ -103,85 +122,82 @@ jobs:
     runs-on: windows-latest
     env:
       VERSION: ${{ needs.release-check.outputs.version }}
+      # secrets cannot be tested in `if:` directly; these flags can
+      SIGNPATH_ENABLED: ${{ secrets.SIGNPATH_API_TOKEN != '' && vars.SIGNPATH_ORGANIZATION_ID != '' }}
+      UPDATER_KEY_PRESENT: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-
-      - name: Build CLI
-        run: cargo build --release -p nfd-cli
-
-      # ── Tauri app (MSI + NSIS) — activates once apps/nanofreedisk exists ──
-      - name: Detect Tauri app
-        id: tauri
-        shell: bash
-        run: |
-          if [[ -f apps/nanofreedisk/src-tauri/tauri.conf.json ]]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
       - uses: pnpm/action-setup@v4
-        if: steps.tauri.outputs.present == 'true'
         with:
           version: 9
       - uses: actions/setup-node@v4
-        if: steps.tauri.outputs.present == 'true'
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: apps/nanofreedisk/pnpm-lock.yaml
-      - name: Build Tauri bundles (MSI + NSIS)
-        if: steps.tauri.outputs.present == 'true'
+      - name: Install UI dependencies
         working-directory: apps/nanofreedisk
+        run: pnpm install --frozen-lockfile
+
+      # MSI + NSIS (Tauri), branded setup (egui), portable zip; updater .sig files
+      # only when TAURI_SIGNING_PRIVATE_KEY exists.
+      - name: Build the four packages
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: ./scripts/build-packages.ps1 -Out dist -Version $env:VERSION
+
+      # ── Code signing (SignPath Foundation). Skipped cleanly until the project is
+      #    approved and SIGNPATH_API_TOKEN + vars.SIGNPATH_ORGANIZATION_ID exist. ──
+      - name: Code signing skipped
+        if: env.SIGNPATH_ENABLED != 'true'
+        shell: bash
+        run: echo "::notice::SignPath is not configured — packages stay unsigned (verify with SHA256SUMS.txt)."
+      - name: Upload unsigned packages for signing
+        id: unsigned
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: unsigned-windows-x64
+          path: |
+            dist/*.exe
+            dist/*.msi
+      - name: Sign with SignPath
+        if: env.SIGNPATH_ENABLED == 'true'
+        uses: signpath/github-action-submit-signing-request@v1
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: nanofreedisk
+          signing-policy-slug: ${{ env.DRY_RUN == 'true' && 'test-signing' || 'release-signing' }}
+          artifact-configuration-slug: installers
+          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: dist-signed
+      - name: Use the signed packages
+        if: env.SIGNPATH_ENABLED == 'true'
+        shell: pwsh
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
-          pnpm install --frozen-lockfile
-          pnpm tauri build --bundles msi,nsis
+          Copy-Item dist-signed/* dist/ -Force
+          # the updater signature must cover the Authenticode-signed bytes
+          if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+            Push-Location apps/nanofreedisk
+            foreach ($f in Get-ChildItem ../../dist -Include *-x64-setup.exe, *-x64.msi -Recurse) {
+              Remove-Item "$($f.FullName).sig" -ErrorAction SilentlyContinue
+              pnpm tauri signer sign $f.FullName
+            }
+            Pop-Location
+          }
 
-      # ── Branded installer — activates once apps/nanofreedisk-setup exists ──
-      - name: Build branded setup
-        if: hashFiles('apps/nanofreedisk-setup/Cargo.toml') != ''
-        run: cargo build --release -p nanofreedisk-setup
-
-      - name: Assemble artifacts
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          $v = $env:VERSION
-          # portable zip (CLI now; app exe joins when present)
-          New-Item -ItemType Directory -Force "dist/portable" | Out-Null
-          Copy-Item target/release/nfd.exe dist/portable/
-          if (Test-Path target/release/nanofreedisk.exe) { Copy-Item target/release/nanofreedisk.exe dist/portable/ }
-          Copy-Item -Recurse rules dist/portable/rules
-          Copy-Item LICENSE, README.md dist/portable/
-          "portable" | Out-File -Encoding ascii dist/portable/portable.flag
-          Compress-Archive -Path dist/portable/* -DestinationPath "dist/$env:APP_NAME-$v-x64-portable.zip" -Force
-          Remove-Item -Recurse -Force dist/portable
-          # Tauri bundles
-          Get-ChildItem -Recurse -Filter *.msi target/release/bundle -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName "dist/$env:APP_NAME-$v-x64.msi" }
-          Get-ChildItem -Recurse -Filter *-setup.exe target/release/bundle -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName "dist/$env:APP_NAME-$v-x64-setup.exe" }
-          # branded setup
-          if (Test-Path target/release/nanofreedisk-setup.exe) { Copy-Item target/release/nanofreedisk-setup.exe "dist/$env:APP_NAME-Setup-$v-x64.exe" }
-          Get-ChildItem dist
-
-      # ── Code signing (optional; runs only when secrets exist) ──
-      - name: Sign binaries (Azure Trusted Signing)
-        if: ${{ env.AZURE_TENANT_ID != '' }}
-        env:
-          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        uses: azure/trusted-signing-action@v0
-        with:
-          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
-          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
-          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
-          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
-          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
-          files-folder: dist
-          files-folder-filter: exe,msi
-
-      - name: Smoke test (portable + silent install/uninstall when installers exist)
+      - name: Smoke test (install -> start -> uninstall, nothing left behind)
         shell: pwsh
         run: ./scripts/smoke-test.ps1 -Dist dist -Version $env:VERSION
 
@@ -209,7 +225,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -226,26 +242,29 @@ jobs:
           path: dist/*
 
   # ─────────────────────────────────────────────────────────────
-  # 4. publish — checksums, SBOM, signature, changelog, GitHub Release
+  # 4. publish — checksums, SBOM, latest.json, changelog, GitHub Release
   # ─────────────────────────────────────────────────────────────
   publish:
     name: publish release
     needs: [release-check, build-windows, build-core]
+    if: ${{ github.event_name == 'push' || !inputs.dry_run }}
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.release-check.outputs.version }}
+      MINISIGN_ENABLED: ${{ secrets.MINISIGN_SECRET_KEY != '' }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ github.event.inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.ref }}
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
       - name: Collect
         run: |
           mkdir -p dist
-          find artifacts -type f -exec cp {} dist/ \;
+          # not the unsigned copies uploaded for SignPath
+          find artifacts/windows-x64 artifacts/cli-* -type f -exec cp {} dist/ \;
           ls -la dist
 
       - name: SBOM (CycloneDX)
@@ -253,21 +272,6 @@ jobs:
         with:
           tool: cargo-cyclonedx
       - run: cargo cyclonedx --format json --override-filename sbom && cp sbom.cdx.json dist/sbom-$VERSION.cdx.json || true
-
-      - name: Checksums
-        working-directory: dist
-        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
-
-      - name: Sign checksums (minisign, optional)
-        if: ${{ env.MINISIGN_KEY != '' }}
-        env:
-          MINISIGN_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
-          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
-        run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
-          printf '%s' "$MINISIGN_KEY" > minisign.key
-          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m dist/SHA256SUMS.txt -t "NANOFreeDisk $VERSION"
-          rm -f minisign.key
 
       - name: Changelog for this version
         id: cliff
@@ -278,6 +282,25 @@ jobs:
         env:
           OUTPUT: RELEASE_NOTES.md
 
+      # Tauri updater manifest (only when the packages carry updater signatures)
+      - name: latest.json
+        run: node scripts/latest-json.mjs dist "$VERSION" "${{ github.repository }}" RELEASE_NOTES.md
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum $(ls | grep -v -E '\.sig$') > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Sign checksums (minisign, optional)
+        if: env.MINISIGN_ENABLED == 'true'
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          printf '%s' "$MINISIGN_KEY" > minisign.key
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m dist/SHA256SUMS.txt -t "NANOFreeDisk $VERSION"
+          rm -f minisign.key
+
       - name: Release notes
         run: |
           {
@@ -285,9 +308,9 @@ jobs:
             echo
             echo "| Package | File |"
             echo "|---|---|"
-            for f in dist/*; do b=$(basename "$f"); echo "| \`$b\` | [download](https://github.com/${{ github.repository }}/releases/download/v$VERSION/$b) |"; done
+            for f in dist/*; do b=$(basename "$f"); case "$b" in *.sig) continue;; esac; echo "| \`$b\` | [download](https://github.com/${{ github.repository }}/releases/download/v$VERSION/$b) |"; done
             echo
-            echo "Verify with \`SHA256SUMS.txt\` (and \`SHA256SUMS.txt.minisig\` when present)."
+            echo "★ \`NANOFreeDisk-Setup-$VERSION-x64.exe\` is the recommended installer. Verify any file with \`SHA256SUMS.txt\` (and \`SHA256SUMS.txt.minisig\` when present)."
             echo
             cat RELEASE_NOTES.md 2>/dev/null || true
           } > NOTES.md
@@ -305,20 +328,20 @@ jobs:
           fail_on_unmatched_files: true
 
   # ─────────────────────────────────────────────────────────────
-  # 5. post-release — winget manifest PR (enabled after v1.0 and a WINGET_TOKEN)
+  # 5. post-release — winget manifest PR (after v1.0 and a WINGET_TOKEN)
   # ─────────────────────────────────────────────────────────────
   winget:
     name: winget manifest
     needs: [release-check, publish]
     if: ${{ needs.release-check.outputs.prerelease == 'false' }}
     runs-on: windows-latest
+    env:
+      WINGET_ENABLED: ${{ secrets.WINGET_TOKEN != '' }}
     steps:
       - name: Publish to winget
-        if: ${{ env.WINGET_TOKEN != '' }}
-        env:
-          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        if: env.WINGET_ENABLED == 'true'
         uses: vedantmgoyal9/winget-releaser@v2
         with:
           identifier: NANODev.NANOFreeDisk
-          installers-regex: 'NANOFreeDisk-.*-x64\.msi$'
+          installers-regex: 'NANOFreeDisk-[0-9.]+(-[a-z0-9.]+)?-x64\.msi$'
           token: ${{ secrets.WINGET_TOKEN }}
