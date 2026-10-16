@@ -22,6 +22,18 @@ const MSR_DRAM_ENERGY_STATUS: u32 = 0x619;
 const MSR_PP0_ENERGY_STATUS: u32 = 0x639;
 const MSR_PP1_ENERGY_STATUS: u32 = 0x641;
 const MSR_PLATFORM_ENERGY_STATUS: u32 = 0x64D;
+const MSR_PLATFORM_INFO: u32 = 0xCE;
+
+/// Bus clock (MHz) the way LibreHardwareMonitor derives it: measured TSC rate
+/// divided by the non-turbo ratio (MSR_PLATFORM_INFO bits 15:8).
+pub fn bus_from_tsc(tsc_delta: u64, secs: f64, nominal_ratio: f64) -> Option<f64> {
+    (secs > 0.2 && nominal_ratio > 0.0).then(|| tsc_delta as f64 / secs / nominal_ratio / 1e6)
+}
+
+fn rdtsc() -> u64 {
+    // SAFETY: RDTSC exists on every x86-64 CPU and has no side effects.
+    unsafe { std::arch::x86_64::_rdtsc() }
+}
 
 /// TjMax (°C) from IA32_TEMPERATURE_TARGET bits 23:16.
 pub fn tjmax(target: u64) -> Option<f64> {
@@ -120,6 +132,9 @@ pub struct IntelMsrProvider {
     energy: Vec<Option<u32>>,
     aperf: Vec<Option<u64>>,
     last: Option<Instant>,
+    /// Non-turbo ratio and the last TSC reading, for the measured bus clock.
+    nominal_ratio: f64,
+    tsc: u64,
     sensors: Vec<Src>,
 }
 
@@ -135,6 +150,8 @@ impl IntelMsrProvider {
             energy: vec![None; ENERGY.len()],
             aperf: Vec::new(),
             last: None,
+            nominal_ratio: 0.0,
+            tsc: 0,
             sensors: Vec::new(),
         }
     }
@@ -151,6 +168,11 @@ impl SensorProvider for IntelMsrProvider {
         self.cores = topo.core_threads.clone();
         self.aperf = vec![None; self.cores.len()];
         self.bus_mhz = cpuid.bus_mhz.map_or(100.0, f64::from);
+        self.nominal_ratio = self
+            .io
+            .read_msr(MSR_PLATFORM_INFO)
+            .map_or(0.0, |v| ((v >> 8) & 0xFF) as f64);
+        self.tsc = rdtsc();
         let hybrid = topo.p_cores.is_some();
         let max_class = self.cores.iter().map(|c| c.1).max().unwrap_or(0);
         let src = "PawnIO IntelMSR";
@@ -270,14 +292,31 @@ impl SensorProvider for IntelMsrProvider {
         let now = Instant::now();
         let secs = self.last.map_or(0.0, |t| (now - t).as_secs_f64());
         self.last = Some(now);
-        // per core: thermal status, perf status, APERF — read on that core
+        let tsc = rdtsc();
+        if let Some(bus) = bus_from_tsc(tsc.wrapping_sub(self.tsc), secs, self.nominal_ratio) {
+            // a plausible bus clock only (guards against a sleep/resume jump)
+            if (90.0..=110.0).contains(&bus) {
+                self.bus_mhz = bus;
+            }
+        }
+        self.tsc = tsc;
+        // Two passes over the cores, like LibreHardwareMonitor: thermal status first,
+        // then perf status (ratio, VID) and APERF. Reading an idle core wakes it; in
+        // the second pass it reports the ratio / VID it actually runs at instead of
+        // the wake-up state, which keeps the numbers comparable with other tools.
+        let therms: Vec<Option<u64>> = self
+            .cores
+            .iter()
+            .map(|&(cpu, _)| on_cpu(cpu, || self.io.read_msr(IA32_THERM_STATUS)))
+            .collect();
         let per_core: Vec<(Option<u64>, Option<u64>, Option<u64>)> = self
             .cores
             .iter()
-            .map(|&(cpu, _)| {
+            .zip(therms)
+            .map(|(&(cpu, _), t)| {
                 on_cpu(cpu, || {
                     (
-                        self.io.read_msr(IA32_THERM_STATUS),
+                        t,
                         self.io.read_msr(IA32_PERF_STATUS),
                         self.io.read_msr(IA32_APERF),
                     )
@@ -385,6 +424,15 @@ mod tests {
         // counter wrap-around
         assert_eq!(rapl_watts(u32::MAX - 16383, 16384, j, 1.0), Some(2.0));
         assert_eq!(rapl_watts(0, 1, j, 0.0), None);
+    }
+
+    #[test]
+    fn bus_clock_from_tsc() {
+        // 2.4 GHz TSC, ratio 24 → 100 MHz
+        let b = bus_from_tsc(2_419_200_000, 1.0, 24.0).expect("bus");
+        assert!((b - 100.8).abs() < 1e-9);
+        assert_eq!(bus_from_tsc(1, 0.1, 24.0), None);
+        assert_eq!(bus_from_tsc(1, 1.0, 0.0), None);
     }
 
     #[test]
