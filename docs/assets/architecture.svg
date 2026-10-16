@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="NANOFreeDisk architecture">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748B"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="640" fill="#0B1220" rx="16"/>
+  <text x="550" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#F8FAFC">NANOFreeDisk — Architecture</text>
+
+  <!-- Layer: apps -->
+  <rect x="40" y="70" width="1020" height="120" rx="12" fill="#111C33" stroke="#1E293B"/>
+  <text x="56" y="94" font-size="13" font-weight="700" fill="#94A3B8">apps/</text>
+  <g font-size="14" fill="#F8FAFC">
+    <rect x="70" y="106" width="300" height="66" rx="10" fill="#1D4ED8" opacity="0.25" stroke="#60A5FA"/>
+    <text x="220" y="134" text-anchor="middle" font-weight="700">nanofreedisk</text>
+    <text x="220" y="156" text-anchor="middle" font-size="12" fill="#CBD5E1">Tauri 2 desktop app · Svelte UI · tray</text>
+
+    <rect x="400" y="106" width="300" height="66" rx="10" fill="#0E7490" opacity="0.3" stroke="#22D3EE"/>
+    <text x="550" y="134" text-anchor="middle" font-weight="700">nfd (CLI)</text>
+    <text x="550" y="156" text-anchor="middle" font-size="12" fill="#CBD5E1">scan · clean · devcache · dupes · watch · health</text>
+
+    <rect x="730" y="106" width="300" height="66" rx="10" fill="#B45309" opacity="0.3" stroke="#F59E0B"/>
+    <text x="880" y="134" text-anchor="middle" font-weight="700">nanofreedisk-setup</text>
+    <text x="880" y="156" text-anchor="middle" font-size="12" fill="#CBD5E1">Branded installer · egui · zstd payload</text>
+  </g>
+
+  <!-- Layer: ipc -->
+  <rect x="40" y="210" width="1020" height="44" rx="10" fill="#111C33" stroke="#1E293B"/>
+  <text x="550" y="238" text-anchor="middle" font-size="14" fill="#CBD5E1"><tspan font-weight="700" fill="#F8FAFC">nfd-ipc</tspan> — serde DTOs, ScanEvent / CleanPlan / HealthReport streams</text>
+
+  <!-- Layer: crates -->
+  <rect x="40" y="274" width="1020" height="200" rx="12" fill="#111C33" stroke="#1E293B"/>
+  <text x="56" y="298" font-size="13" font-weight="700" fill="#94A3B8">crates/</text>
+  <g font-size="13" fill="#F8FAFC">
+    <rect x="70" y="312" width="230" height="140" rx="10" fill="#0E7490" opacity="0.25" stroke="#22D3EE"/>
+    <text x="185" y="336" text-anchor="middle" font-weight="700">nfd-core</text>
+    <text x="185" y="358" text-anchor="middle" font-size="12" fill="#CBD5E1">Entry arena · Scanner</text>
+    <text x="185" y="376" text-anchor="middle" font-size="12" fill="#CBD5E1">Dedupe (BLAKE3)</text>
+    <text x="185" y="394" text-anchor="middle" font-size="12" fill="#CBD5E1">Planner → SafetyGate → Executor</text>
+    <text x="185" y="412" text-anchor="middle" font-size="12" fill="#CBD5E1">Quarantine · UndoJournal</text>
+    <text x="185" y="430" text-anchor="middle" font-size="12" fill="#A3E635">Protected paths (hard-coded)</text>
+
+    <rect x="320" y="312" width="200" height="140" rx="10" fill="#4D7C0F" opacity="0.25" stroke="#A3E635"/>
+    <text x="420" y="336" text-anchor="middle" font-weight="700">nfd-rules</text>
+    <text x="420" y="358" text-anchor="middle" font-size="12" fill="#CBD5E1">TOML rule packs</text>
+    <text x="420" y="376" text-anchor="middle" font-size="12" fill="#CBD5E1">globset matcher</text>
+    <text x="420" y="394" text-anchor="middle" font-size="12" fill="#CBD5E1">RiskLevel + impact text</text>
+    <text x="420" y="412" text-anchor="middle" font-size="12" fill="#CBD5E1">DevCache catalog</text>
+
+    <rect x="540" y="312" width="200" height="140" rx="10" fill="#1D4ED8" opacity="0.25" stroke="#60A5FA"/>
+    <text x="640" y="336" text-anchor="middle" font-weight="700">nfd-monitor</text>
+    <text x="640" y="358" text-anchor="middle" font-size="12" fill="#CBD5E1">ETW FileIo / DiskIo</text>
+    <text x="640" y="376" text-anchor="middle" font-size="12" fill="#CBD5E1">per-process I/O counters</text>
+    <text x="640" y="394" text-anchor="middle" font-size="12" fill="#CBD5E1">PDH disk counters</text>
+    <text x="640" y="412" text-anchor="middle" font-size="12" fill="#CBD5E1">24h history (SQLite)</text>
+
+    <rect x="760" y="312" width="200" height="140" rx="10" fill="#9D174D" opacity="0.3" stroke="#F472B6"/>
+    <text x="860" y="336" text-anchor="middle" font-weight="700">nfd-health</text>
+    <text x="860" y="358" text-anchor="middle" font-size="12" fill="#CBD5E1">SMART ATA · NVMe log 02h</text>
+    <text x="860" y="376" text-anchor="middle" font-size="12" fill="#CBD5E1">WMI reliability counters</text>
+    <text x="860" y="394" text-anchor="middle" font-size="12" fill="#CBD5E1">TRIM · dirty bit · trend</text>
+    <text x="860" y="412" text-anchor="middle" font-size="12" fill="#CBD5E1">alerts &amp; report export</text>
+  </g>
+
+  <!-- Layer: platform -->
+  <rect x="40" y="494" width="1020" height="70" rx="12" fill="#111C33" stroke="#1E293B"/>
+  <text x="56" y="518" font-size="13" font-weight="700" fill="#94A3B8">nfd-platform  —  trait Platform { fs, trash, locks (Restart Manager), elevation, volumes }</text>
+  <g font-size="13" font-weight="700" fill="#F8FAFC">
+    <rect x="70" y="528" width="300" height="28" rx="8" fill="#22D3EE" opacity="0.2" stroke="#22D3EE"/>
+    <text x="220" y="547" text-anchor="middle">windows (v1.0) · windows-rs</text>
+    <rect x="400" y="528" width="300" height="28" rx="8" fill="#334155" stroke="#475569"/>
+    <text x="550" y="547" text-anchor="middle" fill="#94A3B8">macos (v2) · IOKit / FSEvents</text>
+    <rect x="730" y="528" width="300" height="28" rx="8" fill="#334155" stroke="#475569"/>
+    <text x="880" y="547" text-anchor="middle" fill="#94A3B8">linux (v2) · /proc · fanotify</text>
+  </g>
+
+  <!-- rules data -->
+  <text x="550" y="600" text-anchor="middle" font-size="13" fill="#94A3B8">rules/*.toml  (windows-system · browsers · ai-tools · ide-editors · package-managers · game-engines · gpu-shader-cache)</text>
+
+  <!-- arrows -->
+  <g stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M220 172V208"/>
+    <path d="M550 172V208"/>
+    <path d="M185 254V310"/>
+    <path d="M420 254V310"/>
+    <path d="M640 254V310"/>
+    <path d="M860 254V310"/>
+    <path d="M550 454V492"/>
+  </g>
+</svg>

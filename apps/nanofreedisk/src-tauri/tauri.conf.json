@@ -1,0 +1,53 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NANOFreeDisk",
+  "version": "0.1.0",
+  "identifier": "vn.io.nanodev.nanofreedisk",
+  "build": {
+    "beforeDevCommand": "pnpm dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "pnpm build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "NANOFreeDisk",
+        "width": 1280,
+        "height": 820,
+        "minWidth": 900,
+        "minHeight": 600,
+        "center": true,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' data: asset:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src ipc: http://ipc.localhost"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis"],
+    "publisher": "NANO (nanodev.io.vn)",
+    "copyright": "© 2026 Lưu Đức Thành Công (NANO). MIT License.",
+    "category": "Utility",
+    "shortDescription": "Disk analyzer, safe cleaner and dev-cache manager",
+    "longDescription": "NANOFreeDisk shows what uses your disk space and frees it safely: it never deletes what Windows or your tools need.",
+    "homepage": "https://nanodev.io.vn/",
+    "license": "MIT",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper" },
+      "wix": { "language": ["en-US", "vi-VN"] },
+      "nsis": { "languages": ["English", "Vietnamese"], "displayLanguageSelector": true, "installMode": "both" }
+    }
+  }
+}

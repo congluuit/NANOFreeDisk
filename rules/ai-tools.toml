@@ -1,0 +1,387 @@
+# NANOFreeDisk rule pack: AI assistants / coding agents
+# Schema: see docs/DEVTOOL_CACHE_CATALOG.md and crates/nfd-rules/src/schema.rs
+# level: safe | caution | advanced | protected
+# Path variables: ${HOME} ${USERPROFILE} ${APPDATA} ${LOCALAPPDATA} ${PROGRAMDATA} ${TEMP} ${SYSTEMROOT}
+
+[pack]
+id          = "ai-tools"
+name        = "AI assistants & coding agents"
+version     = "0.1.0"
+description = "Caches, logs and session data of Claude, Codex, Gemini CLI, Copilot, Cursor, Windsurf, Ollama and friends."
+
+# ───────────────────────────── Anthropic ─────────────────────────────
+
+[[rule]]
+id              = "anthropic.claude-code.config"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude.json", "${HOME}/.claude/settings.json", "${HOME}/.claude/settings.local.json"]
+level           = "protected"
+impact          = "Global config, OAuth state and permissions. Deleting forces re-login and loses all settings."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.sessions"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/projects/*/*.jsonl"]
+exclude         = ["${HOME}/.claude/projects/*/memory/**"]
+level           = "caution"
+regenerates     = false
+min_age_days    = 7
+requires_closed = ["claude.exe", "claude", "node.exe"]
+impact          = "Session transcripts used by `claude --resume` / `--continue`. Your code is untouched; you only lose the ability to resume old conversations."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.memory"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/projects/*/memory/**"]
+level           = "protected"
+impact          = "Per-project auto-memory. Deleting loses everything Claude Code learned about the project."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.todos"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/todos/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["claude.exe", "claude"]
+impact          = "Temporary per-session todo lists."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.shell-snapshots"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/shell-snapshots/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["claude.exe", "claude"]
+impact          = "Shell environment snapshots; recreated on next session."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.logs"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/debug/**", "${HOME}/.claude/logs/**", "${HOME}/.claude/statsig/**", "${HOME}/.claude/telemetry/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Debug logs and feature-flag cache. You lose logs that could help report a bug."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.file-history"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/file-history/**"]
+level           = "caution"
+regenerates     = false
+min_age_days    = 30
+requires_closed = ["claude.exe", "claude"]
+impact          = "Pre-edit copies of files used to revert Claude Code edits. Old entries are rarely needed."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-code.extensions"
+vendor          = "Anthropic"
+app             = "Claude Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.claude/plugins/**", "${HOME}/.claude/skills/**", "${HOME}/.claude/commands/**", "${HOME}/.claude/agents/**"]
+level           = "protected"
+impact          = "User-installed plugins, skills, commands and agents."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-desktop.cache"
+vendor          = "Anthropic"
+app             = "Claude Desktop"
+category        = "ai-app"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Claude/Cache/**", "${APPDATA}/Claude/Code Cache/**", "${APPDATA}/Claude/GPUCache/**",
+  "${APPDATA}/Claude/DawnCache/**", "${APPDATA}/Claude/DawnGraphiteCache/**", "${APPDATA}/Claude/DawnWebGPUCache/**",
+  "${APPDATA}/Claude/Service Worker/CacheStorage/**", "${APPDATA}/Claude/logs/**", "${APPDATA}/Claude/Crashpad/**",
+  "${LOCALAPPDATA}/AnthropicClaude/packages/*.nupkg", "${LOCALAPPDATA}/AnthropicClaude/*.log",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Claude.exe"]
+impact          = "Chromium/Electron caches and logs; the app rebuilds them and may open slightly slower once."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anthropic.claude-desktop.config"
+vendor          = "Anthropic"
+app             = "Claude Desktop"
+category        = "ai-app"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Claude/claude_desktop_config.json", "${APPDATA}/Claude/Local Storage/**", "${APPDATA}/Claude/IndexedDB/**"]
+level           = "protected"
+impact          = "MCP configuration and login state."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── OpenAI ─────────────────────────────
+
+[[rule]]
+id              = "openai.codex.config"
+vendor          = "OpenAI"
+app             = "Codex CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.codex/auth.json", "${HOME}/.codex/config.toml", "${HOME}/.codex/instructions.md", "${HOME}/.codex/AGENTS.md"]
+level           = "protected"
+impact          = "Credentials and configuration."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "openai.codex.sessions"
+vendor          = "OpenAI"
+app             = "Codex CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.codex/sessions/**", "${HOME}/.codex/history.jsonl"]
+level           = "caution"
+regenerates     = false
+min_age_days    = 7
+requires_closed = ["codex.exe", "codex", "node.exe"]
+impact          = "Session transcripts and prompt history (used by `codex resume`). Code is untouched."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "openai.codex.logs"
+vendor          = "OpenAI"
+app             = "Codex CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.codex/log/**", "${HOME}/.codex/*.log"]
+level           = "safe"
+regenerates     = true
+impact          = "Log files only."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "openai.chatgpt-desktop.cache"
+vendor          = "OpenAI"
+app             = "ChatGPT Desktop"
+category        = "ai-app"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Packages/OpenAI.ChatGPT-Desktop_*/LocalCache/**", "${LOCALAPPDATA}/Packages/OpenAI.ChatGPT-Desktop_*/TempState/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["ChatGPT.exe"]
+impact          = "MSIX app cache; rebuilt on next launch."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Google ─────────────────────────────
+
+[[rule]]
+id              = "google.gemini-cli.config"
+vendor          = "Google"
+app             = "Gemini CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.gemini/oauth_creds.json", "${HOME}/.gemini/settings.json", "${HOME}/.gemini/GEMINI.md", "${HOME}/.gemini/installation_id"]
+level           = "protected"
+impact          = "Credentials and configuration."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.gemini-cli.tmp"
+vendor          = "Google"
+app             = "Gemini CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.gemini/tmp/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["gemini.exe", "gemini", "node.exe"]
+impact          = "Temporary checkpoints."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.gemini-cli.history"
+vendor          = "Google"
+app             = "Gemini CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.gemini/history/**"]
+level           = "caution"
+min_age_days    = 7
+requires_closed = ["gemini.exe", "gemini"]
+impact          = "Conversation history."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── GitHub Copilot ─────────────────────────────
+
+[[rule]]
+id              = "github.copilot.auth"
+vendor          = "GitHub"
+app             = "Copilot"
+category        = "ai-agent"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/github-copilot/**", "${HOME}/.copilot/config.json"]
+level           = "protected"
+impact          = "Tokens and host configuration; deleting forces re-login."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "github.copilot.chat-history"
+vendor          = "GitHub"
+app             = "Copilot Chat (VS Code)"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${APPDATA}/Code/User/globalStorage/github.copilot-chat/**", "${HOME}/.copilot/session-state/**"]
+level           = "caution"
+min_age_days    = 14
+requires_closed = ["Code.exe", "copilot.exe"]
+impact          = "Chat history inside VS Code / Copilot CLI."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Cursor ─────────────────────────────
+
+[[rule]]
+id              = "cursor.config"
+vendor          = "Anysphere"
+app             = "Cursor"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Cursor/User/settings.json", "${APPDATA}/Cursor/User/keybindings.json", "${APPDATA}/Cursor/User/snippets/**",
+  "${APPDATA}/Cursor/User/globalStorage/state.vscdb*", "${HOME}/.cursor/extensions/**", "${HOME}/.cursor/mcp.json", "${HOME}/.cursor/rules/**",
+]
+level           = "protected"
+impact          = "Settings, extensions, MCP config and the state DB that holds Cursor chat history."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "cursor.cache"
+vendor          = "Anysphere"
+app             = "Cursor"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Cursor/Cache/**", "${APPDATA}/Cursor/CachedData/**", "${APPDATA}/Cursor/CachedExtensionVSIXs/**",
+  "${APPDATA}/Cursor/CachedProfilesData/**", "${APPDATA}/Cursor/Code Cache/**", "${APPDATA}/Cursor/GPUCache/**",
+  "${APPDATA}/Cursor/DawnCache/**", "${APPDATA}/Cursor/DawnGraphiteCache/**", "${APPDATA}/Cursor/DawnWebGPUCache/**",
+  "${APPDATA}/Cursor/Service Worker/CacheStorage/**", "${APPDATA}/Cursor/logs/**", "${APPDATA}/Cursor/Crashpad/**",
+  "${LOCALAPPDATA}/cursor-updater/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Cursor.exe"]
+impact          = "Caches, logs and downloaded updates; rebuilt automatically."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "cursor.workspace-state"
+vendor          = "Anysphere"
+app             = "Cursor"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Cursor/User/workspaceStorage/*/**", "${APPDATA}/Cursor/User/History/**"]
+level           = "caution"
+min_age_days    = 30
+requires_closed = ["Cursor.exe"]
+impact          = "Per-workspace UI state, per-project chats and Local History. Entries for workspaces that no longer exist on disk are safe."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Windsurf ─────────────────────────────
+
+[[rule]]
+id              = "codeium.windsurf.cascade"
+vendor          = "Codeium"
+app             = "Windsurf"
+category        = "ai-ide"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.codeium/windsurf/cascade/**"]
+level           = "caution"
+min_age_days    = 14
+requires_closed = ["Windsurf.exe"]
+impact          = "Cascade (agent) conversation history."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "codeium.windsurf.config"
+vendor          = "Codeium"
+app             = "Windsurf"
+category        = "ai-ide"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.codeium/config.json", "${HOME}/.codeium/windsurf/mcp_config.json", "${HOME}/.codeium/windsurf/memories/**"]
+level           = "protected"
+impact          = "Config, MCP and memories."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Local LLM runtimes ─────────────────────────────
+
+[[rule]]
+id              = "ollama.models"
+vendor          = "Ollama"
+app             = "Ollama"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.ollama/models/blobs/**", "${HOME}/.ollama/models/manifests/**"]
+level           = "caution"
+regenerates     = false
+requires_closed = ["ollama.exe", "ollama app.exe", "ollama"]
+impact          = "Downloaded models (often tens of GB). You must `ollama pull` again. Prefer removing single models with `ollama rm <name>`."
+docs            = "https://github.com/ollama/ollama"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "ollama.keys"
+vendor          = "Ollama"
+app             = "Ollama"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.ollama/id_ed25519", "${HOME}/.ollama/id_ed25519.pub"]
+level           = "protected"
+impact          = "Ollama identity key pair used to push/pull from registries; deleting it breaks authenticated access."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "huggingface.hub-cache"
+vendor          = "Hugging Face"
+app             = "huggingface_hub"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.cache/huggingface/hub/**"]
+exclude         = ["${HOME}/.cache/huggingface/token"]
+level           = "caution"
+regenerates     = false
+impact          = "Downloaded models and datasets; re-downloaded on next use."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "lmstudio.models"
+vendor          = "LM Studio"
+app             = "LM Studio"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.lmstudio/models/**", "${HOME}/.cache/lm-studio/models/**"]
+level           = "caution"
+regenerates     = false
+requires_closed = ["LM Studio.exe"]
+impact          = "Downloaded GGUF models; re-download required. Conversations are NOT touched."
+verified_on     = 2026-10-16

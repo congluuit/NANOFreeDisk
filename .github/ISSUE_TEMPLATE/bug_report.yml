@@ -1,0 +1,48 @@
+name: 🐞 Bug report
+description: Something is wrong (crash, wrong size, UI glitch…). For anything that deleted or could delete the wrong file, use SECURITY.md instead.
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **If NANOFreeDisk deleted, moved or could delete something it should not, do NOT file it here — report privately via [SECURITY.md](../blob/main/SECURITY.md).**
+  - type: input
+    id: version
+    attributes:
+      label: NANOFreeDisk version
+      placeholder: "0.3.1 (Setup / MSI / NSIS / portable)"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 24H2 build 26100 / Windows 10 22H2"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. Open Analyze on D:\\ … 2. … 3. …"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: "`%LOCALAPPDATA%\\NANOFreeDisk\\logs\\` — paste the relevant part (remove private paths if you like)."
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+        - label: I am on the latest release.

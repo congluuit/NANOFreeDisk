@@ -1,0 +1,61 @@
+<script lang="ts" module>
+  // 24×24 stroke icons drawn for NANOFreeDisk (round caps, 1.8 stroke).
+  const PATHS: Record<string, string> = {
+    home: "M3 11 12 4l9 7M5 10v10h5v-6h4v6h5V10",
+    analyze: "M12 3v9h9M12 3a9 9 0 1 0 9 9M12 3a9 9 0 0 1 9 9",
+    clean: "M12 3l1.8 4.6L18 9l-4.2 1.4L12 15l-1.8-4.6L6 9l4.2-1.4zM19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8zM5 15l.6 1.4 1.4.6-1.4.6L5 19l-.6-1.4L3 17l1.4-.6z",
+    devcache: "M8 7l-5 5 5 5M16 7l5 5-5 5M14 4l-4 16",
+    duplicates: "M8 8h11v12H8zM5 16V4h11",
+    monitor: "M3 12h4l3-8 4 16 3-8h4",
+    health: "M12 20s-8-4.6-8-10.2A4.6 4.6 0 0 1 12 7a4.6 4.6 0 0 1 8 2.8C20 15.4 12 20 12 20zM7 12h3l1.5-2 2 4 1.5-2h2",
+    settings: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z",
+    folder: "M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z",
+    file: "M14 3H6.5A1.5 1.5 0 0 0 5 4.5v15A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V8zM14 3v5h5",
+    link: "M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1",
+    up: "M12 19V5M5 12l7-7 7 7",
+    refresh: "M20 11a8 8 0 0 0-14.6-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.6 4.5L20 16m0 4v-4h-4",
+    export: "M12 3v12M7 10l5 5 5-5M5 21h14",
+    search: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4",
+    x: "M6 6l12 12M18 6 6 18",
+    trash: "M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3",
+    reveal: "M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5zM12 11v5M9.5 13.5 12 11l2.5 2.5",
+    open: "M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5",
+    zoom: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4M11 8v6M8 11h6",
+    copy: "M9 9h11v11H9zM5 15V4h11",
+    drive: "M3 13h18v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1zM3 13l3-8h12l3 8M7 16h.01M11 16h2",
+    usb: "M12 3v14M8 7l4-4 4 4M7 12v2l5 3 5-3v-3M12 21a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+    network: "M4 5h16v8H4zM12 13v4M5 20h14M12 17v3",
+    disc: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 14a2 2 0 1 0 0-4 2 2 0 0 0 0 4z",
+    alert: "M12 3 2 20h20zM12 10v4M12 17h.01",
+    check: "M5 12l5 5 9-10",
+    chevron: "M9 6l6 6-6 6",
+    cloud: "M7 18h10a4 4 0 0 0 .5-8A6 6 0 0 0 6 9.5 4.3 4.3 0 0 0 7 18z",
+    lock: "M6 11h12v9H6zM8 11V8a4 4 0 0 1 8 0v3",
+    shield: "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z",
+    sun: "M12 17a5 5 0 1 0 0-10 5 5 0 0 0 0 10zM12 1v2M12 21v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M1 12h2M21 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4",
+    sunburst: "M12 12m-3 0a3 3 0 1 0 6 0 3 3 0 1 0-6 0M12 3a9 9 0 1 1-9 9M12 6.5a5.5 5.5 0 1 1-5.5 5.5",
+    treemap: "M3 4h18v16H3zM12 4v16M12 11h9M3 14h9M16.5 11v9",
+    filter: "M3 5h18l-7 8v6l-4 2v-8z",
+  };
+</script>
+
+<script lang="ts">
+  let { name, size = 18, title = "" }: { name: string; size?: number; title?: string } = $props();
+</script>
+
+<svg
+  width={size}
+  height={size}
+  viewBox="0 0 24 24"
+  fill="none"
+  stroke="currentColor"
+  stroke-width="1.8"
+  stroke-linecap="round"
+  stroke-linejoin="round"
+  aria-hidden={title ? undefined : "true"}
+  role={title ? "img" : undefined}
+  aria-label={title || undefined}
+  style="flex: none"
+>
+  <path d={PATHS[name] ?? PATHS.file} />
+</svg>

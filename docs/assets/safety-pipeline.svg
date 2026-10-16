@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="420" viewBox="0 0 1100 420" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Safety pipeline">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M0 0L10 5L0 10z" fill="#64748B"/>
+    </marker>
+  </defs>
+  <rect width="1100" height="420" fill="#0B1220" rx="16"/>
+  <text x="550" y="40" text-anchor="middle" font-size="22" font-weight="700" fill="#F8FAFC">Nothing is deleted without passing the SafetyGate</text>
+
+  <g font-size="14" fill="#F8FAFC">
+    <!-- 1 -->
+    <rect x="40" y="90" width="180" height="90" rx="12" fill="#1D4ED8" opacity="0.25" stroke="#60A5FA"/>
+    <text x="130" y="122" text-anchor="middle" font-weight="700">1 · Select</text>
+    <text x="130" y="144" text-anchor="middle" font-size="12" fill="#CBD5E1">UI / CLI picks items</text>
+    <text x="130" y="162" text-anchor="middle" font-size="12" fill="#CBD5E1">Planner builds CleanPlan</text>
+    <!-- 2 -->
+    <rect x="260" y="70" width="300" height="130" rx="12" fill="#4D7C0F" opacity="0.25" stroke="#A3E635"/>
+    <text x="410" y="98" text-anchor="middle" font-weight="700">2 · SafetyGate</text>
+    <text x="410" y="120" text-anchor="middle" font-size="12" fill="#CBD5E1">canonicalize (junction · 8.3 · \\?\ · case)</text>
+    <text x="410" y="138" text-anchor="middle" font-size="12" fill="#CBD5E1">reject Protected paths &amp; SYSTEM / MS-signed files</text>
+    <text x="410" y="156" text-anchor="middle" font-size="12" fill="#CBD5E1">reject volume roots, mount points, cross-volume links</text>
+    <text x="410" y="174" text-anchor="middle" font-size="12" fill="#CBD5E1">Restart Manager: who locks the file? (never kills)</text>
+    <text x="410" y="192" text-anchor="middle" font-size="12" fill="#F59E0B">Caution / Advanced ⇒ explicit per-item confirmation</text>
+    <!-- 3 -->
+    <rect x="600" y="90" width="200" height="90" rx="12" fill="#B45309" opacity="0.3" stroke="#F59E0B"/>
+    <text x="700" y="122" text-anchor="middle" font-weight="700">3 · Dry-run preview</text>
+    <text x="700" y="144" text-anchor="middle" font-size="12" fill="#CBD5E1">full file list · total size</text>
+    <text x="700" y="162" text-anchor="middle" font-size="12" fill="#CBD5E1">&gt;50 GB or &gt;20 % ⇒ red warning</text>
+    <!-- 4 -->
+    <rect x="840" y="70" width="220" height="130" rx="12" fill="#0E7490" opacity="0.3" stroke="#22D3EE"/>
+    <text x="950" y="98" text-anchor="middle" font-weight="700">4 · Execute</text>
+    <text x="950" y="122" text-anchor="middle" font-size="12" fill="#A3E635">Recycle Bin (default)</text>
+    <text x="950" y="142" text-anchor="middle" font-size="12" fill="#22D3EE">Quarantine · 7-day TTL · restore</text>
+    <text x="950" y="162" text-anchor="middle" font-size="12" fill="#F87171">Permanent · Safe only · type DELETE</text>
+    <text x="950" y="186" text-anchor="middle" font-size="12" fill="#CBD5E1">UndoJournal + audit log</text>
+  </g>
+  <g stroke="#64748B" stroke-width="2" fill="none" marker-end="url(#a)">
+    <path d="M220 135H258"/>
+    <path d="M560 135H598"/>
+    <path d="M800 135H838"/>
+  </g>
+
+  <!-- risk legend -->
+  <g font-size="13" fill="#F8FAFC">
+    <text x="40" y="250" font-size="15" font-weight="700" fill="#F8FAFC">Risk levels shown on every item</text>
+    <circle cx="52" cy="280" r="7" fill="#22C55E"/><text x="68" y="285"><tspan font-weight="700">Safe</tspan> — app recreates it, no user data lost (temp, GPU cache, logs, thumbnails)</text>
+    <circle cx="52" cy="308" r="7" fill="#EAB308"/><text x="68" y="313"><tspan font-weight="700">Caution</tspan> — loses history / needs re-download / slower first start (Claude &amp; Codex sessions, Ollama models, Unity Library)</text>
+    <circle cx="52" cy="336" r="7" fill="#F97316"/><text x="68" y="341"><tspan font-weight="700">Advanced</tspan> — can break repair/uninstall or features; hidden unless Expert mode (Package Cache, SoftwareDistribution, Docker vhdx)</text>
+    <circle cx="52" cy="364" r="7" fill="#EF4444"/><text x="68" y="369"><tspan font-weight="700">Protected / Keep</tspan> — never deletable in-app: Windows, Program Files, WinSxS, pagefile, credentials, configs, user documents</text>
+  </g>
+  <text x="1060" y="400" text-anchor="end" font-size="12" fill="#64748B">Hard-coded protected list cannot be disabled · 100 % test coverage target for nfd-core::safety</text>
+</svg>

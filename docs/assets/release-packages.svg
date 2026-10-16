@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="300" viewBox="0 0 1100 300" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Release packages">
+  <rect width="1100" height="300" fill="#0B1220" rx="16"/>
+  <text x="550" y="40" text-anchor="middle" font-size="20" font-weight="700" fill="#F8FAFC">Every release ships four packages (+ checksums, minisign signature, SBOM)</text>
+  <g font-size="14" fill="#F8FAFC">
+    <rect x="40" y="70" width="245" height="190" rx="12" fill="#B45309" opacity="0.3" stroke="#F59E0B" stroke-width="2"/>
+    <text x="162" y="100" text-anchor="middle" font-weight="700" fill="#F59E0B">★ Branded Setup</text>
+    <text x="162" y="124" text-anchor="middle" font-size="12" fill="#CBD5E1">NANOFreeDisk-Setup-x.y.z-x64.exe</text>
+    <text x="162" y="150" text-anchor="middle" font-size="12" fill="#CBD5E1">Pure Rust (egui) wizard</text>
+    <text x="162" y="168" text-anchor="middle" font-size="12" fill="#CBD5E1">NANO branding · zstd payload</text>
+    <text x="162" y="186" text-anchor="middle" font-size="12" fill="#CBD5E1">per-user or all-users · WebView2 check</text>
+    <text x="162" y="204" text-anchor="middle" font-size="12" fill="#CBD5E1">silent: /S /D=&lt;dir&gt; /ALLUSERS</text>
+    <text x="162" y="240" text-anchor="middle" font-size="12" fill="#A3E635">recommended</text>
+
+    <rect x="305" y="70" width="245" height="190" rx="12" fill="#1D4ED8" opacity="0.25" stroke="#60A5FA"/>
+    <text x="427" y="100" text-anchor="middle" font-weight="700">MSI</text>
+    <text x="427" y="124" text-anchor="middle" font-size="12" fill="#CBD5E1">NANOFreeDisk-x.y.z-x64.msi</text>
+    <text x="427" y="150" text-anchor="middle" font-size="12" fill="#CBD5E1">WiX v5 via Tauri bundler</text>
+    <text x="427" y="168" text-anchor="middle" font-size="12" fill="#CBD5E1">IT / GPO / Intune</text>
+    <text x="427" y="186" text-anchor="middle" font-size="12" fill="#CBD5E1">silent: msiexec /i … /qn</text>
+
+    <rect x="570" y="70" width="245" height="190" rx="12" fill="#0E7490" opacity="0.3" stroke="#22D3EE"/>
+    <text x="692" y="100" text-anchor="middle" font-weight="700">Classic EXE</text>
+    <text x="692" y="124" text-anchor="middle" font-size="12" fill="#CBD5E1">NANOFreeDisk-x.y.z-x64-setup.exe</text>
+    <text x="692" y="150" text-anchor="middle" font-size="12" fill="#CBD5E1">NSIS via Tauri bundler</text>
+    <text x="692" y="168" text-anchor="middle" font-size="12" fill="#CBD5E1">familiar standard wizard</text>
+    <text x="692" y="186" text-anchor="middle" font-size="12" fill="#CBD5E1">silent: /S</text>
+
+    <rect x="835" y="70" width="225" height="190" rx="12" fill="#4D7C0F" opacity="0.25" stroke="#A3E635"/>
+    <text x="947" y="100" text-anchor="middle" font-weight="700">Portable</text>
+    <text x="947" y="124" text-anchor="middle" font-size="12" fill="#CBD5E1">NANOFreeDisk-x.y.z-x64-portable.zip</text>
+    <text x="947" y="150" text-anchor="middle" font-size="12" fill="#CBD5E1">no install, config next to exe</text>
+    <text x="947" y="168" text-anchor="middle" font-size="12" fill="#CBD5E1">includes nfd.exe CLI</text>
+    <text x="947" y="186" text-anchor="middle" font-size="12" fill="#CBD5E1">also: winget · scoop · cargo install</text>
+  </g>
+  <text x="550" y="285" text-anchor="middle" font-size="12" fill="#64748B">release.yml: release-check → build → smoke-test install/uninstall → checksums + SBOM + signature → GitHub Release → winget PR</text>
+</svg>

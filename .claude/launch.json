@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "nanofreedisk-ui",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "apps/nanofreedisk", "dev"],
+      "port": 1420
+    }
+  ]
+}

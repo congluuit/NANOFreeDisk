@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 🔐 Report a destructive bug or vulnerability (private)
+    url: https://github.com/congluuit/NANOFreeDisk/security/advisories/new
+    about: Anything that could make the app delete the wrong file goes here, not in a public issue.
+  - name: 💬 Questions
+    url: https://github.com/congluuit/NANOFreeDisk/discussions
+    about: Ask usage questions in Discussions.

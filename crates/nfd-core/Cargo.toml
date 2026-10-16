@@ -1,0 +1,28 @@
+[package]
+name = "nfd-core"
+description = "NANOFreeDisk core: entry model, scanner, dedupe, safety gate, quarantine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[features]
+# NTFS $MFT fast-path scanner (`ScanMode::Fast`). Stub only for now: scans fall back
+# to standard mode.
+mft = []
+
+[dependencies]
+nfd-platform = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+rayon = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

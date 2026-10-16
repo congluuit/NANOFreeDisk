@@ -1,0 +1,37 @@
+# Normalize line endings
+* text=auto eol=lf
+
+# Windows-specific scripts keep CRLF
+*.ps1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
+# Rust / config
+*.rs text diff=rust
+*.toml text
+*.md text diff=markdown
+*.yml text
+*.yaml text
+*.json text
+*.svg text
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.icns binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.zip binary
+*.msi binary
+*.exe binary
+*.dll binary
+
+# Linguist: treat rule packs and docs as data, keep SVG mockups out of language stats
+rules/** linguist-language=TOML
+docs/assets/** linguist-generated
+*.svg linguist-generated

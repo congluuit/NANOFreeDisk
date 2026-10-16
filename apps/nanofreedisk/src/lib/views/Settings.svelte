@@ -1,0 +1,385 @@
+<script lang="ts">
+  import { api, inTauri, pickOpenFile, pickSaveFile } from "../api";
+  import type { HistoryInfo } from "../types";
+  import { LOCALES, t } from "../i18n.svelte";
+  import { app, fail, toast } from "../state.svelte";
+  import {
+    EDITABLE_TOKENS,
+    PRESETS,
+    contrastIssues,
+    exportToml,
+    importToml,
+    resolvePalette,
+    type PresetId,
+    type ThemeMode,
+    type Token,
+  } from "../theme";
+  import Icon from "../components/Icon.svelte";
+
+  const MODES: { id: ThemeMode; icon: string }[] = [
+    { id: "light", icon: "sun" },
+    { id: "dark", icon: "disc" },
+    { id: "system", icon: "settings" },
+    { id: "custom", icon: "treemap" },
+  ];
+
+  const theme = $derived(app.settings.theme);
+  const palette = $derived(
+    resolvePalette(theme, window.matchMedia("(prefers-color-scheme: dark)").matches, app.info?.accent ?? null).colors,
+  );
+  const issues = $derived(theme.mode === "custom" ? contrastIssues(palette) : []);
+
+  function setMode(mode: ThemeMode) {
+    app.settings.theme.mode = mode;
+  }
+
+  function setColor(token: Token, value: string) {
+    app.settings.theme.overrides = { ...app.settings.theme.overrides, [token]: value };
+  }
+
+  async function importTheme() {
+    const path = await pickOpenFile(t("settings-theme-import"), "toml");
+    if (!path) return;
+    try {
+      const parsed = importToml(await api.readTextFile(path));
+      if (!parsed) {
+        toast(t("settings-theme-invalid"), "error");
+        return;
+      }
+      app.settings.theme = { mode: "custom", preset: parsed.preset, overrides: parsed.overrides };
+      toast(t("settings-theme-imported"), "ok");
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  let history = $state<HistoryInfo | null>(null);
+  $effect(() => {
+    void app.version;
+    api.historyInfo().then((h) => (history = h)).catch(() => (history = null));
+  });
+
+  async function clearHistory() {
+    const question = t("settings-history-clear-confirm");
+    let ok: boolean;
+    if (inTauri) {
+      const { ask } = await import("@tauri-apps/plugin-dialog");
+      ok = await ask(question, { title: t("settings-history"), kind: "warning" });
+    } else {
+      ok = window.confirm(question);
+    }
+    if (!ok) return;
+    try {
+      await api.historyClear();
+      app.snapshot = null;
+      history = await api.historyInfo();
+      toast(t("settings-history-cleared"), "ok");
+    } catch (e) {
+      fail(e);
+    }
+  }
+
+  async function exportTheme() {
+    const path = await pickSaveFile(t("settings-theme-export"), "theme.toml", "toml");
+    if (!path) return;
+    try {
+      await api.writeTextFile(path, exportToml("Custom", theme.preset, palette));
+    } catch (e) {
+      fail(e);
+    }
+  }
+</script>
+
+<section class="page">
+  <h1>{t("settings-title")}</h1>
+
+  <div class="block card">
+    <h2>{t("settings-language")}</h2>
+    <select bind:value={app.settings.locale} aria-label={t("settings-language")}>
+      <option value="system">{t("settings-language-system")}</option>
+      {#each LOCALES as l (l.id)}
+        <option value={l.id}>{l.label}</option>
+      {/each}
+    </select>
+  </div>
+
+  <div class="block card">
+    <h2>{t("settings-theme")}</h2>
+    <div class="modes" role="radiogroup" aria-label={t("settings-theme")}>
+      {#each MODES as m (m.id)}
+        <button role="radio" aria-checked={theme.mode === m.id} class="mode" class:on={theme.mode === m.id} onclick={() => setMode(m.id)}>
+          <Icon name={m.icon} size={20} />
+          {t(`settings-theme-${m.id}`)}
+        </button>
+      {/each}
+    </div>
+    {#if theme.mode === "system"}
+      <p class="muted small">{t("settings-theme-system-hint")}</p>
+    {/if}
+
+    {#if theme.mode === "custom"}
+      <div class="row">
+        <label>
+          <span class="muted small">{t("settings-preset")}</span>
+          <select
+            value={theme.preset}
+            onchange={(e) => {
+              app.settings.theme.preset = (e.currentTarget as HTMLSelectElement).value as PresetId;
+              app.settings.theme.overrides = {};
+            }}
+          >
+            {#each Object.entries(PRESETS) as [id, p] (id)}
+              <option value={id}>{p.label}</option>
+            {/each}
+          </select>
+        </label>
+        <span class="grow"></span>
+        <button class="btn" onclick={importTheme} disabled={!inTauri}><Icon name="folder" size={16} />{t("settings-theme-import")}</button>
+        <button class="btn" onclick={exportTheme} disabled={!inTauri}><Icon name="export" size={16} />{t("settings-theme-export")}</button>
+        <button class="btn ghost" onclick={() => (app.settings.theme.overrides = {})}>{t("settings-theme-reset")}</button>
+      </div>
+
+      {#each issues as i (i.fg + i.bg)}
+        <p class="warn">
+          <Icon name="alert" size={16} />
+          {t("settings-contrast-warning", { pair: `${t(`token-${i.fg}`)} / ${t(`token-${i.bg}`)}`, ratio: i.ratio.toFixed(1) })}
+        </p>
+      {/each}
+
+      <h3>{t("settings-custom-colors")}</h3>
+      <div class="colors">
+        {#each EDITABLE_TOKENS as k (k)}
+          <label class="color">
+            <input type="color" value={palette[k]} oninput={(e) => setColor(k, (e.currentTarget as HTMLInputElement).value)} />
+            <span>{t(`token-${k}`)}</span>
+            <code class="muted">{palette[k]}</code>
+          </label>
+        {/each}
+      </div>
+    {:else}
+      <div class="presets">
+        {#each Object.entries(PRESETS) as [id, p] (id)}
+          <button
+            class="preset"
+            title={p.label}
+            onclick={() => (app.settings.theme = { mode: "custom", preset: id as PresetId, overrides: {} })}
+          >
+            <span class="sample" style="background: {p.colors.bg}; border-color: {p.colors.border}">
+              <i style="background: {p.colors.accent}"></i>
+              <i style="background: {p.colors['tm-1']}"></i>
+              <i style="background: {p.colors['tm-6']}"></i>
+              <i style="background: {p.colors['tm-4']}"></i>
+            </span>
+            <span class="small">{p.label}</span>
+          </button>
+        {/each}
+      </div>
+    {/if}
+  </div>
+
+  <div class="block card">
+    <h2>{t("mode-label")}</h2>
+    <div class="modes two" role="radiogroup" aria-label={t("mode-label")}>
+      {#each ["simple", "expert"] as const as m (m)}
+        <button role="radio" aria-checked={app.settings.mode === m} class="mode" class:on={app.settings.mode === m} onclick={() => (app.settings.mode = m)}>
+          <Icon name={m === "simple" ? "home" : "devcache"} size={20} />
+          <span class="mtext">
+            <strong>{t(`mode-${m}`)}</strong>
+            <span class="muted small">{t(`mode-${m}-hint`)}</span>
+          </span>
+        </button>
+      {/each}
+    </div>
+  </div>
+
+  <div class="block card">
+    <h2>{t("settings-history")}</h2>
+    <label class="toggle">
+      <input type="checkbox" bind:checked={app.settings.history} />
+      <span>{t("settings-history-keep")}</span>
+    </label>
+    <p class="muted small">{t("settings-history-hint")}</p>
+    <div class="row">
+      {#if history}
+        <span class="muted small">{t("settings-history-count", { count: history.snapshots })}</span>
+        {#if app.settings.mode === "expert"}<code class="muted small ellipsis" title={history.path}>{history.path}</code>{/if}
+      {/if}
+      <span class="grow"></span>
+      <button class="btn" onclick={clearHistory} disabled={!history?.snapshots}>
+        <Icon name="trash" size={16} />{t("settings-history-clear")}
+      </button>
+    </div>
+  </div>
+
+  <div class="block card">
+    <h2>{t("settings-font-scale")}</h2>
+    <div class="row">
+      <input
+        type="range"
+        min="0.85"
+        max="1.4"
+        step="0.05"
+        bind:value={app.settings.fontScale}
+        aria-label={t("settings-font-scale")}
+      />
+      <span class="num">{Math.round(app.settings.fontScale * 100)}%</span>
+    </div>
+  </div>
+
+  <div class="block card about">
+    <img src="/icon.png" alt="" width="56" height="56" />
+    <div>
+      <h2>{t("settings-about")}</h2>
+      <p>{t("settings-about-text", { version: app.info?.version ?? "" })}</p>
+      <p class="muted small">{t("settings-author")} · nanodev.io.vn · github.com/congluuit/NANOFreeDisk</p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .page {
+    height: 100%;
+    overflow: auto;
+    padding: 28px 32px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    max-width: 980px;
+  }
+  h1 {
+    margin: 0 0 6px;
+    font-size: 1.6em;
+  }
+  h2 {
+    margin: 0 0 10px;
+    font-size: 1.05em;
+  }
+  h3 {
+    margin: 16px 0 8px;
+    font-size: 0.95em;
+  }
+  .block {
+    padding: 16px 18px;
+  }
+  .small {
+    font-size: 0.86em;
+  }
+  .modes {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+  }
+  .mode {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+  }
+  .toggle {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .modes.two {
+    grid-template-columns: 1fr 1fr;
+  }
+  .mtext {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+  }
+  .mode.on {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+  .row {
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    margin-top: 12px;
+    flex-wrap: wrap;
+  }
+  .row label {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .grow {
+    flex: 1;
+  }
+  .warn {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    color: var(--risk-caution);
+    margin: 8px 0 0;
+    font-size: 0.9em;
+  }
+  .colors {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 6px 14px;
+  }
+  .color {
+    display: grid;
+    grid-template-columns: 34px 1fr auto;
+    gap: 8px;
+    align-items: center;
+  }
+  .color input {
+    width: 34px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: none;
+  }
+  .presets {
+    display: flex;
+    gap: 12px;
+    margin-top: 14px;
+    flex-wrap: wrap;
+  }
+  .preset {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: center;
+    border: none;
+    background: none;
+    padding: 0;
+  }
+  .sample {
+    display: flex;
+    gap: 4px;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid;
+  }
+  .sample i {
+    width: 14px;
+    height: 24px;
+    border-radius: 3px;
+  }
+  .preset:hover .sample {
+    outline: 2px solid var(--accent);
+  }
+  .about {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+  }
+  .about img {
+    border-radius: 12px;
+  }
+  .about p {
+    margin: 2px 0;
+  }
+  input[type="range"] {
+    width: 260px;
+    accent-color: var(--accent);
+  }
+</style>

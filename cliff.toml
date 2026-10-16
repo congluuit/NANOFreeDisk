@@ -1,0 +1,44 @@
+# git-cliff configuration — https://git-cliff.org/docs/configuration
+[changelog]
+header = ""
+body = """
+{% if version %}\
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {% if commit.scope %}**{{ commit.scope }}:** {% endif %}\
+{% if commit.breaking %}[**breaking**] {% endif %}\
+{{ commit.message | upper_first }} ([{{ commit.id | truncate(length=7, end="") }}](https://github.com/congluuit/NANOFreeDisk/commit/{{ commit.id }}))\
+{% endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+commit_parsers = [
+  { message = "^safety", group = "<!-- 0 -->🛡 Safety" },
+  { message = "^feat", group = "<!-- 1 -->✨ Features" },
+  { message = "^fix", group = "<!-- 2 -->🐞 Bug fixes" },
+  { message = "^rules", group = "<!-- 3 -->📁 Cache rules" },
+  { message = "^perf", group = "<!-- 4 -->⚡ Performance" },
+  { message = "^refactor", group = "<!-- 5 -->♻ Refactoring" },
+  { message = "^docs", group = "<!-- 6 -->📚 Documentation" },
+  { message = "^test", group = "<!-- 7 -->🧪 Tests" },
+  { message = "^ci", group = "<!-- 8 -->👷 CI/CD" },
+  { message = "^chore\\(release\\)", skip = true },
+  { message = "^chore\\(deps", group = "<!-- 9 -->📦 Dependencies" },
+  { message = "^chore", group = "<!-- 10 -->🔧 Chores" },
+]
+protect_breaking_commits = true
+filter_commits = false
+tag_pattern = "v[0-9].*"
+topo_order = false
+sort_commits = "oldest"

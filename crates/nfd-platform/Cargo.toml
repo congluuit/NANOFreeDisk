@@ -1,0 +1,21 @@
+[package]
+name = "nfd-platform"
+description = "NANOFreeDisk platform abstraction (known folders, file metadata, trash, file locks, elevation)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

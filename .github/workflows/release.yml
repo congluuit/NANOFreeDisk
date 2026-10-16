@@ -1,0 +1,321 @@
+name: Release
+
+# Triggered by pushing a semver tag: v1.2.3, v1.2.3-rc.1, v1.2.3-beta.2
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  APP_NAME: NANOFreeDisk
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # 1. release-check — refuse to ship if anything is inconsistent
+  # ─────────────────────────────────────────────────────────────
+  release-check:
+    name: release-check
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+      prerelease: ${{ steps.ver.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+
+      - name: Derive version from tag
+        id: ver
+        shell: bash
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          VERSION="${TAG#v}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if [[ "$VERSION" == *-* ]]; then echo "prerelease=true" >> "$GITHUB_OUTPUT"; else echo "prerelease=false" >> "$GITHUB_OUTPUT"; fi
+          echo "Releasing $VERSION (prerelease=$([[ "$VERSION" == *-* ]] && echo true || echo false))"
+
+      - name: Workspace version must match tag
+        shell: bash
+        run: |
+          WS=$(grep -m1 -E '^version\s*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          echo "Cargo.toml workspace.package.version = $WS"
+          [[ "$WS" == "${{ steps.ver.outputs.version }}" ]] || { echo "::error::Cargo.toml version ($WS) != tag (${{ steps.ver.outputs.version }})"; exit 1; }
+
+      - name: tauri.conf.json / package.json versions must match (when present)
+        shell: bash
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          if [[ -f apps/nanofreedisk/src-tauri/tauri.conf.json ]]; then
+            TV=$(jq -r .version apps/nanofreedisk/src-tauri/tauri.conf.json)
+            [[ "$TV" == "$V" ]] || { echo "::error::tauri.conf.json version ($TV) != $V"; exit 1; }
+          fi
+          if [[ -f apps/nanofreedisk/package.json ]]; then
+            PV=$(jq -r .version apps/nanofreedisk/package.json)
+            [[ "$PV" == "$V" ]] || { echo "::error::package.json version ($PV) != $V"; exit 1; }
+          fi
+
+      - name: CHANGELOG must contain an entry for this version
+        shell: bash
+        run: |
+          grep -qE "^## \[${{ steps.ver.outputs.version }}\]" CHANGELOG.md \
+            || { echo "::error::CHANGELOG.md has no '## [${{ steps.ver.outputs.version }}]' section"; exit 1; }
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit,nextest
+
+      - name: fmt / clippy / tests
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo nextest run --workspace --all-features
+
+      - name: Rule packs validate
+        run: cargo run -p nfd-cli -- rules validate ./rules
+
+      - name: cargo audit (no critical advisories)
+        run: cargo audit --deny warnings || { echo "::error::cargo audit reported advisories"; exit 1; }
+
+  # ─────────────────────────────────────────────────────────────
+  # 2. build-windows — CLI, app bundles (MSI/NSIS) and branded setup
+  # ─────────────────────────────────────────────────────────────
+  build-windows:
+    name: build (windows x64)
+    needs: release-check
+    runs-on: windows-latest
+    env:
+      VERSION: ${{ needs.release-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build CLI
+        run: cargo build --release -p nfd-cli
+
+      # ── Tauri app (MSI + NSIS) — activates once apps/nanofreedisk exists ──
+      - name: Detect Tauri app
+        id: tauri
+        shell: bash
+        run: |
+          if [[ -f apps/nanofreedisk/src-tauri/tauri.conf.json ]]; then echo "present=true" >> "$GITHUB_OUTPUT"; else echo "present=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: pnpm/action-setup@v4
+        if: steps.tauri.outputs.present == 'true'
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        if: steps.tauri.outputs.present == 'true'
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/nanofreedisk/pnpm-lock.yaml
+      - name: Build Tauri bundles (MSI + NSIS)
+        if: steps.tauri.outputs.present == 'true'
+        working-directory: apps/nanofreedisk
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm tauri build --bundles msi,nsis
+
+      # ── Branded installer — activates once apps/nanofreedisk-setup exists ──
+      - name: Build branded setup
+        if: hashFiles('apps/nanofreedisk-setup/Cargo.toml') != ''
+        run: cargo build --release -p nanofreedisk-setup
+
+      - name: Assemble artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          $v = $env:VERSION
+          # portable zip (CLI now; app exe joins when present)
+          New-Item -ItemType Directory -Force "dist/portable" | Out-Null
+          Copy-Item target/release/nfd.exe dist/portable/
+          if (Test-Path target/release/nanofreedisk.exe) { Copy-Item target/release/nanofreedisk.exe dist/portable/ }
+          Copy-Item -Recurse rules dist/portable/rules
+          Copy-Item LICENSE, README.md dist/portable/
+          "portable" | Out-File -Encoding ascii dist/portable/portable.flag
+          Compress-Archive -Path dist/portable/* -DestinationPath "dist/$env:APP_NAME-$v-x64-portable.zip" -Force
+          Remove-Item -Recurse -Force dist/portable
+          # Tauri bundles
+          Get-ChildItem -Recurse -Filter *.msi target/release/bundle -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName "dist/$env:APP_NAME-$v-x64.msi" }
+          Get-ChildItem -Recurse -Filter *-setup.exe target/release/bundle -ErrorAction SilentlyContinue | ForEach-Object { Copy-Item $_.FullName "dist/$env:APP_NAME-$v-x64-setup.exe" }
+          # branded setup
+          if (Test-Path target/release/nanofreedisk-setup.exe) { Copy-Item target/release/nanofreedisk-setup.exe "dist/$env:APP_NAME-Setup-$v-x64.exe" }
+          Get-ChildItem dist
+
+      # ── Code signing (optional; runs only when secrets exist) ──
+      - name: Sign binaries (Azure Trusted Signing)
+        if: ${{ env.AZURE_TENANT_ID != '' }}
+        env:
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+        uses: azure/trusted-signing-action@v0
+        with:
+          azure-tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          azure-client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          azure-client-secret: ${{ secrets.AZURE_CLIENT_SECRET }}
+          endpoint: ${{ secrets.AZURE_SIGNING_ENDPOINT }}
+          trusted-signing-account-name: ${{ secrets.AZURE_SIGNING_ACCOUNT }}
+          certificate-profile-name: ${{ secrets.AZURE_SIGNING_PROFILE }}
+          files-folder: dist
+          files-folder-filter: exe,msi
+
+      - name: Smoke test (portable + silent install/uninstall when installers exist)
+        shell: pwsh
+        run: ./scripts/smoke-test.ps1 -Dist dist -Version $env:VERSION
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64
+          path: dist/*
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
+  # 3. build-core — CLI for Linux/macOS (keeps the port honest)
+  # ─────────────────────────────────────────────────────────────
+  build-core:
+    name: build cli (${{ matrix.target }})
+    needs: release-check
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
+          - { os: macos-latest,  target: aarch64-apple-darwin }
+    env:
+      VERSION: ${{ needs.release-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p nfd-cli --target ${{ matrix.target }}
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C target/${{ matrix.target }}/release -czf dist/nfd-$VERSION-${{ matrix.target }}.tar.gz nfd
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cli-${{ matrix.target }}
+          path: dist/*
+
+  # ─────────────────────────────────────────────────────────────
+  # 4. publish — checksums, SBOM, signature, changelog, GitHub Release
+  # ─────────────────────────────────────────────────────────────
+  publish:
+    name: publish release
+    needs: [release-check, build-windows, build-core]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.release-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Collect
+        run: |
+          mkdir -p dist
+          find artifacts -type f -exec cp {} dist/ \;
+          ls -la dist
+
+      - name: SBOM (CycloneDX)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-cyclonedx
+      - run: cargo cyclonedx --format json --override-filename sbom && cp sbom.cdx.json dist/sbom-$VERSION.cdx.json || true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt
+
+      - name: Sign checksums (minisign, optional)
+        if: ${{ env.MINISIGN_KEY != '' }}
+        env:
+          MINISIGN_KEY: ${{ secrets.MINISIGN_SECRET_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MINISIGN_PASSWORD }}
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq minisign
+          printf '%s' "$MINISIGN_KEY" > minisign.key
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m dist/SHA256SUMS.txt -t "NANOFreeDisk $VERSION"
+          rm -f minisign.key
+
+      - name: Changelog for this version
+        id: cliff
+        uses: orhun/git-cliff-action@v4
+        with:
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: RELEASE_NOTES.md
+
+      - name: Release notes
+        run: |
+          {
+            echo "## NANOFreeDisk $VERSION"
+            echo
+            echo "| Package | File |"
+            echo "|---|---|"
+            for f in dist/*; do b=$(basename "$f"); echo "| \`$b\` | [download](https://github.com/${{ github.repository }}/releases/download/v$VERSION/$b) |"; done
+            echo
+            echo "Verify with \`SHA256SUMS.txt\` (and \`SHA256SUMS.txt.minisig\` when present)."
+            echo
+            cat RELEASE_NOTES.md 2>/dev/null || true
+          } > NOTES.md
+          cat NOTES.md
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VERSION }}
+          name: NANOFreeDisk ${{ env.VERSION }}
+          body_path: NOTES.md
+          prerelease: ${{ needs.release-check.outputs.prerelease }}
+          draft: false
+          files: dist/*
+          fail_on_unmatched_files: true
+
+  # ─────────────────────────────────────────────────────────────
+  # 5. post-release — winget manifest PR (enabled after v1.0 and a WINGET_TOKEN)
+  # ─────────────────────────────────────────────────────────────
+  winget:
+    name: winget manifest
+    needs: [release-check, publish]
+    if: ${{ needs.release-check.outputs.prerelease == 'false' }}
+    runs-on: windows-latest
+    steps:
+      - name: Publish to winget
+        if: ${{ env.WINGET_TOKEN != '' }}
+        env:
+          WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+        uses: vedantmgoyal9/winget-releaser@v2
+        with:
+          identifier: NANODev.NANOFreeDisk
+          installers-regex: 'NANOFreeDisk-.*-x64\.msi$'
+          token: ${{ secrets.WINGET_TOKEN }}

@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="Analyze view mockup">
+  <rect width="1200" height="760" rx="14" fill="#0B1220"/>
+  <!-- title bar -->
+  <rect x="0" y="0" width="1200" height="40" rx="14" fill="#111C33"/>
+  <rect x="0" y="20" width="1200" height="20" fill="#111C33"/>
+  <text x="20" y="26" font-size="14" font-weight="700" fill="#F8FAFC">NANO<tspan fill="#22D3EE">FreeDisk</tspan> <tspan fill="#64748B" font-weight="400">— mockup, not a real screenshot</tspan></text>
+  <g fill="#64748B"><circle cx="1140" cy="20" r="5"/><circle cx="1160" cy="20" r="5"/><circle cx="1180" cy="20" r="5"/></g>
+
+  <!-- sidebar -->
+  <rect x="0" y="40" width="200" height="720" fill="#0F172A"/>
+  <g font-size="14" fill="#CBD5E1">
+    <rect x="12" y="56" width="176" height="36" rx="8" fill="#22D3EE" opacity="0.18"/>
+    <text x="28" y="80" fill="#22D3EE" font-weight="700">▣ Analyze</text>
+    <text x="28" y="124">🧹 Clean</text>
+    <text x="28" y="164">🤖 DevCache</text>
+    <text x="28" y="204">⧉ Duplicates</text>
+    <text x="28" y="244">📈 Monitor</text>
+    <text x="28" y="284">♥ Health</text>
+    <text x="28" y="324">⟲ Quarantine</text>
+    <text x="28" y="720" font-size="12" fill="#64748B">v0.1.0 · nanodev.io.vn</text>
+  </g>
+
+  <!-- toolbar -->
+  <g font-size="13" fill="#F8FAFC">
+    <rect x="216" y="56" width="420" height="34" rx="8" fill="#111C33" stroke="#1E293B"/>
+    <text x="230" y="78" fill="#CBD5E1">C:\  ·  NTFS  ·  931 GB  ·  fast scan (MFT) in 6.8 s · 1,204,311 files</text>
+    <rect x="648" y="56" width="92" height="34" rx="8" fill="#22D3EE" opacity="0.2" stroke="#22D3EE"/>
+    <text x="694" y="78" text-anchor="middle" fill="#22D3EE" font-weight="700">Treemap</text>
+    <rect x="748" y="56" width="92" height="34" rx="8" fill="#111C33" stroke="#1E293B"/>
+    <text x="794" y="78" text-anchor="middle" fill="#CBD5E1">Sunburst</text>
+    <rect x="848" y="56" width="92" height="34" rx="8" fill="#111C33" stroke="#1E293B"/>
+    <text x="894" y="78" text-anchor="middle" fill="#CBD5E1">Top 100</text>
+    <rect x="960" y="56" width="220" height="34" rx="8" fill="#111C33" stroke="#1E293B"/>
+    <text x="974" y="78" fill="#64748B">🔍 filter: *.log &gt; 100 MB</text>
+  </g>
+
+  <!-- usage bar -->
+  <rect x="216" y="104" width="964" height="14" rx="7" fill="#1E293B"/>
+  <rect x="216" y="104" width="702" height="14" rx="7" fill="#22D3EE"/>
+  <rect x="216" y="104" width="300" height="14" rx="7" fill="#A3E635"/>
+  <text x="216" y="136" font-size="12" fill="#94A3B8">Used 679 GB  ·  Free 252 GB  ·  ⚠ 41 GB of junk &amp; dev caches detected  ·  ☁ 18 GB cloud placeholders excluded</text>
+
+  <!-- treemap -->
+  <g stroke="#0B1220" stroke-width="2" font-size="12" fill="#0B1220">
+    <rect x="216" y="150" width="400" height="330" fill="#22D3EE"/>
+    <text x="228" y="170" font-weight="700">Users\cong\  312 GB</text>
+    <rect x="216" y="180" width="250" height="160" fill="#67E8F9"/>
+    <text x="228" y="200">.ollama\models  96 GB</text>
+    <rect x="470" y="180" width="146" height="90" fill="#A5F3FC"/>
+    <text x="480" y="200">.cargo  22 GB</text>
+    <rect x="470" y="274" width="146" height="66" fill="#CFFAFE"/>
+    <text x="480" y="294">.claude  3.1 GB</text>
+    <rect x="216" y="344" width="400" height="136" fill="#06B6D4"/>
+    <text x="228" y="364">AppData\Local  128 GB</text>
+
+    <rect x="620" y="150" width="300" height="200" fill="#A3E635"/>
+    <text x="632" y="170" font-weight="700">Projects\  188 GB</text>
+    <rect x="620" y="180" width="180" height="170" fill="#BEF264"/>
+    <text x="632" y="200">UE5\DerivedDataCache 71 GB</text>
+    <rect x="804" y="180" width="116" height="170" fill="#D9F99D"/>
+    <text x="814" y="200">node_modules ×14</text>
+
+    <rect x="924" y="150" width="256" height="200" fill="#F59E0B"/>
+    <text x="936" y="170" font-weight="700">Windows\  64 GB</text>
+    <rect x="924" y="180" width="256" height="60" fill="#FCD34D"/>
+    <text x="936" y="200">WinSxS  11 GB 🔒</text>
+    <rect x="924" y="244" width="130" height="106" fill="#FDE68A"/>
+    <text x="936" y="264">Installer 🔒</text>
+    <rect x="1058" y="244" width="122" height="106" fill="#FEF3C7"/>
+    <text x="1068" y="264">Temp 2.4 GB</text>
+
+    <rect x="620" y="354" width="560" height="126" fill="#60A5FA"/>
+    <text x="632" y="374" font-weight="700">Program Files  97 GB 🔒</text>
+    <rect x="620" y="384" width="220" height="96" fill="#93C5FD"/>
+    <text x="632" y="404">Epic Games 48 GB</text>
+    <rect x="844" y="384" width="180" height="96" fill="#BFDBFE"/>
+    <text x="856" y="404">Unity Hub 26 GB</text>
+    <rect x="1028" y="384" width="152" height="96" fill="#DBEAFE"/>
+    <text x="1040" y="404">JetBrains 12 GB</text>
+  </g>
+
+  <!-- details panel -->
+  <rect x="216" y="496" width="964" height="248" rx="10" fill="#111C33" stroke="#1E293B"/>
+  <g font-size="13" fill="#CBD5E1">
+    <text x="232" y="522" font-weight="700" fill="#F8FAFC">C:\Users\cong\.ollama\models\blobs</text>
+    <text x="232" y="546">96.2 GB · 38 files · modified 3 days ago · hardlinks: 0 · attrs: —</text>
+    <circle cx="238" cy="574" r="6" fill="#EAB308"/>
+    <text x="252" y="579"><tspan font-weight="700" fill="#F8FAFC">Caution</tspan> — rule <tspan fill="#22D3EE">ollama.models</tspan>: downloaded LLM models. Deleting means `ollama pull` again. Prefer removing single models with `ollama rm`.</text>
+    <text x="232" y="606">Requires closed: <tspan fill="#F87171">ollama.exe (running, PID 4120)</tspan> · Locked files: 0</text>
+    <rect x="232" y="628" width="150" height="34" rx="8" fill="#22D3EE" opacity="0.2" stroke="#22D3EE"/>
+    <text x="307" y="650" text-anchor="middle" fill="#22D3EE" font-weight="700">Open in Explorer</text>
+    <rect x="394" y="628" width="190" height="34" rx="8" fill="#A3E635" opacity="0.2" stroke="#A3E635"/>
+    <text x="489" y="650" text-anchor="middle" fill="#A3E635" font-weight="700">Add to plan (Quarantine)</text>
+    <rect x="596" y="628" width="190" height="34" rx="8" fill="#F59E0B" opacity="0.2" stroke="#F59E0B"/>
+    <text x="691" y="650" text-anchor="middle" fill="#F59E0B" font-weight="700">Pick models to remove…</text>
+    <text x="232" y="700" font-size="12" fill="#64748B">Plan: 3 items · 41.6 GB · 0 protected · 1 needs app closed · mode: Quarantine (7 days)   ▶ Preview (dry-run)</text>
+  </g>
+</svg>

@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Segoe UI, Inter, Helvetica, Arial, sans-serif" role="img" aria-label="DevCache view mockup">
+  <rect width="1200" height="760" rx="14" fill="#0B1220"/>
+  <rect x="0" y="0" width="1200" height="40" rx="14" fill="#111C33"/>
+  <rect x="0" y="20" width="1200" height="20" fill="#111C33"/>
+  <text x="20" y="26" font-size="14" font-weight="700" fill="#F8FAFC">NANO<tspan fill="#22D3EE">FreeDisk</tspan> <tspan fill="#64748B" font-weight="400">— DevCache Manager (mockup)</tspan></text>
+
+  <rect x="0" y="40" width="200" height="720" fill="#0F172A"/>
+  <g font-size="14" fill="#CBD5E1">
+    <text x="28" y="80">▣ Analyze</text>
+    <text x="28" y="124">🧹 Clean</text>
+    <rect x="12" y="140" width="176" height="36" rx="8" fill="#F59E0B" opacity="0.18"/>
+    <text x="28" y="164" fill="#F59E0B" font-weight="700">🤖 DevCache</text>
+    <text x="28" y="204">⧉ Duplicates</text>
+    <text x="28" y="244">📈 Monitor</text>
+    <text x="28" y="284">♥ Health</text>
+    <text x="28" y="324">⟲ Quarantine</text>
+  </g>
+
+  <g font-size="13" fill="#F8FAFC">
+    <text x="216" y="76" font-size="18" font-weight="700">AI tools, IDEs, package managers &amp; engines — 142.8 GB reclaimable</text>
+    <text x="216" y="98" font-size="12" fill="#94A3B8">Green = safe one-click · Yellow = needs your confirmation · Red lock = kept on purpose (config, credentials, history you may want)</text>
+    <rect x="980" y="56" width="200" height="34" rx="8" fill="#22C55E" opacity="0.2" stroke="#22C55E"/>
+    <text x="1080" y="78" text-anchor="middle" fill="#22C55E" font-weight="700">Clean all Safe (9.4 GB)</text>
+  </g>
+
+  <!-- header -->
+  <g font-size="12" fill="#64748B">
+    <text x="232" y="128">Vendor / app / folder</text>
+    <text x="700" y="128">Size</text>
+    <text x="780" y="128">Risk</text>
+    <text x="860" y="128">If deleted…</text>
+    <text x="1120" y="128">App</text>
+  </g>
+  <line x1="216" y1="136" x2="1180" y2="136" stroke="#1E293B"/>
+
+  <!-- rows -->
+  <g font-size="13" fill="#CBD5E1">
+    <!-- Anthropic -->
+    <text x="232" y="160" font-weight="700" fill="#F8FAFC">▾ Anthropic — Claude Code &amp; Claude Desktop</text>
+    <text x="700" y="160" fill="#F8FAFC">3.9 GB</text>
+
+    <text x="252" y="186">~\.claude\projects\**\*.jsonl</text>
+    <text x="700" y="186">2.6 GB</text>
+    <circle cx="786" cy="182" r="6" fill="#EAB308"/><text x="798" y="186">Caution</text>
+    <text x="860" y="186" font-size="12">Lose `--resume` of old sessions; code untouched</text>
+    <text x="1120" y="186" fill="#22C55E" font-size="12">closed</text>
+
+    <text x="252" y="212">~\.claude\file-history\</text>
+    <text x="700" y="212">0.9 GB</text>
+    <circle cx="786" cy="208" r="6" fill="#EAB308"/><text x="798" y="212">Caution</text>
+    <text x="860" y="212" font-size="12">Lose revert of edits older than 30 days</text>
+    <text x="1120" y="212" fill="#22C55E" font-size="12">closed</text>
+
+    <text x="252" y="238">~\.claude\shell-snapshots, todos, debug, statsig</text>
+    <text x="700" y="238">214 MB</text>
+    <circle cx="786" cy="234" r="6" fill="#22C55E"/><text x="798" y="238">Safe</text>
+    <text x="860" y="238" font-size="12">Recreated next session</text>
+    <text x="1120" y="238" fill="#22C55E" font-size="12">closed</text>
+
+    <text x="252" y="264">%APPDATA%\Claude\Cache, Code Cache, GPUCache, logs</text>
+    <text x="700" y="264">188 MB</text>
+    <circle cx="786" cy="260" r="6" fill="#22C55E"/><text x="798" y="264">Safe</text>
+    <text x="860" y="264" font-size="12">App opens slightly slower once</text>
+    <text x="1120" y="264" fill="#F87171" font-size="12">running</text>
+
+    <text x="252" y="290" fill="#64748B">🔒 ~\.claude.json · settings.json · projects\*\memory · plugins</text>
+    <text x="700" y="290" fill="#64748B">4 MB</text>
+    <circle cx="786" cy="286" r="6" fill="#EF4444"/><text x="798" y="290" fill="#64748B">Keep</text>
+    <text x="860" y="290" font-size="12" fill="#64748B">Config, login, memory — never offered for deletion</text>
+
+    <!-- OpenAI -->
+    <text x="232" y="326" font-weight="700" fill="#F8FAFC">▾ OpenAI — Codex CLI</text>
+    <text x="700" y="326" fill="#F8FAFC">1.2 GB</text>
+    <text x="252" y="352">~\.codex\sessions\**</text>
+    <text x="700" y="352">1.1 GB</text>
+    <circle cx="786" cy="348" r="6" fill="#EAB308"/><text x="798" y="352">Caution</text>
+    <text x="860" y="352" font-size="12">Lose `codex resume` history</text>
+    <text x="1120" y="352" fill="#22C55E" font-size="12">closed</text>
+    <text x="252" y="378" fill="#64748B">🔒 ~\.codex\auth.json · config.toml</text>
+    <circle cx="786" cy="374" r="6" fill="#EF4444"/><text x="798" y="378" fill="#64748B">Keep</text>
+
+    <!-- Cursor -->
+    <text x="232" y="414" font-weight="700" fill="#F8FAFC">▾ Anysphere — Cursor</text>
+    <text x="700" y="414" fill="#F8FAFC">5.7 GB</text>
+    <text x="252" y="440">%APPDATA%\Cursor\Cache, CachedData, CachedExtensionVSIXs, logs</text>
+    <text x="700" y="440">3.4 GB</text>
+    <circle cx="786" cy="436" r="6" fill="#22C55E"/><text x="798" y="440">Safe</text>
+    <text x="860" y="440" font-size="12">Rebuilt automatically</text>
+    <text x="1120" y="440" fill="#F87171" font-size="12">running</text>
+    <text x="252" y="466">%APPDATA%\Cursor\User\workspaceStorage (11 orphaned)</text>
+    <text x="700" y="466">2.3 GB</text>
+    <circle cx="786" cy="462" r="6" fill="#22C55E"/><text x="798" y="466">Safe*</text>
+    <text x="860" y="466" font-size="12">*Workspaces no longer exist on disk</text>
+
+    <!-- Ollama -->
+    <text x="232" y="502" font-weight="700" fill="#F8FAFC">▾ Ollama</text>
+    <text x="700" y="502" fill="#F8FAFC">96.2 GB</text>
+    <text x="252" y="528">~\.ollama\models\blobs — 7 models (llama3.3:70b 42 GB, qwen2.5-coder:32b 19 GB, …)</text>
+    <text x="700" y="528">96.2 GB</text>
+    <circle cx="786" cy="524" r="6" fill="#EAB308"/><text x="798" y="528">Caution</text>
+    <text x="860" y="528" font-size="12">Pick models → `ollama rm`, re-pull later</text>
+    <text x="1120" y="528" fill="#F87171" font-size="12">running</text>
+
+    <!-- Unreal -->
+    <text x="232" y="564" font-weight="700" fill="#F8FAFC">▾ Epic — Unreal Engine (3 projects)</text>
+    <text x="700" y="564" fill="#F8FAFC">31.4 GB</text>
+    <text x="252" y="590">D:\Projects\Game\Intermediate, Saved\Logs, Saved\Crashes</text>
+    <text x="700" y="590">9.1 GB</text>
+    <circle cx="786" cy="586" r="6" fill="#22C55E"/><text x="798" y="590">Safe</text>
+    <text x="860" y="590" font-size="12">Rebuilt by next compile</text>
+    <text x="252" y="616">D:\Projects\Game\DerivedDataCache</text>
+    <text x="700" y="616">22.3 GB</text>
+    <circle cx="786" cy="612" r="6" fill="#EAB308"/><text x="798" y="616">Caution</text>
+    <text x="860" y="616" font-size="12">Shaders &amp; DDC rebuild — can take hours</text>
+
+    <!-- unknown -->
+    <text x="232" y="652" font-weight="700" fill="#F8FAFC">▾ Unverified (no rule yet)</text>
+    <text x="252" y="678">~\.zencoder\cache\</text>
+    <text x="700" y="678">640 MB</text>
+    <circle cx="786" cy="674" r="6" fill="#EAB308"/><text x="798" y="678">Unverified</text>
+    <text x="860" y="678" font-size="12">Looks like a cache · <tspan fill="#22D3EE">Propose a rule →</tspan></text>
+  </g>
+  <text x="216" y="730" font-size="12" fill="#64748B">Plan: 6 items · 17.9 GB · mode Quarantine (7 days) · 2 apps must be closed first   ▶ Preview (dry-run)</text>
+</svg>

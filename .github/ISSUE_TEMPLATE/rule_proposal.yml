@@ -1,0 +1,45 @@
+name: 📁 Cache rule proposal / correction
+description: Propose a new DevCache rule or report a wrong risk level / impact text.
+labels: ["rules", "triage"]
+body:
+  - type: input
+    id: app
+    attributes:
+      label: Vendor / app / version
+      placeholder: "Anysphere / Cursor 1.7.x"
+    validations:
+      required: true
+  - type: textarea
+    id: paths
+    attributes:
+      label: Folder(s)
+      description: Use variables (%APPDATA%, %LOCALAPPDATA%, ~) rather than your username.
+      placeholder: "%APPDATA%\\Cursor\\CachedData\\"
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: level
+    attributes:
+      label: Proposed risk level
+      options: ["🟢 Safe — recreated, nothing lost", "🟡 Caution — history lost / re-download / slower once", "🟠 Advanced — can break features or repair", "🔴 Protected — config, credentials, user data"]
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: What happens if it is deleted? What is NOT lost?
+    validations:
+      required: true
+  - type: textarea
+    id: verify
+    attributes:
+      label: How did you verify this?
+      description: e.g. "closed the app, deleted the folder, reopened — settings and chats were still there; it re-downloaded 300 MB".
+    validations:
+      required: true
+  - type: input
+    id: closed
+    attributes:
+      label: Processes that must be closed
+      placeholder: "Cursor.exe"

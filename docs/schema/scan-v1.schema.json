@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/congluuit/NANOFreeDisk/blob/main/docs/schema/scan-v1.schema.json",
+  "title": "NANOFreeDisk scan report (nanofreedisk.scan.v1)",
+  "description": "Output of `nfd scan --json`. Sizes in bytes, times in Unix seconds (UTC), paths absolute. Adding fields is backward compatible; renaming or removing one bumps the schema id.",
+  "type": "object",
+  "required": [
+    "schema", "version", "root", "mode", "fallback", "scanned_at", "elapsed_ms",
+    "top", "min_size", "totals", "children", "top_files", "extensions", "errors"
+  ],
+  "properties": {
+    "schema": { "const": "nanofreedisk.scan.v1" },
+    "version": { "type": "string", "description": "nfd version that wrote the report" },
+    "root": { "type": "string", "description": "Path that was scanned" },
+    "mode": { "enum": ["standard", "fast"], "description": "Mode actually used" },
+    "fallback": {
+      "type": ["string", "null"],
+      "description": "Why --fast fell back to the standard scan"
+    },
+    "scanned_at": { "type": "integer" },
+    "elapsed_ms": { "$ref": "#/$defs/count" },
+    "top": { "$ref": "#/$defs/count", "description": "Row limit applied to children, top_files and extensions" },
+    "min_size": { "$ref": "#/$defs/count", "description": "Rows with on_disk below this were omitted" },
+    "totals": {
+      "type": "object",
+      "description": "Whole tree; hard-link duplicates and links excluded from sizes",
+      "required": [
+        "files", "dirs", "symlinks", "junctions", "mount_points", "other",
+        "hardlink_dups", "logical", "on_disk", "errors", "approximate"
+      ],
+      "properties": {
+        "files": { "$ref": "#/$defs/count" },
+        "dirs": { "$ref": "#/$defs/count" },
+        "symlinks": { "$ref": "#/$defs/count" },
+        "junctions": { "$ref": "#/$defs/count" },
+        "mount_points": { "$ref": "#/$defs/count" },
+        "other": { "$ref": "#/$defs/count" },
+        "hardlink_dups": { "$ref": "#/$defs/count" },
+        "logical": { "$ref": "#/$defs/count" },
+        "on_disk": { "$ref": "#/$defs/count" },
+        "errors": { "$ref": "#/$defs/count" },
+        "approximate": { "$ref": "#/$defs/count" }
+      }
+    },
+    "children": {
+      "type": "array",
+      "description": "Direct children of root, largest on_disk first",
+      "items": {
+        "type": "object",
+        "required": ["path", "name", "kind", "logical", "on_disk", "files"],
+        "properties": {
+          "path": { "type": "string" },
+          "name": { "type": "string" },
+          "kind": { "enum": ["file", "dir", "symlink", "junction", "mount_point", "other"] },
+          "logical": { "$ref": "#/$defs/count" },
+          "on_disk": { "$ref": "#/$defs/count" },
+          "files": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "top_files": {
+      "type": "array",
+      "description": "Largest files, on_disk descending",
+      "items": {
+        "type": "object",
+        "required": ["path", "logical", "on_disk", "mtime", "attrs", "hardlinks"],
+        "properties": {
+          "path": { "type": "string" },
+          "logical": { "$ref": "#/$defs/count" },
+          "on_disk": { "$ref": "#/$defs/count" },
+          "mtime": { "type": "integer" },
+          "attrs": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "enum": ["system", "hidden", "reparse", "compressed", "sparse", "offline", "readonly"]
+            }
+          },
+          "hardlinks": { "type": "integer", "minimum": 1, "maximum": 65535 }
+        }
+      }
+    },
+    "extensions": {
+      "type": "array",
+      "description": "Per-extension totals, on_disk descending; ext is lower-case without the dot, empty for none",
+      "items": {
+        "type": "object",
+        "required": ["ext", "files", "logical", "on_disk"],
+        "properties": {
+          "ext": { "type": "string" },
+          "files": { "$ref": "#/$defs/count" },
+          "logical": { "$ref": "#/$defs/count" },
+          "on_disk": { "$ref": "#/$defs/count" }
+        }
+      }
+    },
+    "errors": {
+      "type": "array",
+      "description": "Every path that could not be read (not truncated)",
+      "items": {
+        "type": "object",
+        "required": ["path", "kind", "message"],
+        "properties": {
+          "path": { "type": "string" },
+          "kind": { "enum": ["access_denied", "not_found", "other"] },
+          "message": { "type": "string" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 }
+  }
+}
