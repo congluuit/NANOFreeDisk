@@ -1,0 +1,250 @@
+//! NVMe SMART / Health Information log page (02h), NVM Express Base Specification
+//! §5.16.1.3. 512 bytes, little endian; the 128-bit counters are kept as `u64`
+//! (2^64 data units is far beyond any drive).
+
+use serde::{Deserialize, Serialize};
+
+/// Size of log page 02h.
+pub const LOG_LEN: usize = 512;
+
+/// One data unit of Data Units Read / Written: 1000 × 512 bytes.
+pub const DATA_UNIT: u64 = 512_000;
+
+/// Critical Warning bits.
+pub mod warning {
+    /// Available spare fell below the threshold.
+    pub const SPARE: u8 = 1 << 0;
+    /// Temperature above an over-temperature or below an under-temperature threshold.
+    pub const TEMPERATURE: u8 = 1 << 1;
+    /// NVM subsystem reliability degraded (media or internal errors).
+    pub const RELIABILITY: u8 = 1 << 2;
+    /// Media placed in read-only mode.
+    pub const READ_ONLY: u8 = 1 << 3;
+    /// Volatile memory backup device failed.
+    pub const BACKUP: u8 = 1 << 4;
+}
+
+/// The fields of log 02h the app shows.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NvmeLog {
+    pub critical_warning: u8,
+    /// Composite temperature, °C.
+    pub temperature: Option<i32>,
+    /// Percent.
+    pub available_spare: u8,
+    /// Percent.
+    pub spare_threshold: u8,
+    /// Vendor estimate of life used, percent (may exceed 100).
+    pub percentage_used: u8,
+    pub data_units_read: u64,
+    pub data_units_written: u64,
+    pub host_reads: u64,
+    pub host_writes: u64,
+    /// Minutes.
+    pub controller_busy: u64,
+    pub power_cycles: u64,
+    pub power_on_hours: u64,
+    pub unsafe_shutdowns: u64,
+    pub media_errors: u64,
+    pub error_log_entries: u64,
+    /// Minutes above the warning composite temperature.
+    pub warning_temp_minutes: u32,
+    /// Minutes above the critical composite temperature.
+    pub critical_temp_minutes: u32,
+    /// Temperature sensors 1–8 that report a value, °C.
+    pub sensors: Vec<i32>,
+}
+
+fn u16_at(b: &[u8], o: usize) -> u16 {
+    u16::from_le_bytes([b[o], b[o + 1]])
+}
+
+fn u32_at(b: &[u8], o: usize) -> u32 {
+    u32::from_le_bytes([b[o], b[o + 1], b[o + 2], b[o + 3]])
+}
+
+/// Low 64 bits of a 128-bit counter, saturated when the high half is set.
+fn u128_at(b: &[u8], o: usize) -> u64 {
+    let mut lo = [0u8; 8];
+    lo.copy_from_slice(&b[o..o + 8]);
+    if b[o + 8..o + 16].iter().any(|&x| x != 0) {
+        u64::MAX
+    } else {
+        u64::from_le_bytes(lo)
+    }
+}
+
+/// Kelvin → °C, `None` for "not reported" (0) and implausible readings.
+fn kelvin(k: u16) -> Option<i32> {
+    let c = i32::from(k) - 273;
+    (k != 0 && (-40..150).contains(&c)).then_some(c)
+}
+
+impl NvmeLog {
+    /// Parse a log page; `None` when it is too short or all zeros (some drivers
+    /// answer that way instead of failing).
+    #[must_use]
+    pub fn parse(b: &[u8]) -> Option<Self> {
+        if b.len() < LOG_LEN || b[..LOG_LEN].iter().all(|&x| x == 0) {
+            return None;
+        }
+        Some(Self {
+            critical_warning: b[0],
+            temperature: kelvin(u16_at(b, 1)),
+            available_spare: b[3],
+            spare_threshold: b[4],
+            percentage_used: b[5],
+            data_units_read: u128_at(b, 32),
+            data_units_written: u128_at(b, 48),
+            host_reads: u128_at(b, 64),
+            host_writes: u128_at(b, 80),
+            controller_busy: u128_at(b, 96),
+            power_cycles: u128_at(b, 112),
+            power_on_hours: u128_at(b, 128),
+            unsafe_shutdowns: u128_at(b, 144),
+            media_errors: u128_at(b, 160),
+            error_log_entries: u128_at(b, 176),
+            warning_temp_minutes: u32_at(b, 192),
+            critical_temp_minutes: u32_at(b, 196),
+            sensors: (0..8)
+                .filter_map(|i| kelvin(u16_at(b, 200 + 2 * i)))
+                .collect(),
+        })
+    }
+
+    /// Bytes read, from Data Units Read.
+    #[must_use]
+    pub fn bytes_read(&self) -> u64 {
+        self.data_units_read.saturating_mul(DATA_UNIT)
+    }
+
+    /// Bytes written, from Data Units Written.
+    #[must_use]
+    pub fn bytes_written(&self) -> u64 {
+        self.data_units_written.saturating_mul(DATA_UNIT)
+    }
+
+    /// Life left in percent (100 − Percentage Used, floored at 0).
+    #[must_use]
+    pub fn life_left(&self) -> u8 {
+        100u8.saturating_sub(self.percentage_used)
+    }
+}
+
+/// Size of the Identify Controller data structure (CNS 01h).
+pub const IDENTIFY_LEN: usize = 4096;
+
+/// The Identify Controller fields the app uses.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Identify {
+    pub serial: String,
+    pub model: String,
+    pub firmware: String,
+    /// Warning / critical composite temperature thresholds, °C.
+    pub warning_temp: Option<i32>,
+    pub critical_temp: Option<i32>,
+}
+
+fn ascii(b: &[u8]) -> String {
+    String::from_utf8_lossy(b)
+        .trim_matches(|c: char| c == '\0' || c.is_whitespace())
+        .to_owned()
+}
+
+impl Identify {
+    #[must_use]
+    pub fn parse(b: &[u8]) -> Option<Self> {
+        if b.len() < 512 {
+            return None;
+        }
+        let serial = ascii(&b[4..24]);
+        if serial.is_empty() {
+            return None;
+        }
+        Some(Self {
+            serial,
+            model: ascii(&b[24..64]),
+            firmware: ascii(&b[64..72]),
+            warning_temp: kelvin(u16_at(b, 266)),
+            critical_temp: kelvin(u16_at(b, 268)),
+        })
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+
+    /// Log page with the values of the Samsung PM981 (MZVLB512HAJQ) on the reference
+    /// laptop, as read on 2026-10-16.
+    pub(crate) fn pm981() -> Vec<u8> {
+        let mut b = vec![0u8; LOG_LEN];
+        b[1..3].copy_from_slice(&(52u16 + 273).to_le_bytes());
+        b[3] = 100;
+        b[4] = 10;
+        b[5] = 2;
+        b[32..40].copy_from_slice(&18_820_450u64.to_le_bytes());
+        b[48..56].copy_from_slice(&20_728_552u64.to_le_bytes());
+        b[112..120].copy_from_slice(&1_733u64.to_le_bytes());
+        b[128..136].copy_from_slice(&6_596u64.to_le_bytes());
+        b[144..152].copy_from_slice(&157u64.to_le_bytes());
+        b[176..184].copy_from_slice(&3_027u64.to_le_bytes());
+        b[200..202].copy_from_slice(&(52u16 + 273).to_le_bytes());
+        b[202..204].copy_from_slice(&(61u16 + 273).to_le_bytes());
+        b
+    }
+
+    #[test]
+    fn parses_the_log_page() {
+        let log = NvmeLog::parse(&pm981()).expect("log");
+        assert_eq!(log.temperature, Some(52));
+        assert_eq!(log.available_spare, 100);
+        assert_eq!(log.spare_threshold, 10);
+        assert_eq!(log.life_left(), 98);
+        assert_eq!(log.power_on_hours, 6_596);
+        assert_eq!(log.unsafe_shutdowns, 157);
+        assert_eq!(log.power_cycles, 1_733);
+        assert_eq!(log.error_log_entries, 3_027);
+        assert_eq!(log.sensors, vec![52, 61]);
+        // 20 728 552 × 512 000 B ≈ 10.6 TB (CrystalDiskInfo's "Host Writes" uses the same unit)
+        assert_eq!(log.bytes_written(), 10_613_018_624_000);
+        assert_eq!(log.bytes_read(), 9_636_070_400_000);
+        assert_eq!(log.media_errors, 0);
+    }
+
+    #[test]
+    fn parses_identify_controller() {
+        let mut b = vec![0u8; IDENTIFY_LEN];
+        b[4..24].copy_from_slice(b"S4DXNF0M123456      ");
+        b[24..64].copy_from_slice(b"SAMSUNG MZVLB512HAJQ-000L7              ");
+        b[64..72].copy_from_slice(b"5L2QEXA7");
+        b[266..268].copy_from_slice(&(81u16 + 273).to_le_bytes());
+        b[268..270].copy_from_slice(&(82u16 + 273).to_le_bytes());
+        let id = Identify::parse(&b).expect("identify");
+        assert_eq!(id.serial, "S4DXNF0M123456");
+        assert_eq!(id.model, "SAMSUNG MZVLB512HAJQ-000L7");
+        assert_eq!(id.firmware, "5L2QEXA7");
+        assert_eq!((id.warning_temp, id.critical_temp), (Some(81), Some(82)));
+        assert_eq!(Identify::parse(&[0u8; IDENTIFY_LEN]), None);
+    }
+
+    #[test]
+    fn empty_or_short_pages_are_not_logs() {
+        assert_eq!(NvmeLog::parse(&[0u8; LOG_LEN]), None);
+        assert_eq!(NvmeLog::parse(&pm981()[..100]), None);
+    }
+
+    #[test]
+    fn odd_values_are_filtered() {
+        let mut b = pm981();
+        b[1..3].copy_from_slice(&0u16.to_le_bytes());
+        b[5] = 255;
+        b[56] = 1; // high half of Data Units Written set
+        let log = NvmeLog::parse(&b).expect("log");
+        assert_eq!(log.temperature, None);
+        assert_eq!(log.life_left(), 0);
+        assert_eq!(log.data_units_written, u64::MAX);
+        assert_eq!(log.bytes_written(), u64::MAX);
+    }
+}

@@ -280,6 +280,15 @@
     </div>
   </div>
 
+  <div class="block card" data-settings="health">
+    <h2>{t("settings-health")}</h2>
+    <label class="toggle" title={t("hint-health-alerts")}>
+      <input type="checkbox" bind:checked={app.settings.healthAlerts} data-effect title={t("hint-health-alerts")} />
+      <span>{t("settings-health-alerts")}</span>
+    </label>
+    <p class="muted small">{t("settings-health-alerts-note")}</p>
+  </div>
+
   <div class="block card" data-settings="devcache">
     <h2>{t("settings-devcache")}</h2>
     <label class="toggle" title={t("hint-dev-alerts")}>

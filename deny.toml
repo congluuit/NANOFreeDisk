@@ -75,9 +75,10 @@ highlight = "all"
 deny = [
   # never pull in the old, unmaintained bindings
   # Our code uses `windows-sys`. Tauri's runtime still reaches winapi through
-  # dlopen2 (tao, Windows) and gio-sys (GTK, Linux), and eframe (the branded
-  # setup's egui shell) uses it on Windows; only those may pull it in.
-  { crate = "winapi", wrappers = ["dlopen2", "gio-sys", "eframe"], reason = "use the `windows` / `windows-sys` crates" },
+  # dlopen2 (tao, Windows), gio-sys (GTK, Linux) and libloading (libappindicator for
+  # the tray icon, Linux), and eframe (the branded setup's egui shell) uses it on
+  # Windows; only those may pull it in.
+  { crate = "winapi", wrappers = ["dlopen2", "gio-sys", "libloading", "eframe"], reason = "use the `windows` / `windows-sys` crates" },
 ]
 
 [sources]

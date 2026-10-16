@@ -76,7 +76,7 @@ export function itemMenu(id: number, opts: ItemMenuOptions = {}): MenuItem[] {
   return items;
 }
 
-function download(name: string, text: string): void {
+export function download(name: string, text: string): void {
   const url = URL.createObjectURL(new Blob([text], { type: "text/html" }));
   const a = Object.assign(document.createElement("a"), { href: url, download: name });
   a.click();

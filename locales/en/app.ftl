@@ -25,7 +25,7 @@ home-pick-folder = Choose a folder to analyze
 home-action-analyze = See what fills the disk
 home-action-analyze-hint = Treemap, sunburst and lists of the biggest folders and files.
 home-action-health = Is my drive healthy?
-home-action-health-hint = S.M.A.R.T. and NVMe health arrive in Phase 7.
+home-action-health-hint = Good / Caution / Bad for every drive, temperature, wear and volume checks.
 home-refresh = Refresh
 home-no-drives = No drives found.
 
@@ -367,7 +367,7 @@ health-good = Looks good
 health-fair = Needs attention
 health-poor = Act soon
 health-all-good = Nothing to fix right now.
-health-basis = Based on free space, how fast each drive fills (from your scan history) and the last scan. Drive hardware health (S.M.A.R.T.) arrives in Phase 7.
+health-basis = Based on free space, how fast each drive fills (from your scan history), the last scan and each drive's own health (S.M.A.R.T. / NVMe, temperature).
 health-low-space = { $drive } has only { $percent } free ({ $size }).
 health-filling-fast = At the current pace { $drive } will be full in about { $days } days.
 health-old-large = { $size } of large or old files in { $folder } could be freed.

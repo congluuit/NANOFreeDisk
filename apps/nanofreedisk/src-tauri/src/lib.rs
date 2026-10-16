@@ -8,6 +8,7 @@
 mod commands;
 mod paths;
 mod session;
+mod tray;
 mod uninstall;
 
 use tauri::{Emitter, Manager};
@@ -86,17 +87,20 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
-        // the main window comes from tauri.conf.json ("create": false) so portable
-        // mode can keep the WebView2 profile next to the exe
-        .setup(|app| {
-            paths::main_window(app.handle())?;
-            Ok(())
-        })
         .manage(state)
         .manage(commands::clean::CleanState::default())
         .manage(commands::devcache::DevState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
+        .manage(commands::diskhealth::HealthState::default())
+        .setup(|app| {
+            // the main window comes from tauri.conf.json ("create": false) so
+            // portable mode can keep the WebView2 profile next to the exe
+            paths::main_window(app.handle())?;
+            // the notification-area icon (G5); the app works without it
+            let _ = tray::create(app.handle());
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::list_volumes,
@@ -188,6 +192,10 @@ pub fn run() {
             commands::update::update_check,
             commands::update::update_install,
             commands::update::update_open_releases,
+            commands::diskhealth::health_report,
+            commands::diskhealth::health_elevated,
+            commands::diskhealth::health_export,
+            commands::diskhealth::health_watch_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

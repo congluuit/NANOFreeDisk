@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/congluuit/NANOFreeDisk/blob/main/docs/schema/health-v1.schema.json",
+  "title": "NANOFreeDisk drive health report (nanofreedisk.health.v1)",
+  "description": "Output of `nfd health --json` and of the app's Health → Export JSON. Sizes in bytes, times in Unix seconds (UTC), temperatures in °C. Read-only diagnostics: nothing in it was changed on the drives. Adding fields is backward compatible; renaming or removing one bumps the schema id.",
+  "type": "object",
+  "required": ["schema", "generatedAt", "elevated", "drives", "volumes"],
+  "properties": {
+    "schema": { "const": "nanofreedisk.health.v1" },
+    "generatedAt": { "type": "integer" },
+    "elevated": { "type": "boolean", "description": "Administrator-only reads (SMART thresholds, USB bridges, dirty bit) are included" },
+    "drives": { "type": "array", "items": { "$ref": "#/$defs/drive" } },
+    "volumes": { "type": "array", "items": { "$ref": "#/$defs/volume" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "status": { "enum": ["unknown", "good", "caution", "bad"] },
+    "drive": {
+      "type": "object",
+      "required": ["index", "model", "bus", "removable", "status", "reasons", "heat", "source", "volumes"],
+      "properties": {
+        "index": { "$ref": "#/$defs/count", "description": "N of \\\\.\\PhysicalDriveN" },
+        "model": { "type": "string" },
+        "serial": { "type": ["string", "null"], "description": "Null when redacted or unknown" },
+        "firmware": { "type": ["string", "null"] },
+        "bus": { "type": "string", "description": "NVMe, SATA, USB, RAID…" },
+        "size": { "type": ["integer", "null"] },
+        "ssd": { "type": ["boolean", "null"] },
+        "removable": { "type": "boolean" },
+        "trim": { "type": ["boolean", "null"], "description": "The device supports TRIM / UNMAP" },
+        "status": { "$ref": "#/$defs/status" },
+        "reasons": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["key"],
+            "properties": {
+              "key": {
+                "enum": [
+                  "nvme-spare-low", "nvme-reliability", "nvme-read-only", "nvme-backup",
+                  "nvme-temperature", "nvme-media-errors", "worn", "ata-predict-failure",
+                  "ata-threshold", "ata-reallocated", "ata-pending", "ata-uncorrectable"
+                ]
+              },
+              "value": { "type": ["number", "null"] },
+              "attr": { "type": ["integer", "null"], "description": "ATA attribute id" }
+            }
+          }
+        },
+        "temperature": { "type": ["number", "null"] },
+        "tempWarning": { "type": ["number", "null"], "description": "The drive's own warning temperature (NVMe WCTEMP)" },
+        "tempCritical": { "type": ["number", "null"] },
+        "heat": { "enum": ["unknown", "normal", "warning", "critical"] },
+        "lifeLeft": { "type": ["integer", "null"], "minimum": 0, "maximum": 100 },
+        "powerOnHours": { "type": ["integer", "null"] },
+        "powerCycles": { "type": ["integer", "null"] },
+        "bytesWritten": { "type": ["integer", "null"] },
+        "bytesRead": { "type": ["integer", "null"] },
+        "unsafeShutdowns": { "type": ["integer", "null"] },
+        "source": { "enum": ["nvme", "ata-driver", "ata-smart", "sat", "none"] },
+        "note": { "enum": ["usb-bridge", "needs-admin", "raid", "virtual", "no-smart", null] },
+        "nvme": {
+          "type": ["object", "null"],
+          "description": "NVMe SMART / Health log page 02h",
+          "properties": {
+            "criticalWarning": { "type": "integer" },
+            "temperature": { "type": ["integer", "null"] },
+            "availableSpare": { "type": "integer" },
+            "spareThreshold": { "type": "integer" },
+            "percentageUsed": { "type": "integer" },
+            "dataUnitsRead": { "$ref": "#/$defs/count", "description": "Units of 512 000 bytes" },
+            "dataUnitsWritten": { "$ref": "#/$defs/count" },
+            "hostReads": { "$ref": "#/$defs/count" },
+            "hostWrites": { "$ref": "#/$defs/count" },
+            "controllerBusy": { "$ref": "#/$defs/count", "description": "Minutes" },
+            "powerCycles": { "$ref": "#/$defs/count" },
+            "powerOnHours": { "$ref": "#/$defs/count" },
+            "unsafeShutdowns": { "$ref": "#/$defs/count" },
+            "mediaErrors": { "$ref": "#/$defs/count" },
+            "errorLogEntries": { "$ref": "#/$defs/count" },
+            "warningTempMinutes": { "$ref": "#/$defs/count" },
+            "criticalTempMinutes": { "$ref": "#/$defs/count" },
+            "sensors": { "type": "array", "items": { "type": "integer" } }
+          }
+        },
+        "ata": {
+          "type": ["object", "null"],
+          "properties": {
+            "thresholds": { "type": "boolean" },
+            "predictFailure": { "type": ["boolean", "null"] },
+            "attributes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "flags", "current", "worst", "raw"],
+                "properties": {
+                  "id": { "type": "integer", "minimum": 1, "maximum": 255 },
+                  "flags": { "type": "integer" },
+                  "current": { "type": "integer" },
+                  "worst": { "type": "integer" },
+                  "threshold": { "type": ["integer", "null"] },
+                  "raw": { "$ref": "#/$defs/count", "description": "48-bit raw value" },
+                  "name": { "type": ["string", "null"], "description": "Standard English attribute name; null for vendor-specific ids" }
+                }
+              }
+            }
+          }
+        },
+        "volumes": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "volume": {
+      "type": "object",
+      "required": ["root", "fs", "total", "free", "system", "removable", "hasTrend"],
+      "properties": {
+        "root": { "type": "string" },
+        "label": { "type": "string" },
+        "fs": { "type": "string" },
+        "total": { "$ref": "#/$defs/count" },
+        "free": { "$ref": "#/$defs/count" },
+        "system": { "type": "boolean" },
+        "removable": { "type": "boolean" },
+        "disk": { "type": ["integer", "null"] },
+        "offset": { "type": ["integer", "null"], "description": "Partition start" },
+        "aligned": { "type": ["boolean", "null"], "description": "Partition starts on a 4 KiB boundary" },
+        "cluster": { "type": ["integer", "null"] },
+        "trimEnabled": { "type": ["boolean", "null"], "description": "Windows sends TRIM for this file system" },
+        "bitlocker": { "enum": ["on", "off", "encrypting", "decrypting", "suspended", "locked", "waiting", null] },
+        "dirty": { "type": ["boolean", "null"], "description": "Null = not checked (needs administrator rights)" },
+        "daysToFull": { "type": ["number", "null"] },
+        "hasTrend": { "type": "boolean" }
+      }
+    }
+  }
+}
