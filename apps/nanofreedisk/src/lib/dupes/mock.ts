@@ -3,7 +3,7 @@
 // "frees" the bytes; nothing touches a real disk.
 
 import type { OperationResult } from "../clean/types";
-import type { CopyFlags, DupeGroup, DupeReport, FileCopy, Selection } from "./types";
+import type { CopyFlags, DupeGroup, DupeReport, FileCopy, FolderGroup, Selection } from "./types";
 
 const MB = 2 ** 20;
 const DAY = 86_400;
@@ -37,7 +37,24 @@ function reset(): void {
 }
 reset();
 
-function report(roots: string[]): DupeReport & { totalGroups: number } {
+let folderGroups: FolderGroup[] = [];
+function resetFolders(): void {
+  folderGroups = [
+    {
+      id: groups.length + 1,
+      hash: "f".repeat(64),
+      size: 3.2 * 2 ** 30,
+      files: 412,
+      wasted: 3.2 * 2 ** 30,
+      folders: [
+        { path: "D:\\Photos\\2019 Vietnam trip", mtime: now() - 1800 * DAY, flags: PLAIN, blocked: false },
+        { path: `${HOME}\\Downloads\\Vietnam trip (backup)`, mtime: now() - 1800 * DAY, flags: PLAIN, blocked: false },
+      ],
+    },
+  ];
+}
+
+function report(roots: string[], folders = false): DupeReport & { totalGroups: number } {
   return {
     roots,
     minSize: MB,
@@ -52,8 +69,12 @@ function report(roots: string[]): DupeReport & { totalGroups: number } {
     elapsedMs: 8_400,
     paranoid: false,
     totalGroups: groups.length,
+    folderGroups: folders ? folderGroups : [],
+    folderWasted: folders ? folderGroups.reduce((s, g) => s + g.wasted, 0) : 0,
   };
 }
+
+let withFolders = false;
 
 const risky = (c: FileCopy) => c.flags.cloud || c.flags.git || c.flags.appDir || c.flags.readonly;
 const disposable = (p: string) => /\\(downloads|desktop|temp)\\/i.test(p);
@@ -79,15 +100,31 @@ let roots: string[] = [];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const dupeHandlers: Record<string, (a: Record<string, any>) => unknown> = {
-  dupes_find: ({ paths }) => {
+  dupes_find: ({ paths, options }) => {
     reset();
+    resetFolders();
+    withFolders = !!options?.folders;
     roots = paths?.length ? paths : ["C:\\"];
-    return report(roots);
+    return report(roots, withFolders);
   },
   dupes_cancel: () => undefined,
-  dupes_report: () => report(roots),
-  dupes_select: ({ strategy }) => select(strategy),
-  dupes_run: ({ selections }) => {
+  dupes_report: () => report(roots, withFolders),
+  dupes_select: ({ strategy, folders }) =>
+    folders
+      ? folderGroups.map((g) => ({ group: g.id, keep: g.folders[0].path, remove: g.folders.slice(1).map((f) => f.path) }))
+      : select(strategy),
+  dupes_run: ({ selections, folders }) => {
+    if (folders) {
+      let freed = 0;
+      for (const s of selections as Selection[]) {
+        const g = folderGroups.find((x) => x.id === s.group);
+        if (!g) continue;
+        freed += g.size * s.remove.length;
+        g.folders = g.folders.filter((f) => !s.remove.includes(f.path));
+      }
+      folderGroups = folderGroups.filter((g) => g.folders.length > 1);
+      return { id: `mock-dupes-${now()}`, freed, done: selections.length, partial: 0, skipped: 0, failed: 0, cancelled: false, problems: [], journalError: null };
+    }
     let freed = 0;
     let done = 0;
     for (const s of selections as Selection[]) {

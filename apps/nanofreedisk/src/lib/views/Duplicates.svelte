@@ -16,14 +16,17 @@
     cliCommand,
     dupes,
     findDupes,
+    folderTotals,
     linkPlan,
     loadThumb,
     runDupes,
     selectedTotals,
+    setFolderKeep,
     setKeep,
+    toggleFolderRemove,
     toggleRemove,
   } from "../dupes/state.svelte";
-  import type { DupeAction, DupeGroup, FileCopy, FileKind, KeepStrategy } from "../dupes/types";
+  import type { DupeAction, DupeGroup, FileCopy, FileKind, FolderCopy, KeepStrategy } from "../dupes/types";
   import CliHint from "../components/CliHint.svelte";
   import Icon from "../components/Icon.svelte";
 
@@ -46,6 +49,11 @@
     void dupes.picks;
     return selectedTotals();
   });
+  const ftotals = $derived.by(() => {
+    void dupes.folderPicks;
+    return folderTotals();
+  });
+  const folderTab = $derived(dupes.tab === "folders");
   let acknowledged = $state(false);
   /** "Replace with links": also hard-link types that may be edited in place. */
   let otherTypes = $state(false);
@@ -82,7 +90,7 @@
     if (p.totalBytes > 0) return Math.min(1, p.bytes / p.totalBytes);
     return p.total ? p.done / p.total : 0;
   }
-  function flagsOf(c: FileCopy): string[] {
+  function flagsOf(c: FileCopy | FolderCopy): string[] {
     const out: string[] = [];
     if (c.flags.cloud) out.push("cloud");
     if (c.flags.git) out.push("git");
@@ -106,7 +114,7 @@
     const action = dupes.confirm;
     dupes.confirm = null;
     if (action === "link") await runDupes("link", links.selections);
-    else if (action) await runDupes(action);
+    else if (action) await runDupes(action, undefined, folderTab);
   }
   async function exportAs(format: "json" | "csv") {
     try {
@@ -166,6 +174,7 @@
           {#each KINDS as k (k)}<option value={k}>{t(`dupes-kind-${k}`)}</option>{/each}
         </select>
       </label>
+      <label class="field" title={t("dupes-folders-hint")}><input type="checkbox" bind:checked={dupes.findFolders} disabled={!!dupes.searching} data-effect title={t("dupes-folders-hint")} />{t("dupes-folders")}</label>
       {#if expert()}
         <label class="field" title={t("dupes-app-dirs-hint")}><input type="checkbox" bind:checked={dupes.includeAppDirs} disabled={!!dupes.searching} />{t("dupes-app-dirs")}</label>
         <label class="field" title={t("dupes-paranoid-hint")}><input type="checkbox" bind:checked={dupes.paranoid} disabled={!!dupes.searching} />{t("dupes-paranoid")}</label>
@@ -252,6 +261,67 @@
       {/if}
     </div>
 
+    {#if dupes.findFolders || report.folderGroups?.length}
+      <div class="tabs" role="tablist">
+        <button role="tab" class="tab" class:on={!folderTab} aria-selected={!folderTab} data-dupetab="files" onclick={() => (dupes.tab = "files")}>
+          <Icon name="file" size={16} />{t("dupes-tab-files", { count: report.totalGroups })}
+        </button>
+        <button role="tab" class="tab" class:on={folderTab} aria-selected={folderTab} data-dupetab="folders" onclick={() => (dupes.tab = "folders")}>
+          <Icon name="folder" size={16} />{t("dupes-tab-folders", { count: report.folderGroups?.length ?? 0 })}
+        </button>
+      </div>
+    {/if}
+
+    {#if folderTab}
+      {#each report.folderGroups ?? [] as g (g.id)}
+        {@const pick = dupes.folderPicks[g.id]}
+        <div class="card group" data-folder-group={g.id}>
+          <div class="head static">
+            <Icon name="folder" size={16} />
+            <span class="name ellipsis" title={g.folders[0]?.path}>{nameOf(g.folders[0]?.path ?? "")}</span>
+            <span class="muted small">{t("dupes-folder-copies", { count: g.folders.length, files: formatCount(g.files, loc), size: formatSize(g.size, loc) })}</span>
+            <span class="grow"></span>
+            {#if pick?.remove.length}<span class="tag sel">{t("dupes-group-selected", { count: pick.remove.length })}</span>{/if}
+            <b class="num">{formatSize(g.wasted, loc)}</b>
+          </div>
+          <ul class="copies">
+            {#each g.folders as f (f.path)}
+              {@const keep = pick?.keep === f.path}
+              <li class:keep>
+                <label class="keepbox" title={t("dupes-keep-this-hint")}>
+                  <input type="radio" name="fkeep-{g.id}" checked={keep} onchange={() => setFolderKeep(g.id, f.path)} disabled={!!dupes.running} data-effect title={t("dupes-keep-this-hint")} />
+                  <span class="small">{t("dupes-keep-this")}</span>
+                </label>
+                <label class="rmbox" title={f.blocked ? t("dupes-folder-protected") : keep ? t("dupes-is-keeper") : t("dupes-remove-hint")}>
+                  <input type="checkbox" checked={pick?.remove.includes(f.path) ?? false} disabled={keep || f.blocked || !!dupes.running} onchange={() => toggleFolderRemove(g.id, f.path)} data-effect title={f.blocked ? t("dupes-folder-protected") : keep ? t("dupes-is-keeper") : t("dupes-remove-hint")} />
+                  <span class="small">{t("dupes-remove")}</span>
+                </label>
+                <div class="where">
+                  <span class="mono ellipsis" title={f.path}>{f.path}</span>
+                  <span class="muted small">{formatDate(f.mtime, loc)}</span>
+                </div>
+                <div class="flags">
+                  {#if f.blocked}<span class="tag app" title={t("dupes-folder-protected")}>{t("dupes-flag-protected")}</span>{/if}
+                  {#each flagsOf(f) as fl (fl)}<span class="tag {fl}" title={t(`dupes-flag-${fl}-hint`)}>{t(`dupes-flag-${fl}`)}</span>{/each}
+                </div>
+                <button class="btn ghost icon" onclick={() => dupesApi.reveal(f.path).catch(fail)} title={t("dev-reveal")} aria-label={t("dev-reveal")}><Icon name="reveal" size={14} /></button>
+              </li>
+            {/each}
+          </ul>
+        </div>
+      {:else}
+        <div class="card empty"><Icon name="folder" size={22} /><span>{dupes.findFolders ? t("dupes-folders-none") : t("dupes-folders-off")}</span></div>
+      {/each}
+      <div class="card footer">
+        <span>{t("dupes-folders-selected", { folders: ftotals.folders, files: formatCount(ftotals.files, loc), size: formatSize(ftotals.bytes, loc) })}</span>
+        <span class="grow"></span>
+        {#if expert()}
+          <button class="btn" disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
+        {/if}
+        <button class="btn danger" data-recycle-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}><Icon name="trash" size={16} />{t("dupes-recycle")}</button>
+      </div>
+      <CliHint command={cliCommand()} />
+    {:else}
     {#each groups as g (g.id)}
       {@const pick = dupes.picks[g.id]}
       {@const open = dupes.expanded.includes(g.id)}
@@ -310,6 +380,7 @@
       <button class="btn danger" data-recycle disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}><Icon name="trash" size={16} />{t("dupes-recycle")}</button>
     </div>
     <CliHint command={cliCommand()} />
+    {/if}
   {:else if !dupes.searching}
     <div class="card empty"><Icon name="duplicates" size={22} /><span>{t("dupes-start")}</span></div>
   {/if}
@@ -329,11 +400,24 @@
           <label class="small other"><input type="checkbox" bind:checked={otherTypes} data-effect title={t("dupes-link-other-types-hint")} />{t("dupes-link-other-types")}</label>
         {/if}
         <p class="muted small">{t("dupes-link-undo")}</p>
+      {:else if folderTab}
+        <p>{t("dupes-confirm-folders-body", { folders: ftotals.folders, files: formatCount(ftotals.files, loc), size: formatSize(ftotals.bytes, loc) })}</p>
+        <p class="muted small">{t("dupes-confirm-folders-note")}</p>
       {:else}
         <p>{t("dupes-confirm-body", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</p>
         <p class="muted small">{t("dupes-confirm-note")}</p>
       {/if}
-      {#if totals.risky.length && action !== "link"}
+      {#if folderTab && ftotals.risky.length && action !== "link"}
+        <div class="warn">
+          <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: ftotals.risky.length })}</p>
+          <ul>
+            {#each ftotals.risky.slice(0, 8) as f (f.path)}
+              <li class="small"><span class="mono ellipsis" title={f.path}>{f.path}</span>{#each flagsOf(f) as fl (fl)}<span class="tag {fl}">{t(`dupes-flag-${fl}`)}</span>{/each}</li>
+            {/each}
+          </ul>
+          <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
+        </div>
+      {:else if !folderTab && totals.risky.length && action !== "link"}
         <div class="warn">
           <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: totals.risky.length })}</p>
           <ul>
@@ -351,7 +435,7 @@
           class="btn danger"
           data-confirm
           onclick={go}
-          disabled={action === "link" ? !links.files : totals.risky.length > 0 && !acknowledged}
+          disabled={action === "link" ? !links.files : (folderTab ? ftotals.risky.length : totals.risky.length) > 0 && !acknowledged}
           data-effect
           title={t(action === "link" ? "dupes-link-undo" : "dupes-confirm-note")}
         >
@@ -522,6 +606,28 @@
   }
   .head[aria-expanded="true"] :global(svg:first-child) {
     transform: rotate(90deg);
+  }
+  .head.static {
+    cursor: default;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 8px 12px;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--text-muted);
+  }
+  .tab.on {
+    color: var(--text);
+    border-bottom-color: var(--accent);
   }
   .head .name {
     font-weight: 600;

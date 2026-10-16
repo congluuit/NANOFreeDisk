@@ -14,6 +14,36 @@
     "roots": { "type": "array", "items": { "type": "string" }, "description": "Folders searched" },
     "minSize": { "$ref": "#/$defs/count", "description": "Smaller files were left out" },
     "paranoid": { "type": "boolean", "description": "Groups were also compared byte by byte" },
+    "folderWasted": { "$ref": "#/$defs/count", "description": "Sum of the folder groups' wasted bytes (nfd dupes --folders)" },
+    "folderGroups": {
+      "type": "array",
+      "description": "Folders with identical names and contents, top-most level only, largest waste first (nfd dupes --folders)",
+      "items": {
+        "type": "object",
+        "required": ["id", "hash", "size", "files", "wasted", "folders"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1, "description": "Continues the numbering of the file groups" },
+          "hash": { "type": "string", "pattern": "^[0-9a-f]{64}$", "description": "Signature of the contents (BLAKE3 of the sorted children)" },
+          "size": { "$ref": "#/$defs/count", "description": "Bytes in each copy" },
+          "files": { "$ref": "#/$defs/count", "description": "Files in each copy" },
+          "wasted": { "$ref": "#/$defs/count" },
+          "folders": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": ["path", "mtime", "flags", "blocked"],
+              "properties": {
+                "path": { "type": "string" },
+                "mtime": { "type": "integer", "description": "Newest file inside" },
+                "flags": { "$ref": "#/$defs/flags" },
+                "blocked": { "type": "boolean", "description": "The folder itself is protected and is never removed" }
+              }
+            }
+          }
+        }
+      }
+    },
     "wastedBytes": { "$ref": "#/$defs/count", "description": "Sum of the groups' wasted bytes" },
     "scannedFiles": { "$ref": "#/$defs/count" },
     "candidates": { "$ref": "#/$defs/count", "description": "Files sharing their size with another one" },
@@ -65,15 +95,10 @@
                   "items": { "type": "string" },
                   "description": "Other names of the same file (hard links), never counted as copies"
                 },
-                "flags": {
-                  "type": "object",
-                  "required": ["cloud", "git", "appDir", "readonly"],
-                  "properties": {
-                    "cloud": { "type": "boolean", "description": "Inside a cloud-sync folder" },
-                    "git": { "type": "boolean", "description": "Inside a git working tree" },
-                    "appDir": { "type": "boolean", "description": "Inside an application folder" },
-                    "readonly": { "type": "boolean" }
-                  }
+                "flags": { "$ref": "#/$defs/flags" },
+                "link": {
+                  "enum": ["hardlink", "clone", null],
+                  "description": "How the copy's drive can replace a duplicate by a link"
                 }
               }
             }
@@ -84,6 +109,16 @@
   },
   "$defs": {
     "count": { "type": "integer", "minimum": 0 },
+    "flags": {
+      "type": "object",
+      "required": ["cloud", "git", "appDir", "readonly"],
+      "properties": {
+        "cloud": { "type": "boolean", "description": "Inside a cloud-sync folder" },
+        "git": { "type": "boolean", "description": "Inside a git working tree" },
+        "appDir": { "type": "boolean", "description": "Inside an application folder" },
+        "readonly": { "type": "boolean" }
+      }
+    },
     "reason": {
       "enum": [
         "empty", "small", "extension", "cloud", "reparse", "system", "protected",

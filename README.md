@@ -42,7 +42,7 @@
 | 📊 | **Analyze** | Treemap, sunburst and sortable tree of any drive or folder. NTFS fast path reads the MFT (WizTree-class speed, ~1M files in seconds). Understands hardlinks, junctions, sparse/compressed files and OneDrive cloud placeholders, so numbers add up. |
 | 🧹 | **Clean** | Rule-based junk detection: Windows temp & logs, crash dumps, thumbnail caches, browser caches, GPU shader caches, build artifacts (`target/`, `node_modules/`, `Library/`, `DerivedDataCache/`…). Every item carries a **risk level** and a plain-language **"if you delete this…"** note. |
 | 🤖 | **DevCache** | A curated catalog of the temp/cache/session folders left behind by **Claude Code, Claude Desktop, OpenAI Codex, ChatGPT, Gemini CLI, GitHub Copilot, Cursor, Windsurf, Cline/Roo, Continue, Zed, Kiro, Trae, Ollama, LM Studio, Hugging Face, VS Code, JetBrains, Visual Studio, npm/pnpm/pip/uv/cargo/go/NuGet/Gradle, Unity, Unreal, Godot**… Shows what is safe, what costs you history or a re-download, and what is deliberately kept (configs, credentials, memory). |
-| ⧉ | **Duplicates** | Size → partial BLAKE3 → full BLAKE3 pipeline, multi-threaded. Keep newest/oldest/by-folder, send to Recycle Bin, or replace with NTFS hardlinks. |
+| ⧉ | **Duplicates** | Size → partial BLAKE3 → full BLAKE3 pipeline with a hash cache, gentle on the PC (background I/O priority, one file at a time on hard disks), never downloads cloud placeholders. Identical files and identical folders; keep the oldest / newest / a preferred folder, send the rest to the Recycle Bin, or replace them with NTFS hard links / ReFS block clones — every copy re-checked byte for byte right before it moves, and everything restorable. |
 | 📈 | **Monitor** | Real-time disk activity via ETW: which process reads/writes what, throughput, IOPS, queue length, latency, top files being written. Spots runaway loggers, indexers and sync clients. |
 | ♥ | **Health** | S.M.A.R.T. (ATA) and NVMe health log, temperature, wear, reallocated/pending sectors, TRIM status, dirty volumes, free-space trend with "disk full in N days" forecast, tray alerts, exportable report. |
 | ⌨ | **CLI** | Everything above as `nfd` for scripts and CI: `nfd scan`, `nfd clean --dry-run`, `nfd devcache`, `nfd dupes`, `nfd watch`, `nfd health`. |
@@ -162,7 +162,7 @@ nfd devcache [list|clean --vendor anthropic --level safe|unknown]
 nfd toolchains [--json]
 nfd repos <root> [--keep-recent 7] [--json]   ·   nfd repos clean <root> [--apply]
 nfd stores [--json]   ·   nfd stores run npm-cache-clean
-nfd dupes <path...> [--min-size 1MB] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
+nfd dupes <path...> [--min-size 1MB] [--folders] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
 nfd watch [--interval 1s] [--top 20]
 nfd health [--json] [--watch]
 nfd quarantine [list|restore <id>|purge --older 7d]
@@ -239,7 +239,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | ✅ done — plus age heatmap, empty folders / broken shortcuts / orphan junctions, Explorer menu, `nfd diff` / `nfd explain` ([demo](docs/assets/demo/nanofreedisk-demo.webp)) |
 | 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ⏳ |
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
-| 5 | Duplicate finder | 🚧 in progress — Duplicates view, "Find duplicates here", `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
+| 5 | Duplicate finder | ✅ done — Duplicates view (files + folders), "Find duplicates here", replace with hard links / ReFS block clones, `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ⏳ |
 | 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ⏳ |
 | 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ⏳ |

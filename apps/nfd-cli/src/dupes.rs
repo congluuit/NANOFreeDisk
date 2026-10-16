@@ -16,8 +16,8 @@ use nfd_core::scanner::{self, ScanEvent, ScanOptions, ScanTree};
 use nfd_core::units::{format_count, format_size, parse_size};
 use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::LiveSource;
-use nfd_dupes::keep::{KeepStrategy, auto_select};
-use nfd_dupes::plan::{Action, Verifier, link_selection, plan};
+use nfd_dupes::keep::{KeepStrategy, auto_select, auto_select_folders};
+use nfd_dupes::plan::{Action, Verifier, link_selection, plan, plan_folders};
 use nfd_dupes::{DupeOptions, DupeReport, Phase, Progress, flag_text, write_csv};
 use nfd_platform::Platform;
 
@@ -43,6 +43,11 @@ pub struct DupesArgs {
     /// After the hashes, compare every group byte by byte.
     #[arg(long)]
     paranoid: bool,
+
+    /// Find duplicate folders (identical names and contents, top-most level only);
+    /// --action then removes whole folders. Every non-empty file is hashed.
+    #[arg(long)]
+    folders: bool,
 
     /// Files hashed at once on an SSD [default: 4]; spinning disks always read one
     /// file at a time.
@@ -153,6 +158,7 @@ pub fn search(args: &DupesArgs) -> anyhow::Result<DupeReport> {
         threads: args.threads,
         extensions: args.ext.clone(),
         app_dir_paths: nfd_dupes::collect::default_app_dirs(&resolve),
+        folders: args.folders,
         cancel: None,
     };
     let mut history = if args.no_cache {
@@ -239,11 +245,18 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
         DupeAction::Hardlink => Action::Link,
         _ => Action::Recycle,
     };
-    let mut selections = auto_select(&report.groups, &args.keep);
-    if action == Action::Link {
-        selections = link_selection(&report.groups, &selections, args.link_other_types);
-    }
-    let plan: CleanPlan = plan(&report.groups, &selections, action)?;
+    let (selections, plan): (_, CleanPlan) = if args.folders {
+        let s = auto_select_folders(&report.folder_groups, &args.keep);
+        let p = plan_folders(&report.folder_groups, &s, action)?;
+        (s, p)
+    } else {
+        let mut s = auto_select(&report.groups, &args.keep);
+        if action == Action::Link {
+            s = link_selection(&report.groups, &s, args.link_other_types);
+        }
+        let p = plan(&report.groups, &s, action)?;
+        (s, p)
+    };
     if !args.json {
         for s in &selections {
             println!("\n#{} keep {}", s.group, s.keep.display());
@@ -284,7 +297,8 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::FAILURE);
     }
     // every copy and its keeper are hashed again right before the move
-    let mut verifier = Verifier::new(&LiveSource, report.groups.clone());
+    let mut verifier = Verifier::new(&LiveSource, report.groups.clone())
+        .with_folders(report.folder_groups.clone());
     let (op, journal_ok) = crate::quarantine::execute_verified(
         &plan,
         "dupes",
@@ -344,6 +358,40 @@ fn print_report(r: &DupeReport, top: usize, out: &mut impl Write) -> io::Result<
             out,
             "\n… {} more group(s) (--top N to list more)",
             r.groups.len() - top
+        )?;
+    }
+    for g in r.folder_groups.iter().take(top) {
+        writeln!(
+            out,
+            "\n#{:<4} {} folders × {} ({} files) = {} wasted",
+            g.id,
+            g.folders.len(),
+            format_size(g.size),
+            format_count(g.files),
+            format_size(g.wasted)
+        )?;
+        for f in &g.folders {
+            let flags = flag_text(f.flags);
+            writeln!(
+                out,
+                "   {}  {}{}{}",
+                date(f.mtime),
+                f.path.display(),
+                if flags.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{flags}]")
+                },
+                if f.blocked { "  (protected)" } else { "" }
+            )?;
+        }
+    }
+    if !r.folder_groups.is_empty() {
+        writeln!(
+            out,
+            "\n{} group(s) of identical folders, {} wasted.",
+            format_count(r.folder_groups.len() as u64),
+            format_size(r.folder_wasted)
         )?;
     }
     let skipped: Vec<String> = r

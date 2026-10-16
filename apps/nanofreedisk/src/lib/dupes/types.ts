@@ -34,6 +34,25 @@ export interface DupeGroup {
   copies: FileCopy[];
 }
 
+/** A copy of a duplicated folder. */
+export interface FolderCopy {
+  path: string;
+  /** Newest file inside. */
+  mtime: number;
+  flags: CopyFlags;
+  /** The gate refuses to remove this folder itself. */
+  blocked: boolean;
+}
+
+export interface FolderGroup {
+  id: number;
+  hash: string;
+  size: number;
+  files: number;
+  wasted: number;
+  folders: FolderCopy[];
+}
+
 export type SkipReason =
   | "empty"
   | "small"
@@ -61,6 +80,9 @@ export interface DupeReport {
   paranoid: boolean;
   /** Groups found; `groups` holds at most 5,000. */
   totalGroups: number;
+  /** Duplicate folders (only when asked for). */
+  folderGroups: FolderGroup[];
+  folderWasted: number;
 }
 
 export type DupePhase = "scan" | "collect" | "partial" | "full" | "compare";
@@ -80,6 +102,7 @@ export interface FindOptions {
   paranoid: boolean;
   extensions: string[];
   useCache: boolean;
+  folders: boolean;
 }
 
 /** What to do with one group (`nfd_dupes::keep::Selection`). */

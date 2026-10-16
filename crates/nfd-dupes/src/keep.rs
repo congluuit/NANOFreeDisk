@@ -11,6 +11,7 @@ use std::str::FromStr;
 use serde::{Deserialize, Serialize};
 
 use crate::collect::key;
+use crate::folders::{FolderCopy, FolderGroup};
 use crate::{DupeGroup, FileCopy};
 
 /// How the copy to keep is chosen.
@@ -56,24 +57,28 @@ const DISPOSABLE: &[&str] = &["downloads", "temp", "tmp", "desktop"];
 /// In Downloads, Temp or on the Desktop.
 #[must_use]
 pub fn disposable(path: &Path) -> bool {
-    disposable_below(path, 0)
+    disposable_below(path, 0, false)
 }
 
 /// [`disposable`], looking only at the folders below the first `skip` components
 /// (the part all copies of a group share tells them apart from nothing).
-fn disposable_below(path: &Path, skip: usize) -> bool {
+fn disposable_below(path: &Path, skip: usize, is_dir: bool) -> bool {
     let k = key(path);
     let parts: Vec<&str> = k.split('/').collect();
-    let folders = &parts[..parts.len().saturating_sub(1)];
+    let folders = if is_dir {
+        &parts[..]
+    } else {
+        &parts[..parts.len().saturating_sub(1)]
+    };
     folders
         .iter()
         .skip(skip)
         .any(|part| DISPOSABLE.contains(part))
 }
 
-/// Number of leading folders every copy of `group` shares.
-fn shared_folders(group: &DupeGroup) -> usize {
-    let keys: Vec<String> = group.copies.iter().map(|c| key(&c.path)).collect();
+/// Number of leading folders every path of a group shares.
+fn shared_folders<'a>(paths: impl Iterator<Item = &'a Path>) -> usize {
+    let keys: Vec<String> = paths.map(key).collect();
     let split: Vec<Vec<&str>> = keys.iter().map(|k| k.split('/').collect()).collect();
     let Some(first) = split.first() else { return 0 };
     let mut n = 0;
@@ -100,27 +105,53 @@ fn inside(path: &Path, dirs: &[PathBuf]) -> bool {
 /// Index of the copy to keep in `group` (never `None` for a real group).
 #[must_use]
 pub fn keeper(group: &DupeGroup, strategy: &KeepStrategy) -> Option<usize> {
-    let shared = shared_folders(group);
-    let rank = |c: &FileCopy| {
+    let items: Vec<(&Path, i64, bool)> = group
+        .copies
+        .iter()
+        .map(|c| (c.path.as_path(), c.mtime, sticky(c)))
+        .collect();
+    pick(&items, strategy, false)
+}
+
+/// Risky to delete: a folder the gate refuses, or one holding risky files.
+#[must_use]
+pub const fn sticky_folder(f: &FolderCopy) -> bool {
+    f.blocked || f.flags.app_dir || f.flags.cloud || f.flags.git || f.flags.readonly
+}
+
+/// Index of the folder to keep in `group`.
+#[must_use]
+pub fn folder_keeper(group: &FolderGroup, strategy: &KeepStrategy) -> Option<usize> {
+    let items: Vec<(&Path, i64, bool)> = group
+        .folders
+        .iter()
+        .map(|f| (f.path.as_path(), f.mtime, sticky_folder(f)))
+        .collect();
+    pick(&items, strategy, true)
+}
+
+/// The item to keep among (path, last write, risky) by `strategy`.
+fn pick(items: &[(&Path, i64, bool)], strategy: &KeepStrategy, dirs: bool) -> Option<usize> {
+    let shared = shared_folders(items.iter().map(|i| i.0));
+    let rank = |&(path, mtime, risky): &(&Path, i64, bool)| {
         let preferred = match strategy {
-            KeepStrategy::Prefer(dirs) => inside(&c.path, dirs),
+            KeepStrategy::Prefer(dirs) => inside(path, dirs),
             _ => false,
         };
         let by_strategy = match strategy {
             KeepStrategy::Auto | KeepStrategy::Prefer(_) => {
-                (i64::from(disposable_below(&c.path, shared)), c.mtime, 0)
+                (i64::from(disposable_below(path, shared, dirs)), mtime, 0)
             }
-            KeepStrategy::Oldest => (0, c.mtime, 0),
-            KeepStrategy::Newest => (0, -c.mtime, 0),
-            KeepStrategy::Shortest => (0, 0, c.path.as_os_str().len() as i64),
+            KeepStrategy::Oldest => (0, mtime, 0),
+            KeepStrategy::Newest => (0, -mtime, 0),
+            KeepStrategy::Shortest => (0, 0, path.as_os_str().len() as i64),
         };
-        (!preferred, !sticky(c), by_strategy)
+        (!preferred, !risky, by_strategy)
     };
-    group
-        .copies
+    items
         .iter()
         .enumerate()
-        .min_by(|(_, a), (_, b)| rank(a).cmp(&rank(b)).then_with(|| a.path.cmp(&b.path)))
+        .min_by(|(_, a), (_, b)| rank(a).cmp(&rank(b)).then_with(|| a.0.cmp(b.0)))
         .map(|(i, _)| i)
 }
 
@@ -152,6 +183,30 @@ pub fn auto_select(groups: &[DupeGroup], strategy: &KeepStrategy) -> Vec<Selecti
             (!remove.is_empty()).then(|| Selection {
                 group: g.id,
                 keep: g.copies[k].path.clone(),
+                remove,
+            })
+        })
+        .collect()
+}
+
+/// [`auto_select`] for duplicate folders: risky folders (refused by the gate, or
+/// holding cloud-sync, git, application or read-only files) are never selected.
+#[must_use]
+pub fn auto_select_folders(groups: &[FolderGroup], strategy: &KeepStrategy) -> Vec<Selection> {
+    groups
+        .iter()
+        .filter_map(|g| {
+            let k = folder_keeper(g, strategy)?;
+            let remove: Vec<PathBuf> = g
+                .folders
+                .iter()
+                .enumerate()
+                .filter(|(i, f)| *i != k && !sticky_folder(f))
+                .map(|(_, f)| f.path.clone())
+                .collect();
+            (!remove.is_empty()).then(|| Selection {
+                group: g.id,
+                keep: g.folders[k].path.clone(),
                 remove,
             })
         })

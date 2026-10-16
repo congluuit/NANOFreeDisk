@@ -89,6 +89,9 @@ fn under(key: &str, prefixes: &[String]) -> bool {
 /// A file that may be a duplicate.
 #[derive(Debug, Clone)]
 pub(crate) struct Cand {
+    /// Scan (index in the trees given) and entry it comes from.
+    pub tree: usize,
+    pub entry: u32,
     pub path: PathBuf,
     pub size: u64,
     pub mtime: i64,
@@ -158,7 +161,7 @@ pub(crate) fn collect(
     let min = opts.min_size.max(1);
     let mut out = Vec::new();
     let mut files = 0u64;
-    for tree in trees {
+    for (t, tree) in trees.iter().enumerate() {
         let Some(root) = tree.entries.first() else {
             continue;
         };
@@ -264,6 +267,8 @@ pub(crate) fn collect(
                     let mut flags = parent.flags;
                     flags.readonly = e.attrs.contains(Attrs::READONLY);
                     out.push(Cand {
+                        tree: t,
+                        entry: e.id.0,
                         path,
                         size: e.logical,
                         mtime: e.mtime,

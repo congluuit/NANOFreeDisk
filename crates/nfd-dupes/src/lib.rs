@@ -14,6 +14,8 @@
 //!    several files at a time on SSDs and one at a time on spinning disks, threads
 //!    in Windows background mode (low CPU and I/O priority).
 //! 5. **Paranoid** (optional) — byte-by-byte comparison within each group.
+//! 6. **Folders** (optional, [`folders`]) — folders whose whole contents are
+//!    identical, at the top-most level.
 //!
 //! Hashes are cached in the history database ([`cache`]) by volume, file id, size
 //! and last write, so a second run reads almost nothing.
@@ -24,6 +26,7 @@
 
 pub mod cache;
 pub mod collect;
+pub mod folders;
 pub mod hash;
 pub mod keep;
 pub mod plan;
@@ -68,6 +71,10 @@ pub struct DupeOptions {
     pub extensions: Vec<String>,
     /// Application folders by location ([`collect::default_app_dirs`]).
     pub app_dir_paths: Vec<PathBuf>,
+    /// Also find duplicate folders. Every non-empty file is hashed then (a folder
+    /// is only identical when all of its files are); `min_size` and `extensions`
+    /// still decide which file groups are reported.
+    pub folders: bool,
     pub cancel: Option<Arc<AtomicBool>>,
 }
 
@@ -80,6 +87,7 @@ impl Default for DupeOptions {
             threads: None,
             extensions: Vec::new(),
             app_dir_paths: Vec::new(),
+            folders: false,
             cancel: None,
         }
     }
@@ -235,6 +243,11 @@ pub struct DupeReport {
     pub skipped_samples: Vec<Skipped>,
     pub elapsed_ms: u64,
     pub paranoid: bool,
+    /// Duplicate folders (only with [`DupeOptions::folders`]), largest waste first.
+    #[serde(default)]
+    pub folder_groups: Vec<folders::FolderGroup>,
+    #[serde(default)]
+    pub folder_wasted: u64,
 }
 
 /// The run was cancelled.
@@ -282,7 +295,17 @@ pub fn find(
         bytes: 0,
         total_bytes: 0,
     });
-    let (cands, scanned) = collect::collect(trees, gate, opts, source, &mut skips);
+    let (cands, scanned) = if opts.folders {
+        // a folder is identical only when all of its files are: look at every file
+        let all = DupeOptions {
+            min_size: 1,
+            extensions: Vec::new(),
+            ..opts.clone()
+        };
+        collect::collect(trees, gate, &all, source, &mut skips)
+    } else {
+        collect::collect(trees, gate, opts, source, &mut skips)
+    };
     if ctx.cancelled() {
         return Err(Cancelled);
     }
@@ -491,6 +514,36 @@ pub fn find(
         groups = split;
     }
 
+    // folders: every hashed file entry (hard-linked names too)
+    let folder_groups = if opts.folders {
+        let mut facts: folders::FileFacts = HashMap::new();
+        for &u in groups.iter().flatten() {
+            let Some(full) = units[u].full else { continue };
+            for &i in std::iter::once(&units[u].cand).chain(&units[u].links) {
+                let c = &cands[i];
+                facts.insert((c.tree, c.entry), (full, c.flags));
+            }
+        }
+        // file groups the user asked for: size and type
+        let exts: Vec<String> = opts
+            .extensions
+            .iter()
+            .map(|e| e.trim_start_matches('.').to_lowercase())
+            .filter(|e| !e.is_empty())
+            .collect();
+        groups.retain(|g| {
+            let c = &cands[units[g[0]].cand];
+            c.size >= opts.min_size.max(1)
+                && (exts.is_empty()
+                    || c.path
+                        .extension()
+                        .is_some_and(|e| exts.contains(&e.to_string_lossy().to_lowercase())))
+        });
+        Some(facts)
+    } else {
+        None
+    };
+
     // report
     let mut link_modes: HashMap<u64, Option<LinkKind>> = HashMap::new();
     for &u in groups.iter().flatten() {
@@ -543,6 +596,10 @@ pub fn find(
     for (n, g) in out.iter_mut().enumerate() {
         g.id = u32::try_from(n + 1).unwrap_or(u32::MAX);
     }
+    let folder_groups = folder_groups.map_or_else(Vec::new, |facts| {
+        let first = u32::try_from(out.len() + 1).unwrap_or(u32::MAX);
+        folders::group(trees, &facts, gate, first)
+    });
     Ok(DupeReport {
         roots: trees.iter().map(|t| t.root.clone()).collect(),
         min_size: opts.min_size,
@@ -556,6 +613,8 @@ pub fn find(
         skipped_samples: skips.samples,
         elapsed_ms: u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
         paranoid: opts.paranoid,
+        folder_wasted: folder_groups.iter().map(|g| g.wasted).sum(),
+        folder_groups,
     })
 }
 

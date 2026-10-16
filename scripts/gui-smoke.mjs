@@ -616,6 +616,27 @@ try {
     again.totalGroups === 2 && guarded.problems?.filter((p) => p.reason === "keeper-changed").length === 2 && existsSync(join(dupeFixture, "Downloads", "video.mp4")),
     JSON.stringify(guarded.problems ?? guarded).slice(0, 200),
   );
+  // duplicate folders: two identical albums, each next to something unique
+  const folderDir = join(dupeFixture, "folders");
+  for (const side of ["A", "B"]) {
+    mkdirSync(join(folderDir, side, "Trip", "raw"), { recursive: true });
+    writeFileSync(join(folderDir, side, "Trip", "a.jpg"), dupeB);
+    writeFileSync(join(folderDir, side, "Trip", "raw", "b.dng"), dupeA.subarray(0, 4096));
+    writeFileSync(join(folderDir, side, "Trip", "notes.txt"), "trip\n");
+    writeFileSync(join(folderDir, side, `only-${side}.txt`), side);
+  }
+  const folderFound = await invoke("dupes_find", { paths: [folderDir], options: { ...noCache, folders: true } });
+  const trip = folderFound.folderGroups?.find((g) => g.folders.every((f) => f.path.endsWith("Trip")));
+  check("dupes: identical folders are found at the top level", !!trip && trip.folders.length === 2 && trip.files === 3 && folderFound.folderGroups.length === 1, JSON.stringify(folderFound.folderGroups ?? folderFound).slice(0, 300));
+  const folderSel = await invoke("dupes_select", { strategy: "auto", folders: true });
+  const movedFolder = await invoke("dupes_run", { selections: folderSel, action: "quarantine", folders: true });
+  if (movedFolder.id) operations.push(movedFolder.id);
+  const goneSide = folderSel[0]?.remove[0] ?? "";
+  check("dupes: a duplicate folder goes whole, the other stays", movedFolder.done === 1 && !existsSync(goneSide) && existsSync(folderSel[0]?.keep ?? ""), JSON.stringify(movedFolder));
+  if (movedFolder.id) {
+    const back = await invoke("activity_restore", { id: movedFolder.id, items: null });
+    check("dupes: the folder comes back", back[0]?.status === "restored" && existsSync(join(goneSide, "raw", "b.dng")), JSON.stringify(back));
+  }
   const healthDupes = await invoke("health");
   check("health mentions the duplicates found", healthDupes.findings?.some((f) => f.kind === "duplicates" && f.fix === "duplicates"), JSON.stringify(healthDupes.findings?.map((f) => f.kind)));
   // replace a duplicate by a hard link (NTFS temp folder), then undo it
@@ -668,6 +689,9 @@ try {
   await sleep(300);
   check("Replace with links explains the shared content first", await evaluate("!!document.querySelector('.dialog [data-confirm]') && document.querySelector('.dialog').innerText.length > 80"));
   await evaluate("document.querySelector('.dialog footer .btn').click()");
+  await sleep(200);
+  await evaluate("document.querySelector('[data-dupetab=folders]')?.click()");
+  await sleep(200);
 
   // G4: every control that changes something explains what happens
   const untitled = [];

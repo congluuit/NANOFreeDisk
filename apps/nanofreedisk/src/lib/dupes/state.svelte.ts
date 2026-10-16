@@ -7,7 +7,7 @@ import { formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
 import { app, fail, toast } from "../state.svelte";
 import { dupesApi } from "./api";
-import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, KeepStrategy, LinkKind, Scope, Selection } from "./types";
+import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, FolderCopy, FolderGroup, KeepStrategy, LinkKind, Scope, Selection } from "./types";
 
 /** Extensions of each file-kind filter (lower case, no dot). */
 export const KINDS: Record<Exclude<FileKind, "all">, string[]> = {
@@ -83,6 +83,11 @@ export const dupes = $state({
   includeAppDirs: false,
   /** Expert: compare bytes after hashing. */
   paranoid: false,
+  /** Also look for duplicate folders (every file is hashed then). */
+  findFolders: false,
+  tab: "files" as "files" | "folders",
+  /** Per folder group id: the folder kept and the folders to remove. */
+  folderPicks: {} as Record<number, Pick>,
   report: null as DupeReport | null,
   /** Search running (progress of the current step). */
   searching: null as DupeProgress | null,
@@ -99,8 +104,56 @@ export const dupes = $state({
 });
 
 /** Risky to remove: never pre-selected, extra confirmation. */
-export function risky(c: FileCopy): boolean {
+export function risky(c: FileCopy | FolderCopy): boolean {
   return c.flags.cloud || c.flags.git || c.flags.appDir || c.flags.readonly;
+}
+
+function toFolderPicks(sel: Selection[], groups: FolderGroup[]): Record<number, Pick> {
+  const out: Record<number, Pick> = {};
+  for (const g of groups) out[g.id] = { keep: g.folders.find((f) => f.blocked)?.path ?? g.folders[0]?.path ?? "", remove: [] };
+  for (const s of sel) out[s.group] = { keep: s.keep, remove: [...s.remove] };
+  return out;
+}
+
+/** Folder selections for the backend. */
+export function folderSelections(): Selection[] {
+  return Object.entries(dupes.folderPicks)
+    .filter(([, p]) => p.remove.length > 0)
+    .map(([id, p]) => ({ group: Number(id), keep: p.keep, remove: p.remove }));
+}
+
+/** Folders selected for removal, their size and the risky ones. */
+export function folderTotals(): { folders: number; bytes: number; files: number; risky: FolderCopy[] } {
+  let folders = 0;
+  let bytes = 0;
+  let files = 0;
+  const flagged: FolderCopy[] = [];
+  for (const g of dupes.report?.folderGroups ?? []) {
+    const p = dupes.folderPicks[g.id];
+    for (const f of g.folders) {
+      if (!p?.remove.includes(f.path)) continue;
+      folders++;
+      bytes += g.size;
+      files += g.files;
+      if (risky(f)) flagged.push(f);
+    }
+  }
+  return { folders, bytes, files, risky: flagged };
+}
+
+export function setFolderKeep(group: number, path: string): void {
+  const p = dupes.folderPicks[group];
+  if (!p) return;
+  dupes.folderPicks[group] = { keep: path, remove: p.remove.filter((x) => x !== path) };
+}
+
+export function toggleFolderRemove(group: number, path: string): void {
+  const p = dupes.folderPicks[group];
+  if (!p || p.keep === path) return;
+  dupes.folderPicks[group] = {
+    keep: p.keep,
+    remove: p.remove.includes(path) ? p.remove.filter((x) => x !== path) : [...p.remove, path],
+  };
 }
 
 function toPicks(sel: Selection[], groups: DupeGroup[]): Record<number, Pick> {
@@ -159,6 +212,7 @@ export async function applyStrategy(strategy: KeepStrategy): Promise<void> {
   if (!dupes.report) return;
   try {
     dupes.picks = toPicks(await dupesApi.select(strategy), dupes.report.groups);
+    dupes.folderPicks = toFolderPicks(await dupesApi.select(strategy, true), dupes.report.folderGroups ?? []);
   } catch (e) {
     fail(e);
   }
@@ -167,6 +221,7 @@ export async function applyStrategy(strategy: KeepStrategy): Promise<void> {
 /** Remove nothing: keep every copy. */
 export function clearPicks(): void {
   for (const id of Object.keys(dupes.picks)) dupes.picks[Number(id)].remove = [];
+  for (const id of Object.keys(dupes.folderPicks)) dupes.folderPicks[Number(id)].remove = [];
 }
 
 let progressOff: (() => void) | null = null;
@@ -197,12 +252,15 @@ export async function findDupes(): Promise<void> {
       paranoid: dupes.paranoid,
       extensions: extensions(),
       useCache: useCache(),
+      folders: dupes.findFolders,
     });
     dupes.report = report;
     dupes.shown = 60;
     dupes.expanded = report.groups.slice(0, 3).map((g) => g.id);
     dupes.thumbs = {};
     dupes.picks = toPicks(await dupesApi.select(dupes.strategy), report.groups);
+    dupes.folderPicks = toFolderPicks(await dupesApi.select(dupes.strategy, true), report.folderGroups ?? []);
+    if (!report.folderGroups?.length) dupes.tab = "files";
   } catch (e) {
     const code = e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
     if (code === "cancelled") toast(t("dupes-cancelled"));
@@ -231,9 +289,9 @@ export async function openStartupDupes(): Promise<void> {
   }
 }
 
-/** Remove (or replace by links) the selected copies (already confirmed). */
-export async function runDupes(action: DupeAction, only?: Selection[]): Promise<void> {
-  const sel = only ?? selections();
+/** Remove (or replace by links) the selected copies or folders (already confirmed). */
+export async function runDupes(action: DupeAction, only?: Selection[], folders = false): Promise<void> {
+  const sel = only ?? (folders ? folderSelections() : selections());
   if (dupes.running || !sel.length) return;
   dupes.running = { done: 0, total: 0, freed: 0, path: "" };
   dupes.last = null;
@@ -241,7 +299,7 @@ export async function runDupes(action: DupeAction, only?: Selection[]): Promise<
     cleanOff ??= await on<CleanProgress>("clean-progress", (p) => {
       if (dupes.running) dupes.running = p;
     });
-    const result = await dupesApi.run(sel, action);
+    const result = await dupesApi.run(sel, action, folders);
     dupes.last = result;
     toast(
       t("clean-result", { size: formatSize(result.freed, intlLocale()), done: result.done + result.partial, skipped: result.skipped + result.failed }),
@@ -256,7 +314,10 @@ export async function runDupes(action: DupeAction, only?: Selection[]): Promise<
     try {
       const fresh = await dupesApi.report();
       dupes.report = fresh;
-      if (fresh) dupes.picks = toPicks(await dupesApi.select(dupes.strategy), fresh.groups);
+      if (fresh) {
+        dupes.picks = toPicks(await dupesApi.select(dupes.strategy), fresh.groups);
+        dupes.folderPicks = toFolderPicks(await dupesApi.select(dupes.strategy, true), fresh.folderGroups ?? []);
+      }
     } catch (e) {
       fail(e);
     }
@@ -282,6 +343,7 @@ export function cliCommand(action?: DupeAction): string {
   if (ext.length) parts.push(`--ext ${ext.join(",")}`);
   if (dupes.includeAppDirs) parts.push("--include-app-dirs");
   if (dupes.paranoid) parts.push("--paranoid");
+  if (dupes.tab === "folders") parts.push("--folders");
   parts.push(`--keep ${dupes.strategy}`);
   if (action) parts.push(`--action ${action === "link" ? "hardlink" : action}`, "--apply");
   return parts.join(" ");

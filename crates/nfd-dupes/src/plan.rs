@@ -15,6 +15,7 @@ use nfd_core::plan::{CleanPlan, DeleteMode, PlanItem};
 use nfd_core::safety::Origin;
 use serde::{Deserialize, Serialize};
 
+use crate::folders::{self, FolderGroup};
 use crate::hash::{self, Ctx, Source};
 use crate::keep::Selection;
 use crate::{DupeGroup, FileCopy, LinkKind};
@@ -176,6 +177,8 @@ pub enum PlanError {
     NotInGroup { group: u32, path: PathBuf },
     #[error("group {0} would lose every copy: one must stay")]
     NothingKept(u32),
+    #[error("{path} is protected and stays")]
+    Protected { group: u32, path: PathBuf },
     #[error("{path} cannot become a link to the copy that stays ({why})")]
     CannotLink {
         group: u32,
@@ -275,10 +278,92 @@ pub fn plan(
     Ok(CleanPlan { items })
 }
 
+/// Build the plan for `selections` of duplicate `groups` of folders: each removed
+/// folder goes whole (Recycle Bin or quarantine; folders are never linked).
+///
+/// # Errors
+/// As [`plan`], plus [`PlanError::Protected`] for a folder the gate refuses and
+/// [`PlanError::CannotLink`] for [`Action::Link`].
+pub fn plan_folders(
+    groups: &[FolderGroup],
+    selections: &[Selection],
+    action: Action,
+) -> Result<CleanPlan, PlanError> {
+    let by_id: HashMap<u32, &FolderGroup> = groups.iter().map(|g| (g.id, g)).collect();
+    let mut seen = HashSet::new();
+    let mut items = Vec::new();
+    let index = |g: &FolderGroup, p: &Path| g.folders.iter().position(|f| f.path == p);
+    for s in selections {
+        let g = by_id
+            .get(&s.group)
+            .copied()
+            .ok_or(PlanError::UnknownGroup(s.group))?;
+        if !seen.insert(s.group) {
+            return Err(PlanError::SelectedTwice(s.group));
+        }
+        let keep = index(g, &s.keep).ok_or_else(|| PlanError::NotInGroup {
+            group: s.group,
+            path: s.keep.clone(),
+        })?;
+        let mut remove = Vec::new();
+        for p in &s.remove {
+            let i = index(g, p).ok_or_else(|| PlanError::NotInGroup {
+                group: s.group,
+                path: p.clone(),
+            })?;
+            if i == keep {
+                return Err(PlanError::NothingKept(s.group));
+            }
+            if !remove.contains(&i) {
+                remove.push(i);
+            }
+        }
+        if remove.len() >= g.folders.len() {
+            return Err(PlanError::NothingKept(s.group));
+        }
+        let mode = match action {
+            Action::Recycle => DeleteMode::RecycleBin,
+            Action::Quarantine => DeleteMode::Quarantine,
+            Action::Link => {
+                return Err(PlanError::CannotLink {
+                    group: g.id,
+                    path: s.keep.clone(),
+                    why: "folder",
+                });
+            }
+        };
+        for i in remove {
+            let f = &g.folders[i];
+            if f.blocked {
+                return Err(PlanError::Protected {
+                    group: g.id,
+                    path: f.path.clone(),
+                });
+            }
+            items.push(PlanItem {
+                path: f.path.clone(),
+                origin: Origin::Duplicate { group: g.id },
+                rule_id: None,
+                is_dir: true,
+                bytes: g.size,
+                files: g.files,
+                size: 0,
+                mtime: 0,
+                requires_closed: Vec::new(),
+                mode,
+                selected: true,
+                keeper: Some(g.folders[keep].path.clone()),
+            });
+        }
+    }
+    Ok(CleanPlan { items })
+}
+
 /// The last check before a copy is touched (see the module documentation).
 pub struct Verifier<'a> {
     source: &'a dyn Source,
     groups: HashMap<u32, DupeGroup>,
+    folders: HashMap<u32, FolderGroup>,
     /// Keepers already hashed in this run, and the answer.
     keepers: HashMap<PathBuf, Result<(), Refusal>>,
     ctx: Ctx<'a>,
@@ -308,8 +393,71 @@ impl<'a> Verifier<'a> {
         Self {
             source,
             groups: groups.into_iter().map(|g| (g.id, g)).collect(),
+            folders: HashMap::new(),
             keepers: HashMap::new(),
             ctx: Ctx::default(),
+        }
+    }
+
+    /// Also check removals of duplicate folders against `folders`.
+    #[must_use]
+    pub fn with_folders(mut self, folders: impl IntoIterator<Item = FolderGroup>) -> Self {
+        self.folders = folders.into_iter().map(|g| (g.id, g)).collect();
+        self
+    }
+
+    /// The folder `path` still holds the contents of group `g`.
+    fn same_folder(&self, g: &FolderGroup, path: &Path) -> bool {
+        folders::live_signature(self.source, path, &self.ctx)
+            .ok()
+            .flatten()
+            .is_some_and(|sig| hash::hex(&sig) == g.hash)
+    }
+
+    /// [`Self::check`] for a folder.
+    fn check_folder(&mut self, group: u32, item: &PlanItem) -> Result<(), Refusal> {
+        let g = self
+            .folders
+            .get(&group)
+            .ok_or_else(|| refusal("not-a-duplicate", "the group is not in the search result"))?;
+        let keeper = item
+            .keeper
+            .as_deref()
+            .ok_or_else(|| refusal("not-a-duplicate", "no folder is kept"))?;
+        let known = |p: &Path| g.folders.iter().any(|f| f.path == p);
+        if !known(keeper) || !known(&item.path) || keeper == item.path {
+            return Err(refusal(
+                "not-a-duplicate",
+                "the item or its keeper is not a folder of the group",
+            ));
+        }
+        let answer = match self.keepers.get(keeper) {
+            Some(done) => done.clone(),
+            None => {
+                let r = if self.same_folder(g, keeper) {
+                    Ok(())
+                } else {
+                    Err(refusal(
+                        "keeper-changed",
+                        "the folder that stays changed or is gone",
+                    ))
+                };
+                self.keepers.insert(keeper.to_path_buf(), r.clone());
+                r
+            }
+        };
+        answer?;
+        // the keeper must still be there right now
+        if !keeper.is_dir() {
+            return Err(refusal("keeper-changed", "the folder that stays is gone"));
+        }
+        if self.same_folder(g, &item.path) {
+            Ok(())
+        } else {
+            Err(refusal(
+                "copy-changed",
+                "this folder changed since the search",
+            ))
         }
     }
 
@@ -329,6 +477,9 @@ impl<'a> Verifier<'a> {
         let Origin::Duplicate { group } = item.origin else {
             return Ok(());
         };
+        if item.is_dir {
+            return self.check_folder(group, item);
+        }
         let g = self
             .groups
             .get(&group)

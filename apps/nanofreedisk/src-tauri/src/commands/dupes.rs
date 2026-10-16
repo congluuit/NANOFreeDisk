@@ -19,7 +19,7 @@ use nfd_core::safety::SafetyGate;
 use nfd_core::scanner::{self, ScanEvent, ScanOptions, ScanTree};
 use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::{LiveSource, Source};
-use nfd_dupes::keep::{KeepStrategy, Selection, auto_select};
+use nfd_dupes::keep::{KeepStrategy, Selection, auto_select, auto_select_folders};
 use nfd_dupes::plan::{Action, Verifier};
 use nfd_dupes::{DupeOptions, DupeReport, Phase, Progress};
 use nfd_platform::Platform;
@@ -59,8 +59,8 @@ impl DupeState {
         let guard = self.report.lock().ok()?;
         guard.as_ref().map(|r| {
             (
-                r.wasted_bytes,
-                r.groups.len(),
+                r.wasted_bytes + r.folder_wasted,
+                r.groups.len() + r.folder_groups.len(),
                 r.roots
                     .first()
                     .map(|p| p.to_string_lossy().into_owned())
@@ -69,7 +69,8 @@ impl DupeState {
         })
     }
 
-    /// `true` when `path` is a copy (or a link of one) in the last search.
+    /// `true` when `path` is a copy (or a link of one) or a duplicate folder in the
+    /// last search.
     fn knows(&self, path: &Path) -> CmdResult<bool> {
         let k = key(path);
         let guard = self.report.lock().map_err(|e| err("internal", e))?;
@@ -78,7 +79,10 @@ impl DupeState {
                 g.copies
                     .iter()
                     .any(|c| key(&c.path) == k || c.links.iter().any(|l| key(l) == k))
-            })
+            }) || r
+                .folder_groups
+                .iter()
+                .any(|g| g.folders.iter().any(|f| key(&f.path) == k))
         }))
     }
 }
@@ -97,6 +101,9 @@ pub struct FindOptions {
     /// Read and write the hash cache in the history database.
     #[serde(default = "yes")]
     use_cache: bool,
+    /// Also find duplicate folders.
+    #[serde(default)]
+    folders: bool,
 }
 
 const fn yes() -> bool {
@@ -232,6 +239,7 @@ pub async fn dupes_find(
             threads: None,
             extensions: options.extensions,
             app_dir_paths: nfd_dupes::collect::default_app_dirs(&resolve),
+            folders: options.folders,
             cancel: Some(cancel.clone()),
         };
         // a connection of its own: the app's shared one stays free meanwhile
@@ -291,14 +299,22 @@ pub fn dupes_report(dupes: State<'_, DupeState>) -> CmdResult<Option<DupeView>> 
 }
 
 /// The default selection of every group for `strategy` (`auto`, `oldest`, `newest`,
-/// `shortest`, `prefer:<dir>`): one copy kept, risky copies never selected.
+/// `shortest`, `prefer:<dir>`): one copy kept, risky copies never selected. With
+/// `folders`, the selection of the duplicate folders.
 #[tauri::command]
-pub fn dupes_select(dupes: State<'_, DupeState>, strategy: String) -> CmdResult<Vec<Selection>> {
+pub fn dupes_select(
+    dupes: State<'_, DupeState>,
+    strategy: String,
+    folders: Option<bool>,
+) -> CmdResult<Vec<Selection>> {
     let strategy: KeepStrategy = strategy.parse().map_err(|e| err("bad-strategy", e))?;
     let guard = dupes.report.lock().map_err(|e| err("internal", e))?;
     let report = guard
         .as_ref()
         .ok_or_else(|| err("no-dupes", "no duplicate search yet"))?;
+    if folders.unwrap_or(false) {
+        return Ok(auto_select_folders(&report.folder_groups, &strategy));
+    }
     let mut sel = auto_select(&report.groups, &strategy);
     sel.retain(|s| s.group as usize <= MAX_GROUPS);
     Ok(sel)
@@ -315,14 +331,20 @@ pub async fn dupes_run(
     dupes: State<'_, DupeState>,
     selections: Vec<Selection>,
     action: Action,
+    folders: Option<bool>,
 ) -> CmdResult<OperationDto> {
-    let (plan, groups) = {
+    let folders = folders.unwrap_or(false);
+    let (plan, groups, folder_groups) = {
         let guard = dupes.report.lock().map_err(|e| err("internal", e))?;
         let report = guard
             .as_ref()
             .ok_or_else(|| err("no-dupes", "no duplicate search yet"))?;
-        let plan = nfd_dupes::plan::plan(&report.groups, &selections, action)
-            .map_err(|e| err("dupes-plan", e))?;
+        let plan = if folders {
+            nfd_dupes::plan::plan_folders(&report.folder_groups, &selections, action)
+        } else {
+            nfd_dupes::plan::plan(&report.groups, &selections, action)
+        }
+        .map_err(|e| err("dupes-plan", e))?;
         let ids: HashSet<u32> = selections.iter().map(|s| s.group).collect();
         let groups: Vec<_> = report
             .groups
@@ -330,14 +352,20 @@ pub async fn dupes_run(
             .filter(|g| ids.contains(&g.id))
             .cloned()
             .collect();
-        (plan, groups)
+        let folder_groups: Vec<_> = report
+            .folder_groups
+            .iter()
+            .filter(|g| ids.contains(&g.id))
+            .cloned()
+            .collect();
+        (plan, groups, folder_groups)
     };
     if plan.items.is_empty() {
         return Err(err("nothing-to-clean", "nothing selected"));
     }
     let cancel = Arc::new(AtomicBool::new(false));
     *dupes.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
-    let mut verifier = Verifier::new(&LiveSource, groups);
+    let mut verifier = Verifier::new(&LiveSource, groups).with_folders(folder_groups);
     let (dto, op) = clean::execute_plan_returning(
         &app,
         &window,
@@ -375,6 +403,12 @@ fn forget(report: &mut DupeReport, gone: &HashSet<String>) {
     }
     report.groups.retain(|g| g.copies.len() > 1);
     report.wasted_bytes = report.groups.iter().map(|g| g.wasted).sum();
+    for g in &mut report.folder_groups {
+        g.folders.retain(|f| !gone.contains(&key(&f.path)));
+        g.wasted = g.size * (g.folders.len().max(1) as u64 - 1);
+    }
+    report.folder_groups.retain(|g| g.folders.len() > 1);
+    report.folder_wasted = report.folder_groups.iter().map(|g| g.wasted).sum();
 }
 
 /// Show a copy of the last search in Explorer.
