@@ -534,6 +534,15 @@ NANOFreeDisk/
 - [x] View **Cache lập trình** (Cache / Toolchain / Repo / Package store / Thư mục lạ): "Dọn an toàn (chỉ 🟢)" theo vendor và toàn bộ, xem trước + *Mở trong Explorer* (chỉ đường dẫn view đã hiện), dialog tổng GB, Expert: xóa vĩnh viễn 🟢 + lệnh `nfd`; Settings → Cache lập trình (ngưỡng theo vendor, nhắc bằng thông báo sau lần quét và một lần sau khi mở app 1 phút, giữ build output N ngày, stale N ngày); `locales/{en,vi}/devcache.ftl` (120 message); mock trình duyệt; `gui-smoke.mjs` phủ DevCache bằng fixture + pack riêng
 - [ ] Đặt **lịch** dọn tự động (scheduled clean) và gỡ toolchain trực tiếp — v1.x; C5 Container & VM, C6 PATH Doctor, C7 IDE hygiene — v1.1+
 
+**Phase 5 — Duplicates** (chi tiết: `docs/PHASE5_DUPLICATES.md`; kế hoạch 2026-10-16, chưa code)
+
+- [ ] Crate `nfd-dupes`: tập tệp từ `ScanTree` (loại tệp < 1 MB, reparse, cloud placeholder, SYSTEM, Protected, thư mục ứng dụng mặc định), gom (volume, size), gộp hardlink cùng `file_id`, BLAKE3 từng phần (đầu/giữa/cuối 16 KB) → toàn bộ (buffer 1 MB, không mmap, số luồng theo SSD/HDD), paranoid so byte; cache hash `(volume, file_id, size, mtime)` trong `nfd-history`; `nfd dupes --json/--csv`, schema `nanofreedisk.dupes.v1`, benchmark
+- [ ] Chọn bản giữ (cũ nhất / mới nhất / đường dẫn ngắn / thư mục ưu tiên / ngoài Downloads-Temp), `dupes::plan` không bao giờ chọn hết một nhóm (proptest), kiểm tra lại size/mtime + hash lại cả hai bản ngay trước khi hành động; cảnh báo ☁ đồng bộ / git / chỉ đọc; Recycle Bin / Quarantine; `--action recycle|quarantine --apply`
+- [ ] View **Duplicates** (nhóm theo dung lượng lãng phí, giữ bản này, chiến lược tự chọn, xem trước ảnh, xuất CSV/JSON), menu Analyze + verb Explorer "Find duplicates here", Health info, `locales/{en,vi}/dupes.ftl`, `gui-smoke`
+- [ ] Thay bằng **hardlink** (NTFS, cùng volume) / **block clone** (ReFS, Dev Drive) với undo qua Quarantine; hardlink chỉ chọn sẵn cho media / bộ cài / archive / model, không bao giờ trong thư mục đồng bộ hay git repo
+- [ ] Thư mục trùng (hash thư mục từ các con, hiện ở cấp cao nhất), `nfd dupes --folders`
+- [ ] DoD: 100 GB media < 5 phút (SSD), quét lại có cache < 30 s, 0 báo nhầm, không đọc cloud placeholder
+
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 
 1. *Lưu trữ*: crate mới `nfd-history` (SQLite qua `rusqlite` feature `bundled`; kiểm tra MSRV 1.85 và `cargo deny` trước khi thêm). DB ở `%LOCALAPPDATA%\NANOFreeDisk\history.db`. Bảng `scans(id, root, volume_serial, started_at, elapsed_ms, files, dirs, on_disk, free_bytes, total_bytes)`, `dir_sizes(scan_id, path_hash, path, depth, on_disk, files)` — **chỉ thư mục tới độ sâu 6 + mọi thư mục ≥ 50 MB** (không lưu từng tệp: 1 triệu tệp → vài chục nghìn dòng) — và `top_files(scan_id, path, on_disk, mtime)` top 500. Đường dẫn chuẩn hóa chữ thường + `path_hash` (xxh3) để join nhanh. Giữ 30 snapshot / root (cấu hình được), tự xóa cũ; có tùy chọn tắt lưu lịch sử.
