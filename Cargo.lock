@@ -2356,6 +2356,7 @@ dependencies = [
  "globset",
  "nfd-core",
  "nfd-platform",
+ "rayon",
  "serde",
  "tempfile",
  "thiserror 2.0.21",

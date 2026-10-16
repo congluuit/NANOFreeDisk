@@ -508,10 +508,10 @@ try {
 
   const repoScan = await invoke("devcache_repos", { root: join(devFixture, "projects"), keepRecentDays: 7, staleDays: 90, gitStatus: false });
   const smokeRepo = repoScan.repos?.find((r) => r.name === "smoke-app");
-  const target = smokeRepo?.artifacts?.find((a) => a.rel === "target");
-  check("repo finder: project and its build output", !!target && target.selected && target.level === "safe" && smokeRepo.kinds.includes("rust"), JSON.stringify(repoScan).slice(0, 240));
-  if (target) {
-    const moved = await invoke("devcache_repos_clean", { paths: [target.path] });
+  const buildOut = smokeRepo?.artifacts?.find((a) => a.rel === "target");
+  check("repo finder: project and its build output", !!buildOut && buildOut.selected && buildOut.level === "safe" && smokeRepo.kinds.includes("rust"), JSON.stringify(repoScan).slice(0, 240));
+  if (buildOut) {
+    const moved = await invoke("devcache_repos_clean", { paths: [buildOut.path] });
     if (moved.id) operations.push(moved.id);
     check("repo build output goes to the quarantine", moved.done === 1 && !existsSync(join(devProject, "target")) && existsSync(join(devProject, "Cargo.toml")), JSON.stringify(moved));
     if (moved.id) {

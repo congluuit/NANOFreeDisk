@@ -384,7 +384,7 @@ Kèm: `SHA256SUMS.txt`, `SHA256SUMS.txt.minisig` (minisign), `sbom.cdx.json`, `C
 | **2 – GUI Analyze** ✅ | 5–7 | Tauri app: drive overview, treemap/sunburst/list, filter/search, mở Explorer, xóa thủ công vào Recycle Bin | Demo video; 60 fps treemap 50k rect; chốt Tauri vs egui — **xong 2026-10-16** |
 | **3 – Safety + Clean** | 8–9 | SafetyGate, Planner/Executor, Quarantine, Undo, rule engine, packs `windows-system`, `browsers`, `gpu-shader-cache` | 200+ safety tests xanh; `nfd clean --dry-run` |
 | **3B – Hardware + Tasks** | song song 8–10 | `nfd-hwinfo`, `nfd-sensors`, `nfd-tasks`, view Hardware (Tổng quan / Cảm biến / Tasks), `nfd hw` / `sensors` / `ps`; helper elevated + PawnIO opt-in (Intel → AMD → Super I/O) | ±2 °C / ±5 % so với LibreHardwareMonitor trên i9-13900HX + 1 máy AMD; lấy mẫu < 1 % CPU; test chặn cứng End task |
-| **4 – DevCache Manager** | 10 | Catalog + packs `ai-tools`, `ide-editors`, `package-managers`, `game-engines`, UI DevCache | Catalog ≥ 60 rule có impact text; phát hiện thư mục lạ |
+| **4 – DevCache Manager** ✅ | 10 | Catalog + packs `ai-tools`, `ide-editors`, `package-managers`, `game-engines`, UI DevCache | Catalog ≥ 60 rule có impact text; phát hiện thư mục lạ — **xong 2026-10-16** (123 rule) |
 | **5 – Duplicates** | 11–12 | Dedupe pipeline, UI, hardlink action | 100 GB ảnh/video trong < 5 phút (SSD) |
 | **6 – Monitor** | 13–14 | ETW helper elevated, per-process I/O, realtime chart, cảnh báo | Overhead < 2 % CPU |
 | **7 – Health** | 15–16 | SMART ATA/NVMe, WMI reliability, trend, tray alert, export | Khớp CrystalDiskInfo trên ≥ 5 ổ mẫu (SATA SSD, NVMe, HDD, USB) |
@@ -522,16 +522,17 @@ NANOFreeDisk/
 - [ ] `cargo-fuzz` cho rule loader; job CI dry-run toàn hệ thống mới viết, chưa chạy trên runner `windows-latest`
 - [ ] Dọn junk cần quyền admin (`%SystemRoot%\Temp`, CBS log…) — cần helper elevated (cùng helper Hardware Monitor); hiện các mục đó báo lỗi truy cập và được bỏ qua
 
-**Phase 4 — DevCache Manager** (chi tiết: `docs/PHASE4_DEVCACHE.md`; C1 + C2 cơ bản + C3 + C4 + C9, 3 tuần)
+**Phase 4 — DevCache Manager** (chi tiết: `docs/PHASE4_DEVCACHE.md`; C1 + C2 cơ bản + C3 + C4 + C9; xong 7 lát cắt 2026-10-16)
 
-- [ ] Rule pack `ide-editors`, `package-managers`, `game-engines` + mở rộng `ai-tools`: ≥ 60 rule DevCache, mỗi rule có `impact` EN + VI và `verified_on`; cờ `devcache` trong `[pack]`; test pack
-- [ ] `nfd-devtools::devcache`: vendor → app → thư mục, 🔒 Giữ lại (rule Protected), ngưỡng theo vendor
-- [ ] `nfd-devtools::unknown`: thư mục lạ trong `%USERPROFILE%` / `%APPDATA%` / `%LOCALAPPDATA%` → 🟡 "Chưa xác minh" + link đóng góp rule
-- [ ] C2 Toolchain Inventory cơ bản (rustup, Node, Python, Conda, JDK, Gradle, Go, Android SDK, .NET, Unity, Unreal, Flutter, Visual Studio) — chỉ Hướng dẫn lệnh gỡ
-- [ ] C3 Repo Finder + C9 build artifact policy (marker, tên chung chung cần git ignore, giữ repo hoạt động 7 ngày) → Quarantine qua Planner
-- [ ] C4 lệnh dọn package store chính chủ: hiện đúng dòng lệnh + xác nhận; không hoàn tác được → Hướng dẫn; ghi Activity log
-- [ ] CLI `nfd devcache [list|clean|unknown]`, `nfd toolchains`, `nfd repos [clean]`, `nfd stores [run]`
-- [ ] View DevCache (Cache / Toolchain / Repo / Package store / Thư mục lạ), "Dọn an toàn (chỉ 🟢)" theo vendor, Settings ngưỡng + nhắc; `locales/{en,vi}/devcache.ftl`; `gui-smoke.mjs` phủ DevCache
+- [x] Rule pack `ide-editors` (31), `package-managers` (38), `game-engines` (12) + `ai-tools` mở rộng lên 42: **123 rule DevCache**, mỗi rule có `impact` EN + VI và `verified_on`; cờ `devcache` trong `[pack]`; test: ≥ 60 rule (`DEVCACHE_MIN_RULES`), đã dịch, rule 🟢 phải `regenerates`, không rule xóa được nào chạm config / credential / extension / toolchain / memory. Matcher: đường dẫn của mọi rule 🔴 Protected là `exclude` của **mọi** rule (🔒 Keep được bảo đảm cả khi rule khác rộng hơn)
+- [x] Crate `nfd-devtools`. `devcache`: vendor → app → thư mục (tổng, lần sửa cuối, app đang chạy), 🔒 Giữ lại (chỉ cho app có trên máy), ngưỡng theo vendor (mặc định Ollama 50 GB, Hugging Face 30 GB, JetBrains 10 GB)
+- [x] `unknown`: dot-folder của profile và thư mục con của `%APPDATA%` / `%LOCALAPPDATA%` / `~/.cache` / `~/.config` / `~/.local/share` chưa rule nào nhắc tới, có thư mục con `cache|logs|sessions|models|…` (2 cấp), ≥ 50 MB → 🟡 "Chưa xác minh" + link issue "Cache rule proposal" điền sẵn (thư mục dạng biến, không có tên người dùng); không bao giờ dọn
+- [x] C2 Toolchain Inventory cơ bản: rustup (★ mặc định), nvm-windows / fnm / Volta, pyenv-win, python.org, uv Python, Conda env, JDK của IDE, Go SDK, Android SDK (platforms, build-tools, NDK, system-images), .NET SDK, Unity / Unreal, fvm, Visual Studio (`vswhere`), đĩa WSL / Docker — chỉ Hướng dẫn (lệnh gỡ để sao chép hoặc ứng dụng gỡ)
+- [x] C3 Repo Finder + C9: marker → artifact (Rust, Node, Python, .NET, CMake, Gradle, Maven, Flutter, Unity, Unreal, Godot, Terraform, Ruby); tên chung chung chỉ khi `git check-ignore` xác nhận; thư mục có tệp được git theo dõi không bao giờ đề xuất; `venv` cần `pyvenv.cfg`; `target` > 5 GB → 🟡; giữ (không chọn sẵn) repo hoạt động trong 7 ngày; commit cuối đọc từ `.git/logs/HEAD`; thay đổi chưa commit qua `git status`; xóa = mục chọn tay → Quarantine qua Planner → Gate → Executor → Journal (kind `devcache`)
+- [x] C4 lệnh chính chủ (npm, pnpm, Yarn, pip, uv, Conda, Go cache / modcache, NuGet, cargo-cache, Composer, Scoop): chỉ exe trên `PATH`, không qua shell, không stdin, timeout 10 phút, hủy được (dừng cả cây tiến trình); chạy chỉ khi chuỗi đã xác nhận đúng bằng dòng lệnh; đo store trước/sau; ghi Activity (kind `command`, không khôi phục) + audit log. `ollama rm`, `hf cache delete`, `docker system prune`, `git gc` chỉ Hướng dẫn
+- [x] CLI `nfd devcache [list|clean|unknown]`, `nfd toolchains`, `nfd repos <root>` / `nfd repos clean <root> [--apply]`, `nfd stores` / `nfd stores run <id>`; `nfd clean --apply` và `repos clean` dùng chung đường thực thi
+- [x] View **Cache lập trình** (Cache / Toolchain / Repo / Package store / Thư mục lạ): "Dọn an toàn (chỉ 🟢)" theo vendor và toàn bộ, xem trước + *Mở trong Explorer* (chỉ đường dẫn view đã hiện), dialog tổng GB, Expert: xóa vĩnh viễn 🟢 + lệnh `nfd`; Settings → Cache lập trình (ngưỡng theo vendor, nhắc bằng thông báo sau lần quét và một lần sau khi mở app 1 phút, giữ build output N ngày, stale N ngày); `locales/{en,vi}/devcache.ftl` (120 message); mock trình duyệt; `gui-smoke.mjs` phủ DevCache bằng fixture + pack riêng
+- [ ] Đặt **lịch** dọn tự động (scheduled clean) và gỡ toolchain trực tiếp — v1.x; C5 Container & VM, C6 PATH Doctor, C7 IDE hygiene — v1.1+
 
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 

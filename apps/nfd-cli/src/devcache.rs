@@ -215,6 +215,10 @@ fn clean(mut args: DevCleanArgs) -> anyhow::Result<ExitCode> {
     {
         bail!("`{bad}` is not a DevCache pack (use `nfd clean` for the others)");
     }
+    args.clean.command = Some(match &args.vendor {
+        Some(v) => format!("nfd devcache clean --vendor \"{v}\""),
+        None => "nfd devcache clean".to_owned(),
+    });
     if let Some(vendor) = &args.vendor {
         let ids: Vec<String> = dev
             .iter()

@@ -1,6 +1,6 @@
 # Phase 4 — DevCache Manager: kế hoạch chi tiết
 
-> Trạng thái: **kế hoạch** (2026-10-16) — checklist ở `docs/PLAN.md` §12 "Phase 4". Bản chi tiết của hàng "4 – DevCache Manager" trong `docs/PLAN.md` §8, theo thiết kế §4.2 (định dạng rule, RiskLevel, marker build artifact), §4.3 (UI DevCache) và các mục ① của nhóm C trong §13.2: **C1** DevCache Manager, **C2** Toolchain Inventory (cơ bản), **C3** Repo Finder, **C4** dọn package store bằng lệnh chính chủ, **C9** chính sách build artifact. Theo §13.4, Phase 4 kéo dài **3 tuần**. Nguồn dữ liệu: `docs/DEVTOOL_CACHE_CATALOG.md` và `rules/ai-tools.toml`.
+> Trạng thái: **đã làm xong 7 lát cắt** (2026-10-16) — checklist ở `docs/PLAN.md` §12 "Phase 4". Khác kế hoạch: build output của repo dùng origin *chọn tay* (gate cho phép bên trong Documents) nhưng đi Quarantine thay vì Recycle Bin; nhắc ngưỡng chạy sau mỗi lần quét DevCache và một lần ~1 phút sau khi mở app (khi bật), chưa có lịch; Simple mode vẫn chạy được lệnh package store (luôn qua dialog hiện đúng dòng lệnh); độ sâu quét repo mặc định 8. Bản chi tiết của hàng "4 – DevCache Manager" trong `docs/PLAN.md` §8, theo thiết kế §4.2 (định dạng rule, RiskLevel, marker build artifact), §4.3 (UI DevCache) và các mục ① của nhóm C trong §13.2: **C1** DevCache Manager, **C2** Toolchain Inventory (cơ bản), **C3** Repo Finder, **C4** dọn package store bằng lệnh chính chủ, **C9** chính sách build artifact. Theo §13.4, Phase 4 kéo dài **3 tuần**. Nguồn dữ liệu: `docs/DEVTOOL_CACHE_CATALOG.md` và `rules/ai-tools.toml`.
 
 ## 1. Mục tiêu & DoD
 
@@ -19,7 +19,8 @@
 - `[pack]` thêm cờ `devcache = true` → view DevCache lọc theo cờ này; Clean (Phase 3) vẫn quét mọi pack như cũ.
 - Rule 🔴 Protected tiếp tục là **danh sách 🔒 Giữ lại** (config, auth, extension, memory…): matcher liệt kê nhưng không bao giờ đi vào.
 - Build artifact **trong project** không làm bằng rule glob (gate cấm rule đụng Documents/Desktop… và glob `**/node_modules` trên cả ổ là quá rộng) mà bằng C9 (§2.4).
-- Test: mỗi pack DevCache hợp lệ, ≥ 60 rule tổng, rule 🟢 phải `regenerates = true`, mọi rule có `requires_closed` hoặc là log/cache không bị khóa, không rule nào khớp `.git`, `extensions`, `settings.json`, `credentials`, `auth`, `token`.
+- Test: mỗi pack DevCache hợp lệ, ≥ 60 rule tổng, đã dịch, rule 🟢 phải `regenerates = true`, không rule xóa được nào khớp `.git`, `extensions`, `settings.json`, `credentials`, `auth`, `token`, `toolchains`, `memory`…
+- Matcher: đường dẫn của mọi rule 🔴 Protected là `exclude` của mọi rule — rule cache rộng không bao giờ cuốn theo thứ một rule khác hứa giữ.
 
 ### 2.2 Crate mới `nfd-devtools` (feature crate theo §13.5)
 
@@ -84,7 +85,7 @@ Tab: **Cache** · **Toolchain** · **Repo** · **Package store** · **Thư mục
 - **Artifact là output thật** (repo commit `dist/`, project Blueprint-only cần `Binaries/`) → tên chung chung cần git ignore; tệp được track → bỏ; `Binaries` / `Library` / `DerivedDataCache` 🟡 (không chọn sẵn); project hoạt động 7 ngày gần đây → không chọn sẵn.
 - **pnpm store / Gradle cache bị hard-link / dùng chung** → dọn qua lệnh chính chủ (`pnpm store prune`) thay vì xóa thô; rule thô của pnpm store là 🟡.
 - **Lệnh chính chủ treo / hỏi tương tác** → đối số không tương tác (`--force`, `-y`), stdin rỗng, timeout, hủy được; chỉ exe trên `PATH`, không bao giờ qua `cmd /c`.
-- **Quét repo chậm trên ổ lớn** → người dùng chọn gốc, giới hạn độ sâu (mặc định 6), không đi vào artifact / `.git` / thư mục hệ thống, hủy được, `git status` chỉ khi bật.
+- **Quét repo chậm trên ổ lớn** → người dùng chọn gốc, giới hạn độ sâu (mặc định 8), không đi vào artifact / `.git` / thư mục ẩn / thư mục hệ thống, hủy được, `git status` tắt được (`--no-git-status`).
 - **Toolchain gỡ sai** → chỉ Hướng dẫn trong Phase 4.
 
 ## 6. Ngoài phạm vi Phase 4
