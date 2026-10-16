@@ -26,8 +26,9 @@ use std::path::{Component, Path, PathBuf, Prefix};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    Blocked, CONTAINER_TEMPLATES, PROTECTED_TEMPLATES, USER_DATA_TEMPLATES, VOLUME_ROOT_PROTECTED,
-    comparable, expand_template, is_within,
+    AGENT_HISTORY_TEMPLATES, Blocked, CONTAINER_TEMPLATES, PROTECTED_TEMPLATES,
+    USER_DATA_TEMPLATES, VOLUME_ROOT_PROTECTED, agent_history_name, comparable, contains_pattern,
+    expand_template, is_within, within_pattern,
 };
 use crate::RiskLevel;
 use crate::plan::CleanPlan;
@@ -179,6 +180,8 @@ pub struct SafetyGate {
     subtree: Vec<(&'static str, String)>,
     user_data: Vec<(&'static str, String)>,
     containers: Vec<(&'static str, String)>,
+    /// AI agents' conversation history (last component may hold wildcards).
+    agent_history: Vec<(&'static str, String)>,
 }
 
 impl SafetyGate {
@@ -204,6 +207,7 @@ impl SafetyGate {
             subtree: resolved(PROTECTED_TEMPLATES, USER_DATA_TEMPLATES),
             user_data: resolved(USER_DATA_TEMPLATES, &[]),
             containers: resolved(CONTAINER_TEMPLATES, &[]),
+            agent_history: resolved(AGENT_HISTORY_TEMPLATES, &[]),
         }
     }
 
@@ -276,6 +280,24 @@ impl SafetyGate {
                     template: (*template).to_owned(),
                 });
             }
+        }
+        // Conversation history of AI agents: never deleted, whoever asks (PLAN §5.1).
+        for (template, root) in &self.agent_history {
+            if within_pattern(&cand, root) {
+                return Err(Blocked::Protected {
+                    template: (*template).to_owned(),
+                });
+            }
+            if contains_pattern(&cand, root) {
+                return Err(Blocked::ContainsProtected {
+                    template: (*template).to_owned(),
+                });
+            }
+        }
+        if let Some(name) = agent_history_name(&cand) {
+            return Err(Blocked::Protected {
+                template: format!("<any>/{name}"),
+            });
         }
         for (template, root) in &self.user_data {
             // Rules never touch user data; the user may pick items inside it.

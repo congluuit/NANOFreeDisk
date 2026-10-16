@@ -54,9 +54,13 @@ function reset(): void {
       requiresClosed: ["Claude.exe"],
       running: ["Claude.exe"],
     }),
-    rule("anthropic.claude-code.sessions", "Anthropic", "Claude Code", "caution", 1.4 * GB, [
-      "Session transcripts used by `claude --resume`; your code is untouched.",
-      "Bản ghi phiên dùng cho `claude --resume`; mã nguồn không bị ảnh hưởng.",
+    rule("anthropic.claude-code.file-history", "Anthropic", "Claude Code", "caution", 1.4 * GB, [
+      "Pre-edit copies of files used to revert Claude Code edits.",
+      "Bản sao tệp trước khi sửa, dùng để hoàn tác thay đổi của Claude Code.",
+    ]),
+    rule("anthropic.claude-code.sessions", "Anthropic", "Claude Code", "protected", 0, [
+      "Conversation transcripts and memory. Conversation history is never deleted.",
+      "Bản ghi hội thoại và bộ nhớ. Lịch sử hội thoại không bao giờ bị xóa.",
     ]),
     rule("anthropic.claude-code.config", "Anthropic", "Claude Code", "protected", 0, [
       "Global config, OAuth state and permissions.",

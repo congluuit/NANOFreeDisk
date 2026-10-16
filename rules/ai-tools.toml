@@ -30,14 +30,10 @@ vendor          = "Anthropic"
 app             = "Claude Code"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
-paths           = ["${HOME}/.claude/projects/*/*.jsonl"]
-exclude         = ["${HOME}/.claude/projects/*/memory/**"]
-level           = "caution"
-regenerates     = false
-min_age_days    = 7
-requires_closed = ["claude.exe", "claude", "node.exe"]
-impact          = "Session transcripts used by `claude --resume` / `--continue`. Your code is untouched; you only lose the ability to resume old conversations."
-impact_vi       = "Bản ghi phiên dùng cho `claude --resume` / `--continue`. Mã nguồn không bị ảnh hưởng; bạn chỉ mất khả năng tiếp tục các cuộc hội thoại cũ."
+paths           = ["${HOME}/.claude/projects/**", "${HOME}/.claude/sessions/**", "${HOME}/.claude/history.jsonl"]
+level           = "protected"
+impact          = "Conversation transcripts used by `claude --resume` / `--continue`, per-project memory and prompt history. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Bản ghi hội thoại dùng cho `claude --resume` / `--continue`, bộ nhớ theo dự án và lịch sử prompt. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -173,13 +169,10 @@ vendor          = "OpenAI"
 app             = "Codex CLI"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
-paths           = ["${HOME}/.codex/sessions/**", "${HOME}/.codex/history.jsonl"]
-level           = "caution"
-regenerates     = false
-min_age_days    = 7
-requires_closed = ["codex.exe", "codex", "node.exe"]
-impact          = "Session transcripts and prompt history (used by `codex resume`). Code is untouched."
-impact_vi       = "Bản ghi phiên và lịch sử prompt (dùng cho `codex resume`). Mã nguồn không bị ảnh hưởng."
+paths           = ["${HOME}/.codex/sessions/**", "${HOME}/.codex/archived_sessions/**", "${HOME}/.codex/history.jsonl", "${HOME}/.codex/session_index.jsonl", "${HOME}/.codex/thread_history_*", "${HOME}/.codex/state_*", "${HOME}/.codex/memories/**", "${HOME}/.codex/memories_*", "${HOME}/.codex/attachments/**"]
+level           = "protected"
+impact          = "Session transcripts, thread history, memories and prompt history (used by `codex resume`). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Bản ghi phiên, lịch sử thread, bộ nhớ và lịch sử prompt (dùng cho `codex resume`). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -224,17 +217,15 @@ impact_vi       = "Thông tin đăng nhập và cấu hình."
 verified_on     = 2026-10-16
 
 [[rule]]
-id              = "google.gemini-cli.tmp"
+id              = "google.gemini-cli.chats"
 vendor          = "Google"
 app             = "Gemini CLI"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.gemini/tmp/**"]
-level           = "safe"
-regenerates     = true
-requires_closed = ["gemini.exe", "gemini", "node.exe"]
-impact          = "Temporary checkpoints."
-impact_vi       = "Các checkpoint tạm thời."
+level           = "protected"
+impact          = "Saved chats, checkpoints and logs of each project (`/chat resume`, `/restore`). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Chat đã lưu, checkpoint và nhật ký của từng dự án (`/chat resume`, `/restore`). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -244,11 +235,9 @@ app             = "Gemini CLI"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.gemini/history/**"]
-level           = "caution"
-min_age_days    = 7
-requires_closed = ["gemini.exe", "gemini"]
-impact          = "Conversation history."
-impact_vi       = "Lịch sử hội thoại."
+level           = "protected"
+impact          = "Gemini CLI conversation history. Never deleted (PLAN §5.1)."
+impact_vi       = "Lịch sử hội thoại của Gemini CLI. Không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── GitHub Copilot ─────────────────────────────
@@ -271,12 +260,10 @@ vendor          = "GitHub"
 app             = "Copilot Chat (VS Code)"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
-paths           = ["${APPDATA}/Code/User/globalStorage/github.copilot-chat/**", "${HOME}/.copilot/session-state/**"]
-level           = "caution"
-min_age_days    = 14
-requires_closed = ["Code.exe", "copilot.exe"]
-impact          = "Chat history inside VS Code / Copilot CLI."
-impact_vi       = "Lịch sử chat trong VS Code / Copilot CLI."
+paths           = ["${APPDATA}/Code/User/globalStorage/github.copilot-chat/**", "${APPDATA}/Code/User/globalStorage/emptyWindowChatSessions/**", "${HOME}/.copilot/session-state/**", "${HOME}/.copilot/history-session-state/**"]
+level           = "protected"
+impact          = "Chat history inside VS Code / Copilot CLI. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Lịch sử chat trong VS Code / Copilot CLI. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Cursor ─────────────────────────────
@@ -317,17 +304,17 @@ impact_vi       = "Bộ đệm, nhật ký và bản cập nhật đã tải; đ
 verified_on     = 2026-10-16
 
 [[rule]]
-id              = "cursor.workspace-state"
+id              = "cursor.local-history"
 vendor          = "Anysphere"
 app             = "Cursor"
 category        = "ai-ide"
 platform        = ["windows"]
-paths           = ["${APPDATA}/Cursor/User/workspaceStorage/*/**", "${APPDATA}/Cursor/User/History/**"]
+paths           = ["${APPDATA}/Cursor/User/History/**"]
 level           = "caution"
 min_age_days    = 30
 requires_closed = ["Cursor.exe"]
-impact          = "Per-workspace UI state, per-project chats and Local History. Entries for workspaces that no longer exist on disk are safe."
-impact_vi       = "Trạng thái giao diện theo workspace, chat theo dự án và Local History. Mục của workspace không còn trên đĩa thì an toàn."
+impact          = "Local History (the file timeline). Per-workspace chats are kept (rule cursor.chats)."
+impact_vi       = "Local History (dòng thời gian của tệp). Chat theo workspace được giữ lại (rule cursor.chats)."
 verified_on     = 2026-10-16
 
 # ───────────────────────────── Windsurf ─────────────────────────────
@@ -338,12 +325,10 @@ vendor          = "Codeium"
 app             = "Windsurf"
 category        = "ai-ide"
 platform        = ["windows", "macos", "linux"]
-paths           = ["${HOME}/.codeium/windsurf/cascade/**"]
-level           = "caution"
-min_age_days    = 14
-requires_closed = ["Windsurf.exe"]
-impact          = "Cascade (agent) conversation history."
-impact_vi       = "Lịch sử hội thoại Cascade (agent)."
+paths           = ["${HOME}/.codeium/windsurf/cascade/**", "${HOME}/.codeium/windsurf/brain/**", "${APPDATA}/Windsurf/User/workspaceStorage/**", "${APPDATA}/Windsurf/User/globalStorage/**"]
+level           = "protected"
+impact          = "Cascade (agent) conversations and per-workspace chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Hội thoại Cascade (agent) và chat theo workspace. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -554,11 +539,9 @@ app             = "Continue"
 category        = "ai-agent"
 platform        = ["windows", "macos", "linux"]
 paths           = ["${HOME}/.continue/sessions/**"]
-level           = "caution"
-min_age_days    = 14
-requires_closed = ["Code.exe", "idea64.exe"]
-impact          = "Saved Continue chat sessions; older than 14 days only."
-impact_vi       = "Phiên chat Continue đã lưu; chỉ phiên cũ hơn 14 ngày."
+level           = "protected"
+impact          = "Saved Continue chat sessions. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên chat Continue đã lưu. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -580,11 +563,9 @@ app             = "Cline"
 category        = "ai-agent"
 platform        = ["windows"]
 paths           = ["${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/**", "${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/checkpoints/**"]
-level           = "caution"
-min_age_days    = 14
-requires_closed = ["Code.exe"]
-impact          = "Cline task history with checkpoints and screenshots (often several GB). Old tasks can no longer be reopened or rolled back."
-impact_vi       = "Lịch sử task của Cline kèm checkpoint và ảnh chụp (thường vài GB). Không mở lại hay quay lui task cũ được nữa."
+level           = "protected"
+impact          = "Cline task history with checkpoints and screenshots. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Lịch sử task của Cline kèm checkpoint và ảnh chụp. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -594,9 +575,129 @@ app             = "Roo Code"
 category        = "ai-agent"
 platform        = ["windows"]
 paths           = ["${APPDATA}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**", "${APPDATA}/Code/User/globalStorage/rooveterinaryinc.roo-cline/checkpoints/**"]
-level           = "caution"
-min_age_days    = 14
-requires_closed = ["Code.exe"]
-impact          = "Roo Code task history with checkpoints. Old tasks can no longer be reopened or rolled back."
-impact_vi       = "Lịch sử task của Roo Code kèm checkpoint. Không mở lại hay quay lui task cũ được nữa."
+level           = "protected"
+impact          = "Roo Code task history with checkpoints. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Lịch sử task của Roo Code kèm checkpoint. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+# ─────────────── Conversation history of other agents (PLAN §5.1) ───────────────
+
+[[rule]]
+id              = "anthropic.claude-desktop.sessions"
+vendor          = "Anthropic"
+app             = "Claude Desktop"
+category        = "ai-app"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Claude/local-agent-mode-sessions/**", "${APPDATA}/Claude/claude-code-sessions/**", "${APPDATA}/Claude/side-session-notes/**"]
+level           = "protected"
+impact          = "Agent and Claude Code sessions started from the desktop app, with their notes. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên agent và Claude Code mở từ ứng dụng desktop, kèm ghi chú của chúng. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "cursor.chats"
+vendor          = "Anysphere"
+app             = "Cursor"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Cursor/User/workspaceStorage/**", "${APPDATA}/Cursor/User/globalStorage/**", "${HOME}/.cursor/chats/**"]
+level           = "protected"
+impact          = "Per-workspace chats and composer history, Cursor CLI chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Chat theo workspace, lịch sử composer và chat của Cursor CLI. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.chat-sessions"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/User/workspaceStorage/**", "${APPDATA}/Code/User/globalStorage/**", "${APPDATA}/Code - Insiders/User/workspaceStorage/**", "${APPDATA}/Code - Insiders/User/globalStorage/**", "${APPDATA}/VSCodium/User/workspaceStorage/**", "${APPDATA}/VSCodium/User/globalStorage/**"]
+level           = "protected"
+impact          = "Per-workspace and extension storage, where Copilot Chat, Cline, Roo Code and other extensions keep AI chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Bộ nhớ theo workspace và của extension, nơi Copilot Chat, Cline, Roo Code và extension khác lưu chat AI. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.antigravity.conversations"
+vendor          = "Google"
+app             = "Antigravity"
+category        = "ai-ide"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.gemini/antigravity*/**", "${APPDATA}/Antigravity/User/workspaceStorage/**", "${APPDATA}/Antigravity/User/globalStorage/**", "${APPDATA}/Antigravity IDE/User/workspaceStorage/**", "${APPDATA}/Antigravity IDE/User/globalStorage/**"]
+level           = "protected"
+impact          = "Agent conversations, brain, knowledge items and per-workspace chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Hội thoại agent, brain, knowledge và chat theo workspace. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "cognition.devin.sessions"
+vendor          = "Cognition"
+app             = "Devin"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Devin/User/workspaceStorage/**", "${APPDATA}/Devin/User/globalStorage/**", "${APPDATA}/Devin/User/acp-messages/**", "${APPDATA}/Devin/summaries/**", "${APPDATA}/Devin/cli/summaries/**", "${APPDATA}/Devin/cli/sessions.db*", "${APPDATA}/Devin/windsurfSessionHandoff.db*"]
+level           = "protected"
+impact          = "Devin sessions, summaries and per-workspace chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên Devin, bản tóm tắt và chat theo workspace. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "zai.zcode.sessions"
+vendor          = "Z.ai"
+app             = "ZCode"
+category        = "ai-ide"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.zcode/**", "${APPDATA}/ZCode/session/IndexedDB/**", "${APPDATA}/ZCode/session/Local Storage/**"]
+level           = "protected"
+impact          = "ZCode tasks, rollouts and chat state. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Task, rollout và trạng thái chat của ZCode. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "bytedance.trae.chats"
+vendor          = "ByteDance"
+app             = "Trae"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Trae/User/workspaceStorage/**", "${APPDATA}/Trae/User/globalStorage/**", "${APPDATA}/Trae/ModularData/ai-agent/**", "${HOME}/.trae/memory/**"]
+level           = "protected"
+impact          = "Agent database, memory and per-workspace chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Cơ sở dữ liệu agent, bộ nhớ và chat theo workspace. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "aws.kiro.sessions"
+vendor          = "Amazon"
+app             = "Kiro"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Kiro/User/workspaceStorage/**", "${APPDATA}/Kiro/User/globalStorage/**"]
+level           = "protected"
+impact          = "Kiro agent sessions and per-workspace chats. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên agent Kiro và chat theo workspace. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "sst.opencode.sessions"
+vendor          = "SST"
+app             = "opencode"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.local/share/opencode/**", "${APPDATA}/ai.opencode.desktop/**"]
+level           = "protected"
+impact          = "opencode session database and snapshots. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Cơ sở dữ liệu phiên và snapshot của opencode. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "alibaba.qwen-code.chats"
+vendor          = "Alibaba"
+app             = "Qwen Code"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.qwen/tmp/**"]
+level           = "protected"
+impact          = "Saved chats and checkpoints of each project. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Chat đã lưu và checkpoint của từng dự án. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16

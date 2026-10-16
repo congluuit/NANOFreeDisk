@@ -623,6 +623,36 @@ verified_on = 2026-10-16
         }
     }
 
+    /// PLAN §5.1: every AI conversation-history location of the SafetyGate is also a
+    /// 🔴 "Keep" rule (so DevCache shows it as kept and every rule excludes it), and no
+    /// rule that deletes anything reaches into one.
+    #[test]
+    fn agent_history_is_kept_by_the_rule_packs() {
+        use nfd_core::safety::{AGENT_HISTORY_TEMPLATES, normalize};
+        let packs = builtin_packs().expect("builtin");
+        let rules: Vec<&Rule> = packs.iter().flat_map(|p| &p.rules).collect();
+        for template in AGENT_HISTORY_TEMPLATES {
+            let want = normalize(template);
+            let kept = rules.iter().any(|r| {
+                r.level == RiskLevel::Protected
+                    && r.paths.iter().any(|p| {
+                        let p = normalize(p);
+                        p == want || p == format!("{want}/**")
+                    })
+            });
+            assert!(kept, "{template} has no 🔴 Keep rule");
+        }
+        for rule in rules.iter().filter(|r| r.level.is_deletable()) {
+            for path in &rule.paths {
+                assert!(
+                    !is_protected_template(path),
+                    "{}: {path} reaches protected data",
+                    rule.id
+                );
+            }
+        }
+    }
+
     /// The real rule packs shipped in `rules/` must always validate.
     #[test]
     fn shipped_rule_packs_are_valid() {

@@ -64,6 +64,9 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 - `nfd devcache [list|clean|unknown]` (`--vendor`, `--level`, `--json` schema `nanofreedisk.devcache.v1`).
 - The rule matcher walks rules in parallel: a whole-machine dry run with all 150 rules takes ~7 s instead of ~31 s on the reference PC.
 
+### Changed
+- **AI conversation history is never deleted** (PLAN §5.1): the SafetyGate protects the session / conversation folders of Claude Code and Claude Desktop, Codex, Gemini CLI, Antigravity, Copilot (VS Code and CLI), Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Qwen Code, LM Studio and Jan, plus Aider chat logs and `.specstory` folders inside projects, against every origin — rules of any level, DevCache, Duplicates and items picked by hand — and refuses the folders that contain them. The rules that used to offer old transcripts (🟡 Claude Code / Codex sessions, Gemini CLI `tmp` and history, Copilot chat, Cursor and VS Code `workspaceStorage`, Windsurf Cascade, Continue, Cline, Roo Code) are now 🔴 Keep rules, and new Keep rules list the other agents' history in DevCache.
+
 ## [0.1.0] - unreleased
 
 Reserved for the first tagged pre-release (core scanner + CLI).

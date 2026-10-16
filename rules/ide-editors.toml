@@ -49,17 +49,17 @@ impact_vi       = "Nhật ký và báo cáo lỗi cũ. Bạn chỉ mất tư li�
 verified_on     = 2026-10-16
 
 [[rule]]
-id              = "microsoft.vscode.workspace-state"
+id              = "microsoft.vscode.local-history"
 vendor          = "Microsoft"
 app             = "Visual Studio Code"
 category        = "ide"
 platform        = ["windows"]
-paths           = ["${APPDATA}/Code/User/workspaceStorage/**", "${APPDATA}/Code/User/History/**"]
+paths           = ["${APPDATA}/Code/User/History/**"]
 level           = "caution"
 min_age_days    = 30
 requires_closed = ["Code.exe"]
-impact          = "Per-workspace state (open editors, extension data such as AI chats per project) and Local History (the file timeline). Your files are untouched."
-impact_vi       = "Trạng thái theo workspace (tab đang mở, dữ liệu extension như chat AI theo dự án) và Local History (dòng thời gian của tệp). Tệp của bạn không bị ảnh hưởng."
+impact          = "Local History (the file timeline). Your files are untouched. Per-workspace state, where extensions keep AI chats, is kept (PLAN §5.1)."
+impact_vi       = "Local History (dòng thời gian của tệp). Tệp của bạn không bị ảnh hưởng. Trạng thái theo workspace, nơi extension lưu chat AI, được giữ lại (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]

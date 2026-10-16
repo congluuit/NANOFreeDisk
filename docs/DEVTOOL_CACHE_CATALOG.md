@@ -19,13 +19,15 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 
 ## 1. AI Assistants / Coding Agents
 
+> **Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1).** Mọi thư mục lưu conversation / session của AI agent (Claude Code & Desktop, Codex, Gemini CLI, Antigravity, Copilot, Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Aider, SpecStory, LM Studio, Jan…) nằm trong `AGENT_HISTORY_TEMPLATES` / `AGENT_HISTORY_NAMES` của SafetyGate (`crates/nfd-core/src/safety.rs`) — bị chặn với mọi nguồn xóa (rule, DevCache, Duplicates, chọn tay) — và là rule 🔴 Keep trong `rules/ai-tools.toml`.
+
 ### 1.1 Anthropic — Claude Code (CLI)
 
 | Đường dẫn | Mức | Nội dung | Nếu xóa thì… | Cần đóng |
 |-----------|-----|----------|--------------|----------|
 | `%USERPROFILE%\.claude.json` | 🔴 | Config toàn cục, OAuth, trạng thái onboarding, MCP servers | Phải đăng nhập lại, mất cấu hình | — |
 | `%USERPROFILE%\.claude\settings.json`, `settings.local.json` | 🔴 | Permissions, hooks, model | Mất cấu hình | — |
-| `%USERPROFILE%\.claude\projects\<proj>\*.jsonl` | 🟡 | Transcript phiên làm việc (dùng cho `--resume`, `--continue`) | Mất khả năng resume phiên cũ; không ảnh hưởng code | `claude.exe`, `node.exe` |
+| `%USERPROFILE%\.claude\projects\<proj>\*.jsonl` | 🔴 | Transcript phiên làm việc (dùng cho `--resume`, `--continue`) | Lịch sử hội thoại — không bao giờ xóa (PLAN §5.1) | — |
 | `%USERPROFILE%\.claude\projects\<proj>\memory\` | 🔴 | Auto-memory của Claude Code cho project | Mất "trí nhớ" tích lũy | — |
 | `%USERPROFILE%\.claude\todos\` | 🟢 | Todo list tạm theo phiên | Không | `claude.exe` |
 | `%USERPROFILE%\.claude\shell-snapshots\` | 🟢 | Snapshot shell env | Tự tạo lại | `claude.exe` |
@@ -55,9 +57,9 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 |-----------|-----|--------------|----------|
 | `%USERPROFILE%\.codex\auth.json` | 🔴 | Đăng nhập lại | — |
 | `%USERPROFILE%\.codex\config.toml`, `instructions.md`, `AGENTS.md` | 🔴 | Mất cấu hình | — |
-| `%USERPROFILE%\.codex\sessions\**\*.jsonl` | 🟡 | Mất lịch sử/resume phiên Codex | `codex.exe`, `node.exe` |
+| `%USERPROFILE%\.codex\sessions\**\*.jsonl` | 🔴 | Lịch sử/resume phiên Codex — không bao giờ xóa (PLAN §5.1) | — |
 | `%USERPROFILE%\.codex\log\`, `*.log` | 🟢 | Mất log | — |
-| `%USERPROFILE%\.codex\history.jsonl` | 🟡 | Mất lịch sử prompt | `codex.exe` |
+| `%USERPROFILE%\.codex\history.jsonl`, `archived_sessions\`, `thread_history_*.sqlite` | 🔴 | Lịch sử prompt / thread — không bao giờ xóa | — |
 | `%LOCALAPPDATA%\Packages\OpenAI.ChatGPT-Desktop_*\LocalCache\` | 🟢 | Cache app MSIX; tải lại | `ChatGPT.exe` |
 | `%LOCALAPPDATA%\Packages\OpenAI.ChatGPT-Desktop_*\LocalState\` | 🟡 | Mất cài đặt/draft local | `ChatGPT.exe` |
 
@@ -66,8 +68,8 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 | Đường dẫn | Mức | Nếu xóa thì… | Cần đóng |
 |-----------|-----|--------------|----------|
 | `%USERPROFILE%\.gemini\oauth_creds.json`, `settings.json`, `GEMINI.md` | 🔴 | Đăng nhập/cấu hình lại | — |
-| `%USERPROFILE%\.gemini\tmp\` | 🟢 | Checkpoint/tạm | `gemini.exe`, `node.exe` |
-| `%USERPROFILE%\.gemini\history\`, `*.jsonl` | 🟡 | Mất lịch sử phiên | `gemini.exe` |
+| `%USERPROFILE%\.gemini\tmp\` | 🔴 | Chat đã lưu, checkpoint theo dự án — không bao giờ xóa | — |
+| `%USERPROFILE%\.gemini\history\`, `*.jsonl` | 🔴 | Lịch sử phiên — không bao giờ xóa | — |
 | `%USERPROFILE%\.gemini\installation_id` | 🔴 | — | — |
 
 ### 1.5 GitHub Copilot (CLI + extension)
@@ -84,7 +86,7 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 |-----------|-----|--------------|----------|
 | `%APPDATA%\Cursor\User\settings.json`, `keybindings.json`, `snippets\` | 🔴 | Mất cấu hình | — |
 | `%APPDATA%\Cursor\User\globalStorage\state.vscdb` | 🔴 | Mất trạng thái, lịch sử chat Cursor (lưu trong DB này) | — |
-| `%APPDATA%\Cursor\User\workspaceStorage\` | 🟡 | Mất trạng thái từng workspace (chat per-project, UI state); thư mục của workspace đã xóa khỏi máy → 🟢 | `Cursor.exe` |
+| `%APPDATA%\Cursor\User\workspaceStorage\` | 🔴 | Chat theo dự án, trạng thái UI — không bao giờ xóa (PLAN §5.1) | — |
 | `%APPDATA%\Cursor\User\History\` | 🟡 | Mất Local History (timeline) của file | `Cursor.exe` |
 | `%APPDATA%\Cursor\Cache\`, `CachedData\`, `CachedExtensionVSIXs\`, `CachedProfilesData\`, `Code Cache\`, `GPUCache\`, `DawnCache\`, `Service Worker\CacheStorage\` | 🟢 | Tải lại, mở chậm lần đầu | `Cursor.exe` |
 | `%APPDATA%\Cursor\logs\`, `Crashpad\` | 🟢 | Mất log | `Cursor.exe` |
@@ -98,7 +100,7 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 | Đường dẫn | Mức | Nếu xóa thì… |
 |-----------|-----|--------------|
 | `%APPDATA%\Windsurf\` | như VS Code (mục 2.1) | `User\` 🔴, `Cache*` 🟢, `logs` 🟢 |
-| `%USERPROFILE%\.codeium\windsurf\` | 🟡 | `cascade\` lịch sử Cascade 🟡, `mcp_config.json` 🔴, `memories\` 🔴, `logs\` 🟢 |
+| `%USERPROFILE%\.codeium\windsurf\` | 🟡 | `cascade\` lịch sử Cascade 🔴, `mcp_config.json` 🔴, `memories\` 🔴, `logs\` 🟢 |
 | `%USERPROFILE%\.codeium\config.json`, `language_server_*` | 🔴/🟢 | config 🔴; binary language server cũ 🟢 (tải lại) |
 
 ### 1.8 Khác (Devin, Zed, Kiro, Trae, Cline/Roo, Continue, Aider, Amp, Zencoder, OpenCode)
@@ -109,9 +111,9 @@ Quy ước chung: mọi thư mục `Cache`, `Code Cache`, `GPUCache`, `DawnCache
 | **Zed** | `%LOCALAPPDATA%\Zed\logs\` 🟢, `\db\` 🟡 (lịch sử), `\languages\`/`\node\` 🟢 (tải lại), `\extensions\` 🔴; `%APPDATA%\Zed\settings.json` 🔴 | — | Zed Windows ổn định từ 2025 |
 | **Kiro** (AWS) | `%APPDATA%\Kiro\` (như VS Code), `%USERPROFILE%\.kiro\` (`settings\`, `specs\` 🔴; `logs\` 🟢) | — | — |
 | **Trae** (ByteDance) | `%APPDATA%\Trae\` (như VS Code), `%USERPROFILE%\.trae\` | — | — |
-| **Cline / Roo Code** | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\tasks\` 🟡 (lịch sử task), `rooveterinaryinc.roo-cline\` tương tự | 🟡 | Có thể rất lớn (checkpoint + screenshot) |
-| **Continue** | `%USERPROFILE%\.continue\index\` 🟢 (re-index), `sessions\` 🟡, `config.yaml`/`config.json` 🔴 | — | — |
-| **Aider** | `<repo>\.aider.chat.history.md`, `.aider.input.history` 🟡, `.aider.tags.cache.v*\` 🟢 | — | Nằm trong repo → rule project-level |
+| **Cline / Roo Code** | `%APPDATA%\Code\User\globalStorage\saoudrizwan.claude-dev\tasks\` 🔴 (lịch sử task), `rooveterinaryinc.roo-cline\` tương tự | 🔴 | Có thể rất lớn (checkpoint + screenshot) |
+| **Continue** | `%USERPROFILE%\.continue\index\` 🟢 (re-index), `sessions\` 🔴, `config.yaml`/`config.json` 🔴 | — | — |
+| **Aider** | `<repo>\.aider.chat.history.md`, `.aider.input.history` 🔴, `.aider.tags.cache.v*\` 🟢 | — | Nằm trong repo → rule project-level |
 | **Amp** (Sourcegraph) | `%LOCALAPPDATA%\amp\` / `%USERPROFILE%\.config\amp\` | 🟡 | Chưa xác minh → mặc định 🟡 |
 | **Zencoder / OpenCode / Crush …** | `%USERPROFILE%\.<tool>\` | 🟡 | Chưa xác minh → app gắn nhãn "Chưa xác minh", mời đóng góp rule |
 
@@ -139,8 +141,8 @@ Thay `Code` bằng tên fork tương ứng trong `%APPDATA%\<Code>\`.
 | Thư mục | Mức | Nếu xóa thì… |
 |---------|-----|--------------|
 | `User\settings.json`, `keybindings.json`, `snippets\`, `profiles\`, `globalStorage\state.vscdb` | 🔴 | Mất cấu hình/trạng thái |
-| `User\globalStorage\<ext>\` | 🟡 | Dữ liệu từng extension (chat history AI, token) — xử lý theo rule riêng |
-| `User\workspaceStorage\<hash>\` | 🟡 | Trạng thái workspace; mục trỏ tới folder không còn tồn tại → 🟢 (app kiểm tra `workspace.json`) |
+| `User\globalStorage\<ext>\` | 🔴 | Dữ liệu từng extension (chat history AI, token) — giữ lại (PLAN §5.1) |
+| `User\workspaceStorage\<hash>\` | 🔴 | Trạng thái workspace, chat AI theo dự án — giữ lại (PLAN §5.1) |
 | `User\History\` | 🟡 | Local History |
 | `Cache\`, `CachedData\`, `CachedExtensions\`, `CachedExtensionVSIXs\`, `CachedProfilesData\`, `Code Cache\`, `GPUCache\`, `DawnCache\`, `DawnGraphiteCache\`, `DawnWebGPUCache\`, `Service Worker\CacheStorage\`, `blob_storage\`, `Crashpad\` | 🟢 | Tải lại |
 | `logs\` | 🟢 | Mất log cũ |

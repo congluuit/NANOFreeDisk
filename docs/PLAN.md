@@ -284,6 +284,8 @@ nfd rules [list|validate <file>]
 - `Windows\WinSxS`, `Windows\Installer`, `Windows\servicing`, `Windows\System32`, `SysWOW64`, `Boot`, `EFI`, `Recovery`.
 - Thư mục user data: `Documents`, `Desktop`, `Pictures`, `Videos`, `Music`, `Downloads` (chỉ được xóa khi **người dùng chọn tay từng file** trong Analyze, không bao giờ qua rule).
 - Config/credential của dev tools: `~/.claude.json`, `~/.claude/settings*.json`, `~/.codex/auth.json`, `~/.codex/config.toml`, `~/.gemini/oauth_creds.json`, `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.azure`, `~/.kube`, `~/.docker/config.json`, `~/.npmrc`, `~/.cargo/credentials*`, `~/.git-credentials`, `.env*`.
+- Kiếm thư mục lưu trữ conversation sessions của Codex, Claude, ZCode, Devin, Antigravity,..các tool của agents để đảm bảo không xóa làm mất dữ liệu conversations.
+  - ✅ (2026-10-16) `nfd_core::safety::AGENT_HISTORY_TEMPLATES` / `AGENT_HISTORY_NAMES`: Claude Code (`projects`, `sessions`, `history.jsonl`) & Claude Desktop, Codex (`sessions`, `archived_sessions`, `thread_history_*`…), Gemini CLI (`tmp`, `history`), Antigravity (`~/.gemini/antigravity*`), `workspaceStorage` / `globalStorage` của VS Code, Cursor, Windsurf, Trae, Kiro, Devin, Antigravity; Devin CLI, ZCode (`~/.zcode`), Copilot CLI, opencode, Continue, LM Studio, Jan, `.aider.chat.history.md`, `.specstory`. SafetyGate chặn với **mọi** nguồn (rule mọi mức, DevCache, Duplicates, chọn tay) và chặn cả thư mục cha; mỗi vị trí là một rule 🔴 Keep trong `rules/ai-tools.toml` (test `agent_history_is_kept_by_the_rule_packs`, `crates/nfd-core/tests/agent_history.rs`).
 - Mọi đường dẫn là **root volume**, **mount point**, hoặc **target của junction/symlink nằm ngoài volume**.
 
 ### 5.2 Kiểm tra động

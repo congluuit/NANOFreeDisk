@@ -108,9 +108,9 @@ cases! {
     manual_recycle_named_deeper: M, r"C:\dev\$Recycle.Bin" => "ok";
     manual_npmrc_named_folder: M, r"C:\dev\.npmrc" => "ok";
     manual_cargo_bin_sibling: M, r"C:\Users\nano\.cargo\binaries" => "ok";
-    manual_claude_projects_file: M, r"C:\Users\nano\.claude\projects\x\a.jsonl" => "ok";
+    manual_claude_debug_file: M, r"C:\Users\nano\.claude\debug\a.txt" => "ok";
     manual_docker_other_file: M, r"C:\Users\nano\.docker\buildx" => "ok";
-    manual_codex_sessions: M, r"C:\Users\nano\.codex\sessions" => "ok";
+    manual_codex_log: M, r"C:\Users\nano\.codex\log\codex-tui.log" => "ok";
 }
 
 // ---------------------------------------------------------------- manual: blocked
@@ -291,7 +291,7 @@ cases! {
     rule_chrome_cache: SAFE, r"C:\Users\nano\AppData\Local\Google\Chrome\User Data\Default\Cache\Cache_Data" => "ok";
     rule_firefox_cache: SAFE, r"C:\Users\nano\AppData\Local\Mozilla\Firefox\Profiles\x.default\cache2" => "ok";
     rule_claude_debug: SAFE, r"C:\Users\nano\.claude\debug\x.txt" => "ok";
-    rule_claude_sessions: CAUTION, r"C:\Users\nano\.claude\projects\p\a.jsonl" => "ok";
+    rule_claude_sessions: CAUTION, r"C:\Users\nano\.claude\projects\p\a.jsonl" => "protected";
     rule_hf_cache: CAUTION, r"C:\Users\nano\.cache\huggingface\hub\models--x" => "ok";
     rule_roaming_cache: SAFE, r"C:\Users\nano\AppData\Roaming\Code\Cache" => "ok";
 }

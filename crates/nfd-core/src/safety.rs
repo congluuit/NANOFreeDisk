@@ -82,6 +82,99 @@ pub const PROTECTED_TEMPLATES: &[&str] = &[
     "${HOME}/.gemini/settings.json",
 ];
 
+/// Where AI coding agents and chat apps keep their conversation / session history
+/// (PLAN §5.1). Protected like [`PROTECTED_TEMPLATES`] for **every** origin — rules,
+/// DevCache, Duplicates and items picked by hand — so a conversation is never lost
+/// through the application. Also listed (with the reason) as 🔴 "Keep" rules in
+/// `rules/ai-tools.toml`.
+///
+/// Only the **last** component may contain `*` / `?` wildcards (versioned database
+/// names such as `thread_history_1.sqlite`), which keeps the "contains a protected
+/// location" check for parent folders exact.
+pub const AGENT_HISTORY_TEMPLATES: &[&str] = &[
+    // Claude Code: transcripts (`claude --resume`), per-project memory, prompt history
+    "${HOME}/.claude/projects",
+    "${HOME}/.claude/sessions",
+    "${HOME}/.claude/history.jsonl",
+    // Claude Desktop: agent / Claude Code sessions, session notes, chat state
+    "${APPDATA}/Claude/local-agent-mode-sessions",
+    "${APPDATA}/Claude/claude-code-sessions",
+    "${APPDATA}/Claude/side-session-notes",
+    "${APPDATA}/Claude/IndexedDB",
+    "${APPDATA}/Claude/Local Storage",
+    // OpenAI Codex
+    "${HOME}/.codex/sessions",
+    "${HOME}/.codex/archived_sessions",
+    "${HOME}/.codex/history.jsonl",
+    "${HOME}/.codex/session_index.jsonl",
+    "${HOME}/.codex/attachments",
+    "${HOME}/.codex/memories",
+    "${HOME}/.codex/thread_history_*",
+    "${HOME}/.codex/state_*",
+    "${HOME}/.codex/memories_*",
+    // Gemini CLI (chats and checkpoints live in tmp/<project>/), Qwen Code
+    "${HOME}/.gemini/tmp",
+    "${HOME}/.gemini/history",
+    "${HOME}/.qwen/tmp",
+    // Antigravity (agent, CLI and IDE: conversations, brain, knowledge)
+    "${HOME}/.gemini/antigravity*",
+    "${APPDATA}/Antigravity/User/workspaceStorage",
+    "${APPDATA}/Antigravity/User/globalStorage",
+    "${APPDATA}/Antigravity IDE/User/workspaceStorage",
+    "${APPDATA}/Antigravity IDE/User/globalStorage",
+    // VS Code and its forks keep AI chats per workspace and per extension
+    // (Copilot Chat, Cline, Roo Code…)
+    "${APPDATA}/Code/User/workspaceStorage",
+    "${APPDATA}/Code/User/globalStorage",
+    "${APPDATA}/Code - Insiders/User/workspaceStorage",
+    "${APPDATA}/Code - Insiders/User/globalStorage",
+    "${APPDATA}/VSCodium/User/workspaceStorage",
+    "${APPDATA}/VSCodium/User/globalStorage",
+    "${APPDATA}/Cursor/User/workspaceStorage",
+    "${APPDATA}/Cursor/User/globalStorage",
+    "${HOME}/.cursor/chats",
+    "${APPDATA}/Windsurf/User/workspaceStorage",
+    "${APPDATA}/Windsurf/User/globalStorage",
+    "${HOME}/.codeium/windsurf/cascade",
+    "${HOME}/.codeium/windsurf/brain",
+    "${HOME}/.codeium/windsurf/memories",
+    "${APPDATA}/Trae/User/workspaceStorage",
+    "${APPDATA}/Trae/User/globalStorage",
+    "${APPDATA}/Trae/ModularData/ai-agent",
+    "${HOME}/.trae/memory",
+    "${APPDATA}/Kiro/User/workspaceStorage",
+    "${APPDATA}/Kiro/User/globalStorage",
+    // Devin (Windsurf's successor) and its CLI
+    "${APPDATA}/Devin/User/workspaceStorage",
+    "${APPDATA}/Devin/User/globalStorage",
+    "${APPDATA}/Devin/User/acp-messages",
+    "${APPDATA}/Devin/summaries",
+    "${APPDATA}/Devin/cli/summaries",
+    "${APPDATA}/Devin/cli/sessions.db*",
+    "${APPDATA}/Devin/windsurfSessionHandoff.db*",
+    // ZCode (Z.ai)
+    "${HOME}/.zcode",
+    "${APPDATA}/ZCode/session/IndexedDB",
+    "${APPDATA}/ZCode/session/Local Storage",
+    // GitHub Copilot CLI
+    "${HOME}/.copilot/session-state",
+    "${HOME}/.copilot/history-session-state",
+    // opencode, Continue, LM Studio, Jan
+    "${HOME}/.local/share/opencode",
+    "${APPDATA}/ai.opencode.desktop",
+    "${HOME}/.continue/sessions",
+    "${HOME}/.lmstudio/conversations",
+    "${APPDATA}/Jan/data/threads",
+];
+
+/// File and folder names that hold AI chat history wherever they are (inside
+/// projects): Aider's chat log and input history, SpecStory's saved chats.
+pub const AGENT_HISTORY_NAMES: &[&str] = &[
+    ".aider.chat.history.md",
+    ".aider.input.history",
+    ".specstory",
+];
+
 /// The user-data subset of [`PROTECTED_TEMPLATES`]: never touched by a rule, but the
 /// user may pick files *inside* them by hand in Analyze. The folders themselves stay
 /// protected.
@@ -260,6 +353,67 @@ pub(crate) fn is_within(inner: &str, outer: &str) -> bool {
             && (outer.ends_with('/') || inner.as_bytes()[outer.len()] == b'/'))
 }
 
+/// `true` when `pattern` (a [`comparable`] path whose last component may contain
+/// `*` / `?`) names `cand` or one of its ancestors.
+pub(crate) fn within_pattern(cand: &str, pattern: &str) -> bool {
+    match split_glob(pattern) {
+        None => is_within(cand, pattern),
+        Some((parent, last)) => {
+            if !is_within(cand, parent) || cand.len() == parent.len() {
+                return false;
+            }
+            let rest = cand[parent.len()..].trim_start_matches('/');
+            let first = rest.split('/').next().unwrap_or_default();
+            wildcard(last, first)
+        }
+    }
+}
+
+/// `true` when `cand` is a folder that holds (or may hold) what `pattern` names:
+/// `cand` is the pattern itself or an ancestor of it.
+pub(crate) fn contains_pattern(cand: &str, pattern: &str) -> bool {
+    match split_glob(pattern) {
+        None => is_within(pattern, cand),
+        Some((parent, _)) => is_within(parent, cand),
+    }
+}
+
+/// `(parent, last)` of a pattern whose last component has a wildcard.
+fn split_glob(pattern: &str) -> Option<(&str, &str)> {
+    let (parent, last) = pattern.rsplit_once('/')?;
+    (last.contains(['*', '?']) && !parent.is_empty()).then_some((parent, last))
+}
+
+/// Shell-style match of one name: `*` any run, `?` one character.
+pub(crate) fn wildcard(pattern: &str, name: &str) -> bool {
+    let p: Vec<char> = pattern.chars().collect();
+    let n: Vec<char> = name.chars().collect();
+    let (mut pi, mut ni) = (0, 0);
+    let mut star: Option<(usize, usize)> = None;
+    while ni < n.len() {
+        if pi < p.len() && (p[pi] == '?' || p[pi] == n[ni]) {
+            pi += 1;
+            ni += 1;
+        } else if pi < p.len() && p[pi] == '*' {
+            star = Some((pi, ni));
+            pi += 1;
+        } else if let Some((sp, sn)) = star {
+            pi = sp + 1;
+            ni = sn + 1;
+            star = Some((sp, sn + 1));
+        } else {
+            return false;
+        }
+    }
+    p[pi..].iter().all(|&c| c == '*')
+}
+
+/// Name of an [`AGENT_HISTORY_NAMES`] entry among the components of `cand`.
+pub(crate) fn agent_history_name(cand: &str) -> Option<&'static str> {
+    cand.split('/')
+        .find_map(|part| AGENT_HISTORY_NAMES.iter().find(|n| **n == part).copied())
+}
+
 /// Expand a `${VAR}/rest` template into its [`comparable`] form.
 pub(crate) fn expand_template(
     template: &str,
@@ -371,10 +525,11 @@ pub fn strip_glob_tail(path: &str) -> String {
 #[must_use]
 pub fn is_protected_template(candidate: &str) -> bool {
     let cand = strip_glob_tail(&normalize(candidate));
-    PROTECTED_TEMPLATES.iter().any(|root| {
-        let root = normalize(root);
-        cand == root || cand.starts_with(&format!("{root}/"))
-    })
+    PROTECTED_TEMPLATES
+        .iter()
+        .chain(AGENT_HISTORY_TEMPLATES)
+        .any(|root| within_pattern(&cand, &normalize(root)))
+        || agent_history_name(&cand).is_some()
 }
 
 #[cfg(test)]
@@ -423,7 +578,7 @@ mod tests {
             "${SYSTEMROOT}/SoftwareDistribution/Download/**"
         ));
         assert!(!is_protected_template("${HOME}/.claude/debug/**"));
-        assert!(!is_protected_template("${HOME}/.claude/projects/*/*.jsonl"));
+        assert!(is_protected_template("${HOME}/.claude/projects/*/*.jsonl"));
         assert!(!is_protected_template("${HOME}/.cargo/registry/cache/**"));
         assert!(!is_protected_template("${TEMP}/**"));
         assert!(!is_protected_template("${LOCALAPPDATA}/NVIDIA/DXCache/**"));

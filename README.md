@@ -112,9 +112,9 @@ A few examples from the catalog:
 
 | Folder | Level | If you delete it… |
 |---|---|---|
-| `~\.claude\projects\**\*.jsonl` | 🟡 | You lose `claude --resume` for old sessions. Your code is untouched. |
-| `~\.claude\projects\*\memory\`, `~\.claude.json`, `settings.json` | 🔴 | Kept — Claude Code's memory, login and permissions. |
-| `~\.codex\sessions\` | 🟡 | You lose `codex resume` history. `auth.json` / `config.toml` are kept. |
+| `~\.claude\projects\`, `~\.codex\sessions\`, `~\.gemini\tmp\`, `~\.gemini\antigravity\`, VS Code / Cursor / Windsurf / Devin `workspaceStorage`, … | 🔴 | Kept — the conversation history of AI agents is **never** deleted, by any feature (rules, DevCache, Duplicates or by hand). |
+| `~\.claude.json`, `settings.json`, `~\.codex\auth.json` | 🔴 | Kept — login, permissions and configuration. |
+| `~\.claude\file-history\` | 🟡 | You can no longer revert old Claude Code edits. Your code is untouched. |
 | `%APPDATA%\Cursor\Cache`, `CachedData`, `logs` | 🟢 | Rebuilt on next start. `User\globalStorage\state.vscdb` (chat history) is kept. |
 | `~\.ollama\models\blobs` | 🟡 | Re-download required — the app lets you pick individual models instead. |
 | `%LOCALAPPDATA%\JetBrains\<IDE>\caches`, `index` | 🟢 | IDE re-indexes the project once. |

@@ -61,7 +61,7 @@ function reset(): void {
       running: ["msedge.exe"],
     }),
     rule("gpu.nvidia.shader-cache", "gpu-shader-cache", "GPU driver", "NVIDIA", "safe", 101 * MB, 164),
-    rule("anthropic.claude-code.sessions", "ai-tools", "Claude Code", "Anthropic", "caution", 380 * MB, 920),
+    rule("anthropic.claude-code.file-history", "ai-tools", "Claude Code", "Anthropic", "caution", 380 * MB, 920),
   ];
 }
 reset();
