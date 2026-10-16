@@ -131,3 +131,5 @@ settings-dev-keep-recent = Giữ build output của dự án hoạt động tron
 hint-dev-keep-recent = Nếu đổi: build output của dự án dùng gần đây vẫn được liệt kê nhưng không chọn sẵn (0 = tắt).
 settings-dev-stale = Đánh dấu dự án không hoạt động sau (ngày)
 hint-dev-stale = Nếu đổi: repo không dùng lâu như vậy được đánh dấu lâu không dùng.
+activity-kind-devcache = Đã dọn cache lập trình
+activity-kind-command = Lệnh dọn kho gói

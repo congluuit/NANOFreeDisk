@@ -131,3 +131,5 @@ settings-dev-keep-recent = Keep build output of projects active in the last (day
 hint-dev-keep-recent = If you change this: build output of projects used this recently is listed but not pre-selected (0 = off).
 settings-dev-stale = Flag projects without activity for (days)
 hint-dev-stale = If you change this: repositories idle this long are marked stale.
+activity-kind-devcache = Dev caches cleaned
+activity-kind-command = Package-store command

@@ -18,7 +18,7 @@ use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::LiveSource;
 use nfd_dupes::keep::{KeepStrategy, auto_select};
 use nfd_dupes::plan::{Action, Verifier, plan};
-use nfd_dupes::{CopyFlags, DupeOptions, DupeReport, Phase, Progress};
+use nfd_dupes::{DupeOptions, DupeReport, Phase, Progress, flag_text, write_csv};
 use nfd_platform::Platform;
 
 #[derive(Args, Debug)]
@@ -269,7 +269,7 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
         return Ok(ExitCode::FAILURE);
     }
     // every copy and its keeper are hashed again right before the move
-    let mut verifier = Verifier::new(&LiveSource, &report.groups);
+    let mut verifier = Verifier::new(&LiveSource, report.groups.clone());
     let (op, journal_ok) = crate::quarantine::execute_verified(
         &plan,
         "dupes",
@@ -288,24 +288,6 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
         crate::quarantine::print_outcome(&op, journal_ok);
     }
     Ok(crate::quarantine::exit_code(&op))
-}
-
-/// Short markers for a copy's flags.
-pub fn flag_text(f: CopyFlags) -> String {
-    let mut out = Vec::new();
-    if f.cloud {
-        out.push("cloud-sync");
-    }
-    if f.git {
-        out.push("git");
-    }
-    if f.app_dir {
-        out.push("app");
-    }
-    if f.readonly {
-        out.push("read-only");
-    }
-    out.join(" ")
 }
 
 fn date(ts: i64) -> String {
@@ -372,40 +354,9 @@ fn print_report(r: &DupeReport, top: usize, out: &mut impl Write) -> io::Result<
     Ok(())
 }
 
-fn csv_field(s: &str) -> String {
-    if s.contains([',', '"', '\n']) {
-        format!("\"{}\"", s.replace('"', "\"\""))
-    } else {
-        s.to_owned()
-    }
-}
-
-/// One line per copy (and per hard-linked name).
-pub fn write_csv(r: &DupeReport, out: &mut impl Write) -> io::Result<()> {
-    writeln!(out, "group,hash,size,wasted,path,mtime,flags")?;
-    for g in &r.groups {
-        for c in &g.copies {
-            for p in std::iter::once(&c.path).chain(&c.links) {
-                writeln!(
-                    out,
-                    "{},{},{},{},{},{},{}",
-                    g.id,
-                    g.hash,
-                    g.size,
-                    g.wasted,
-                    csv_field(&p.to_string_lossy()),
-                    c.mtime,
-                    flag_text(c.flags)
-                )?;
-            }
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use nfd_dupes::{DupeGroup, FileCopy};
+    use nfd_dupes::{CopyFlags, DupeGroup, FileCopy};
 
     use super::*;
 

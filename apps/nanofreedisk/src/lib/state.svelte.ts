@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
@@ -36,6 +36,10 @@ export interface Settings {
   keepRecentDays: number;
   /** Projects without activity for N days are flagged stale. */
   staleDays: number;
+  /** Duplicates: files smaller than this many MB are left out. */
+  dupeMinMb: number;
+  /** Duplicates: how the copy to keep is chosen (auto, oldest, newest, shortest). */
+  dupeKeep: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   repoRoot: "",
   keepRecentDays: 7,
   staleDays: 90,
+  dupeMinMb: 1,
+  dupeKeep: "auto",
 };
 
 interface Toast {

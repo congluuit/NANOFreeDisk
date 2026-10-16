@@ -77,7 +77,7 @@
 
   async function setShellMenu(enabled: boolean) {
     try {
-      shellMenu = await api.shellMenuSet(enabled, t("shell-menu-caption"));
+      shellMenu = await api.shellMenuSet(enabled, t("shell-menu-caption"), t("shell-menu-dupes-caption"));
       toast(t(enabled ? "settings-shell-on" : "settings-shell-off"), "ok");
     } catch (e) {
       fail(e);

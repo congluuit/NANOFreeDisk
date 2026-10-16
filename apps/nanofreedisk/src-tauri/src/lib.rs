@@ -24,6 +24,13 @@ fn path_argument(args: &[String], cwd: &str) -> Option<String> {
     Some(full.to_string_lossy().into_owned())
 }
 
+/// "Find duplicates here" (`--dupes <folder>`) rather than "Analyze".
+fn wants_dupes(args: &[String]) -> bool {
+    args.iter()
+        .skip(1)
+        .any(|a| a == nfd_platform::shell_menu::DUPES_FLAG)
+}
+
 /// Start the application.
 ///
 /// `--unregister-shell` removes the Explorer menu keys and exits (for uninstallers).
@@ -46,13 +53,22 @@ pub fn run() {
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
     let state = commands::AppState::default();
-    state.set_startup_path(path_argument(&args, &cwd));
+    if wants_dupes(&args) {
+        state.set_startup_dupes(path_argument(&args, &cwd));
+    } else {
+        state.set_startup_path(path_argument(&args, &cwd));
+    }
 
     tauri::Builder::default()
         // must come first: a second launch hands its folder to this window and exits
         .plugin(tauri_plugin_single_instance::init(|app, argv, cwd| {
             if let Some(path) = path_argument(&argv, &cwd) {
-                let _ = app.emit("open-path", path);
+                let event = if wants_dupes(&argv) {
+                    "open-dupes"
+                } else {
+                    "open-path"
+                };
+                let _ = app.emit(event, path);
             }
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();
@@ -65,6 +81,7 @@ pub fn run() {
         .manage(state)
         .manage(commands::clean::CleanState::default())
         .manage(commands::devcache::DevState::default())
+        .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -129,6 +146,15 @@ pub fn run() {
             commands::devcache::devcache_reveal,
             commands::devcache::devcache_propose,
             commands::devcache::devcache_notify,
+            commands::dupes::dupes_find,
+            commands::dupes::dupes_cancel,
+            commands::dupes::dupes_report,
+            commands::dupes::dupes_select,
+            commands::dupes::dupes_run,
+            commands::dupes::dupes_reveal,
+            commands::dupes::dupes_thumbnail,
+            commands::dupes::dupes_export,
+            commands::take_startup_dupes,
             commands::hwmon::hw_inventory,
             commands::hwmon::hw_export,
             commands::hwmon::sensors_snapshot,
@@ -174,5 +200,9 @@ mod tests {
         );
         let rel = path_argument(&args(&["app.exe", "sub"]), "base").expect("relative");
         assert!(rel.starts_with("base") && rel.ends_with("sub"), "{rel}");
+        let dupes = args(&["app.exe", "--dupes", abs]);
+        assert!(super::wants_dupes(&dupes));
+        assert!(!super::wants_dupes(&args(&["app.exe", abs])));
+        assert_eq!(path_argument(&dupes, "C:\\").as_deref(), Some(abs));
     }
 }

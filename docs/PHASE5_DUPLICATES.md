@@ -1,6 +1,6 @@
 # Phase 5 — Duplicates: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** (2026-10-16) — lát 1 ✅ (pipeline lõi, cache hash, `nfd dupes`), lát 2 ✅ (chọn bản giữ, `dupes::plan`, kiểm tra lại trước khi hành động, Recycle Bin / Quarantine). Bản chi tiết của hàng "5 – Duplicates" trong `docs/PLAN.md` §8, theo thiết kế §4.4, lệnh `nfd dupes` ở §4.7, mục A7 ① "Find duplicates here" (§13.2). Mọi thao tác xóa / thay thế đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`).
+> Trạng thái: **đang làm** (2026-10-16) — lát 1 ✅ (pipeline lõi, cache hash, `nfd dupes`), lát 2 ✅ (chọn bản giữ, `dupes::plan`, kiểm tra lại trước khi hành động, Recycle Bin / Quarantine), lát 3 ✅ (view Duplicates, menu Analyze + verb Explorer, Health info, `gui-smoke`). Bản chi tiết của hàng "5 – Duplicates" trong `docs/PLAN.md` §8, theo thiết kế §4.4, lệnh `nfd dupes` ở §4.7, mục A7 ① "Find duplicates here" (§13.2). Mọi thao tác xóa / thay thế đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`).
 
 ## 1. Mục tiêu & DoD
 

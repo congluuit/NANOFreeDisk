@@ -54,7 +54,7 @@ pub(super) fn app_local(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_local_data_dir().ok()
 }
 
-fn roots(app: &AppHandle) -> QuarantineRoots {
+pub(super) fn roots(app: &AppHandle) -> QuarantineRoots {
     QuarantineRoots::new(app_local(app).as_deref())
 }
 
@@ -306,6 +306,25 @@ pub(super) async fn execute_plan(
     kind: &str,
     cancel: Arc<AtomicBool>,
 ) -> CmdResult<OperationDto> {
+    execute_plan_returning(app, window, state, plan, kind, cancel, Box::new(|_| Ok(())))
+        .await
+        .map(|(dto, _)| dto)
+}
+
+/// A last feature-specific check per item, run on the worker thread right before
+/// the item is touched (Duplicates: keeper and copy hashed again).
+pub(super) type Verify = Box<dyn FnMut(&plan::PlanItem) -> Result<(), exec::Refusal> + Send>;
+
+/// [`execute_plan`] with a [`Verify`] check, also returning the operation itself.
+pub(super) async fn execute_plan_returning(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    state: &State<'_, AppState>,
+    plan: CleanPlan,
+    kind: &str,
+    cancel: Arc<AtomicBool>,
+    mut verify: Verify,
+) -> CmdResult<(OperationDto, Operation)> {
     if plan.selected().next().is_none() {
         return Err(err("nothing-to-clean", "the rules have nothing to clean"));
     }
@@ -319,24 +338,31 @@ pub(super) async fn execute_plan(
     let emitter = app.clone();
     let op = tauri::async_runtime::spawn_blocking(move || {
         let mut freed = 0;
-        exec::execute(&plan, &gate(), &LiveProbe, &opts, &mut |done, total, r| {
-            freed += r.freed;
-            let _ = emitter.emit(
-                "clean-progress",
-                CleanProgress {
-                    done,
-                    total,
-                    freed,
-                    path: r.path.to_string_lossy().into_owned(),
-                },
-            );
-            !cancel.load(Ordering::Relaxed)
-        })
+        exec::execute_verified(
+            &plan,
+            &gate(),
+            &LiveProbe,
+            &opts,
+            &mut verify,
+            &mut |done, total, r| {
+                freed += r.freed;
+                let _ = emitter.emit(
+                    "clean-progress",
+                    CleanProgress {
+                        done,
+                        total,
+                        freed,
+                        path: r.path.to_string_lossy().into_owned(),
+                    },
+                );
+                !cancel.load(Ordering::Relaxed)
+            },
+        )
     })
     .await
     .map_err(|e| err("internal", e))?;
     let journal_error = journal(app, state, &op);
-    Ok(op_dto(&op, journal_error))
+    Ok((op_dto(&op, journal_error), op))
 }
 
 /// Clean every candidate of `rule_ids` from the last rule scan. 🟠 Advanced rules

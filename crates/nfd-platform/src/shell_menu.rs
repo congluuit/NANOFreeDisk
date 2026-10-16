@@ -1,9 +1,11 @@
-//! Explorer context menu "Analyze with NANOFreeDisk" (PLAN §13 A7), registered per
-//! user under `HKCU\Software\Classes` — no administrator rights, nothing machine-wide,
-//! and removing the keys ([`unregister`]) leaves no trace. The entry starts the app
-//! with the folder as its only argument; a running instance takes it over.
+//! Explorer context menu "Analyze with NANOFreeDisk" and "Find duplicates here"
+//! (PLAN §13 A7), registered per user under `HKCU\Software\Classes` — no
+//! administrator rights, nothing machine-wide, and removing the keys
+//! ([`unregister`]) leaves no trace. The entries start the app with the folder as
+//! argument (`--dupes` first for the second one); a running instance takes it over.
 //!
-//! Keys written (each with a `command` sub-key `"<exe>" "%V"`):
+//! Keys written (each with a `command` sub-key `"<exe>" "%V"`, and the same under
+//! [`DUPES_VERB`] with `"<exe>" --dupes "%V"`):
 //! `Directory\shell\NANOFreeDisk` (right-click a folder),
 //! `Directory\Background\shell\NANOFreeDisk` (right-click inside a folder) and
 //! `Drive\shell\NANOFreeDisk` (right-click a drive).
@@ -13,6 +15,10 @@ use std::path::Path;
 
 /// Verb key name under each `shell` key.
 pub const VERB: &str = "NANOFreeDisk";
+/// Verb key of "Find duplicates here".
+pub const DUPES_VERB: &str = "NANOFreeDiskDupes";
+/// Command-line flag of "Find duplicates here".
+pub const DUPES_FLAG: &str = "--dupes";
 
 /// `HKCU\Software\Classes\…` keys the menu lives under.
 pub const PARENTS: [&str; 3] = [
@@ -27,12 +33,18 @@ pub fn command_line(exe: &Path) -> String {
     format!("\"{}\" \"%V\"", exe.display())
 }
 
-/// Add (or update) the menu entry with the given caption, starting `exe`.
+/// The command line of "Find duplicates here": `"<exe>" --dupes "%V"`.
+#[must_use]
+pub fn dupes_command_line(exe: &Path) -> String {
+    format!("\"{}\" {DUPES_FLAG} \"%V\"", exe.display())
+}
+
+/// Add (or update) both menu entries with the given captions, starting `exe`.
 ///
 /// # Errors
 /// The registry refuses the write (policy, roaming profile problems).
-pub fn register(exe: &Path, caption: &str) -> io::Result<()> {
-    imp::register(exe, caption)
+pub fn register(exe: &Path, caption: &str, dupes_caption: &str) -> io::Result<()> {
+    imp::register(exe, caption, dupes_caption)
 }
 
 /// Remove every key [`register`] created. Missing keys are fine.
@@ -61,7 +73,7 @@ mod imp {
         RegCloseKey, RegCreateKeyExW, RegDeleteTreeW, RegGetValueW, RegSetValueExW,
     };
 
-    use super::{PARENTS, VERB, command_line};
+    use super::{DUPES_VERB, PARENTS, VERB, command_line, dupes_command_line};
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain([0]).collect()
@@ -120,25 +132,32 @@ mod imp {
         })
     }
 
-    pub(super) fn register(exe: &Path, caption: &str) -> io::Result<()> {
+    pub(super) fn register(exe: &Path, caption: &str, dupes_caption: &str) -> io::Result<()> {
         let icon = format!("\"{}\",0", exe.display());
         for parent in PARENTS {
-            let verb = create(&format!(r"{parent}\{VERB}"))?;
-            set(&verb, None, caption)?;
-            set(&verb, Some("Icon"), &icon)?;
-            let cmd = create(&format!(r"{parent}\{VERB}\command"))?;
-            set(&cmd, None, &command_line(exe))?;
+            for (name, text, line) in [
+                (VERB, caption, command_line(exe)),
+                (DUPES_VERB, dupes_caption, dupes_command_line(exe)),
+            ] {
+                let verb = create(&format!(r"{parent}\{name}"))?;
+                set(&verb, None, text)?;
+                set(&verb, Some("Icon"), &icon)?;
+                let cmd = create(&format!(r"{parent}\{name}\command"))?;
+                set(&cmd, None, &line)?;
+            }
         }
         Ok(())
     }
 
     pub(super) fn unregister() -> io::Result<()> {
         for parent in PARENTS {
-            let name = wide(&format!(r"{parent}\{VERB}"));
-            // SAFETY: valid NUL-terminated sub-key name under HKCU.
-            let rc = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, name.as_ptr()) };
-            if rc != ERROR_FILE_NOT_FOUND {
-                check(rc)?;
+            for verb in [VERB, DUPES_VERB] {
+                let name = wide(&format!(r"{parent}\{verb}"));
+                // SAFETY: valid NUL-terminated sub-key name under HKCU.
+                let rc = unsafe { RegDeleteTreeW(HKEY_CURRENT_USER, name.as_ptr()) };
+                if rc != ERROR_FILE_NOT_FOUND {
+                    check(rc)?;
+                }
             }
         }
         Ok(())
@@ -173,7 +192,7 @@ mod imp {
     use std::io;
     use std::path::Path;
 
-    pub(super) fn register(_exe: &Path, _caption: &str) -> io::Result<()> {
+    pub(super) fn register(_exe: &Path, _caption: &str, _dupes: &str) -> io::Result<()> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "Explorer menu is Windows-only",
@@ -198,6 +217,10 @@ mod tests {
         assert_eq!(
             command_line(Path::new(r"C:\Program Files\NANOFreeDisk\nanofreedisk.exe")),
             r#""C:\Program Files\NANOFreeDisk\nanofreedisk.exe" "%V""#
+        );
+        assert_eq!(
+            dupes_command_line(Path::new(r"C:\Apps\nanofreedisk.exe")),
+            r#""C:\Apps\nanofreedisk.exe" --dupes "%V""#
         );
     }
 }

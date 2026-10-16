@@ -94,7 +94,8 @@ export const api = {
   owner: (id: number) => call<string | null>("owner", { id }),
   takeStartupPath: () => call<string | null>("take_startup_path"),
   shellMenuStatus: () => call<boolean>("shell_menu_status"),
-  shellMenuSet: (enabled: boolean, caption: string) => call<boolean>("shell_menu_set", { enabled, caption }),
+  shellMenuSet: (enabled: boolean, caption: string, dupesCaption: string) =>
+    call<boolean>("shell_menu_set", { enabled, caption, dupesCaption }),
   brokenLinks: (id: number, limit: number) => call<ShortcutRows>("broken_links", { id, limit }),
   health: () => call<HealthScore>("health"),
   reveal: (id: number) => call<void>("reveal", { id }),

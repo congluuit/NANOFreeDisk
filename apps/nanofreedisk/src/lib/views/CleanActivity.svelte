@@ -102,7 +102,7 @@
       {#each d.rows as o (o.id)}
         <li class="card op {o.state}">
           <div class="line">
-            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : "trash"} size={18} /></span>
+            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : "trash"} size={18} /></span>
             <div class="what">
               <strong>{t(`activity-kind-${o.kind}`)}</strong>
               <span class="muted small">

@@ -656,6 +656,55 @@ pub fn group_has(group: &DupeGroup, path: &Path) -> bool {
         .any(|c| c.path == path || c.links.iter().any(|l| l == path))
 }
 
+/// Short markers for a copy's flags.
+pub fn flag_text(f: CopyFlags) -> String {
+    let mut out = Vec::new();
+    if f.cloud {
+        out.push("cloud-sync");
+    }
+    if f.git {
+        out.push("git");
+    }
+    if f.app_dir {
+        out.push("app");
+    }
+    if f.readonly {
+        out.push("read-only");
+    }
+    out.join(" ")
+}
+
+fn csv_field(s: &str) -> String {
+    if s.contains([',', '"', '\n']) {
+        format!("\"{}\"", s.replace('"', "\"\""))
+    } else {
+        s.to_owned()
+    }
+}
+
+/// One line per copy (and per hard-linked name).
+pub fn write_csv(r: &DupeReport, out: &mut impl std::io::Write) -> std::io::Result<()> {
+    writeln!(out, "group,hash,size,wasted,path,mtime,flags")?;
+    for g in &r.groups {
+        for c in &g.copies {
+            for p in std::iter::once(&c.path).chain(&c.links) {
+                writeln!(
+                    out,
+                    "{},{},{},{},{},{},{}",
+                    g.id,
+                    g.hash,
+                    g.size,
+                    g.wasted,
+                    csv_field(&p.to_string_lossy()),
+                    c.mtime,
+                    flag_text(c.flags)
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
 /// Serde helpers: numbers that may not fit a JSON number, as hex text.
 mod hexnum {
     pub mod u64 {

@@ -18,12 +18,16 @@
 // matches its own fixture (clean + restore, the 🔒 Keep list), the Repo tab's build
 // output (quarantine + restore), toolchains, package stores (listed, never run — a
 // command line that was not confirmed is refused), unknown folders and the guarded
-// reveal / propose commands. Nothing outside the fixture is ever deleted and the only
+// reveal / propose commands; Phase 5: duplicates in their own fixture (groups, keeper,
+// refusal of a selection that keeps nothing, quarantine + restore, a keeper changed
+// after the search, preview / reveal / export guards, the view and its confirmation,
+// the Explorer verb). Nothing outside the fixture is ever deleted and the only
 // process ever ended is a `ping` the script starts itself; the fixture's history
 // snapshots and journal entries are forgotten at the end.
 
 import { execFileSync, spawn } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { randomBytes } from "node:crypto";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -159,6 +163,22 @@ impact_vi = "Thiết lập của fixture kiểm thử GUI."
 verified_on = 2026-10-16
 `,
 );
+// Phase 5: duplicates in their own fixture (never written to the hash cache)
+const dupeFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-dupes-"));
+const dupeA = randomBytes(1536 * 1024);
+const dupeB = randomBytes(1200 * 1024);
+mkdirSync(join(dupeFixture, "Photos", "2019"), { recursive: true });
+mkdirSync(join(dupeFixture, "Downloads"), { recursive: true });
+mkdirSync(join(dupeFixture, "node_modules", "pkg"), { recursive: true });
+writeFileSync(join(dupeFixture, "Photos", "2019", "video.mp4"), dupeA);
+writeFileSync(join(dupeFixture, "Downloads", "video.mp4"), dupeA);
+writeFileSync(join(dupeFixture, "Downloads", "video (1).mp4"), dupeA);
+writeFileSync(join(dupeFixture, "Photos", "pic.png"), dupeB);
+writeFileSync(join(dupeFixture, "Downloads", "pic.png"), dupeB);
+writeFileSync(join(dupeFixture, "node_modules", "pkg", "video.mp4"), dupeA);
+writeFileSync(join(dupeFixture, "small-a.txt"), "same small text\n");
+writeFileSync(join(dupeFixture, "small-b.txt"), "same small text\n");
+for (const p of ["Photos/2019/video.mp4", "Photos/pic.png"]) utimesSync(join(dupeFixture, p), yearAgo, yearAgo);
 const operations = [];
 
 let pinger = null;
@@ -417,6 +437,13 @@ try {
     /* missing key */
   }
   check("Explorer menu registered for this exe", on === true && regValue.toLowerCase().includes(exe.toLowerCase()) && regValue.includes("%V"), regValue.trim().split("\n").pop());
+  let dupesVerb = "";
+  try {
+    dupesVerb = execFileSync("reg", ["query", "HKCU\\Software\\Classes\\Directory\\shell\\NANOFreeDiskDupes\\command", "/ve"], { encoding: "utf8" });
+  } catch {
+    /* missing key */
+  }
+  check("Explorer menu has \"Find duplicates here\"", dupesVerb.toLowerCase().includes(exe.toLowerCase()) && dupesVerb.includes("--dupes"), dupesVerb.trim().split("\n").pop());
   const off = await invoke("shell_menu_set", { enabled: false, caption: "" });
   let stillThere = true;
   try {
@@ -541,9 +568,74 @@ try {
   check("DevCache tabs render", await evaluate("!!document.querySelector('[data-devtab=unknown][aria-selected=true]')"));
   await evaluate("document.querySelector('[data-devtab=cache]').click()");
 
+  // Phase 5: Duplicates (own fixture, hash cache off so nothing reaches the real DB)
+  await evaluate("window.__nfdNoDupeCache = true");
+  const noCache = { minSize: 1024 * 1024, includeAppDirs: false, paranoid: false, extensions: [], useCache: false };
+  const dupesFound = await invoke("dupes_find", { paths: [dupeFixture], options: noCache });
+  const video = dupesFound.groups?.find((g) => g.size === dupeA.length);
+  check(
+    "dupes: groups by content, small files and node_modules left out",
+    dupesFound.totalGroups === 2 && video?.copies.length === 3 && dupesFound.wastedBytes === 2 * dupeA.length + dupeB.length && dupesFound.skipped?.["app-dir"] === 1 && dupesFound.skipped?.small === 2,
+    JSON.stringify({ groups: dupesFound.totalGroups, wasted: dupesFound.wastedBytes, skipped: dupesFound.skipped ?? dupesFound }).slice(0, 240),
+  );
+  const sel = await invoke("dupes_select", { strategy: "auto" });
+  const videoSel = sel.find?.((s) => s.group === video?.id);
+  check("dupes: keeps the copy outside Downloads", !!videoSel && videoSel.keep.endsWith(join("Photos", "2019", "video.mp4")) && videoSel.remove.length === 2, JSON.stringify(sel));
+  const emptied = await invoke("dupes_run", { selections: [{ group: video?.id, keep: videoSel?.keep, remove: video?.copies.map((c) => c.path) }], action: "quarantine" });
+  check("dupes: a selection that keeps nothing is refused", emptied.__error?.code === "dupes-plan" && existsSync(join(dupeFixture, "Photos", "2019", "video.mp4")), JSON.stringify(emptied));
+  const thumb = await invoke("dupes_thumbnail", { path: join(dupeFixture, "Photos", "pic.png") });
+  check("dupes: image preview from the backend", typeof thumb === "string" && thumb.startsWith("data:image/png;base64,"), String(thumb).slice(0, 40));
+  const badThumb = await invoke("dupes_thumbnail", { path: "C:\\Windows\\Web\\Wallpaper\\Windows\\img0.jpg" });
+  const badDupeReveal = await invoke("dupes_reveal", { path: "C:\\Windows\\System32" });
+  check("dupes: preview and reveal only for paths of the search", badThumb.__error?.code === "not-found" && badDupeReveal.__error?.code === "not-found");
+  const csvPath = join(dupeFixture, "dupes.csv");
+  await invoke("dupes_export", { path: csvPath, format: "csv" });
+  const badExport = await invoke("dupes_export", { path: join(dupeFixture, "x.exe"), format: "csv" });
+  check("dupes: CSV export (and nothing but .csv / .json)", existsSync(csvPath) && readFileSync(csvPath, "utf8").split("\n").length >= 6 && badExport.__error?.code === "bad-path");
+  rmSync(csvPath, { force: true });
+  const removed = await invoke("dupes_run", { selections: sel, action: "quarantine" });
+  if (removed.id) operations.push(removed.id);
+  check(
+    "dupes: copies go to the quarantine, one of each group stays",
+    removed.done === 3 && existsSync(join(dupeFixture, "Photos", "2019", "video.mp4")) && existsSync(join(dupeFixture, "Photos", "pic.png")) && !existsSync(join(dupeFixture, "Downloads", "video.mp4")),
+    JSON.stringify(removed),
+  );
+  if (removed.id) {
+    const back = await invoke("activity_restore", { id: removed.id, items: null });
+    check("dupes: restore brings the copies back", back.length === 3 && readFileSync(join(dupeFixture, "Downloads", "video (1).mp4")).equals(dupeA), JSON.stringify(back));
+  }
+  // the keeper changes after the search: its group is left alone
+  const again = await invoke("dupes_find", { paths: [dupeFixture], options: noCache });
+  const sel2 = await invoke("dupes_select", { strategy: "auto" });
+  const keeper = sel2.find((s) => s.remove.some((p) => p.endsWith("video.mp4")))?.keep;
+  if (keeper) writeFileSync(keeper, randomBytes(dupeA.length));
+  const guarded = await invoke("dupes_run", { selections: sel2, action: "quarantine" });
+  if (guarded.id) operations.push(guarded.id);
+  check(
+    "dupes: a keeper that changed protects its whole group",
+    again.totalGroups === 2 && guarded.problems?.filter((p) => p.reason === "keeper-changed").length === 2 && existsSync(join(dupeFixture, "Downloads", "video.mp4")),
+    JSON.stringify(guarded.problems ?? guarded).slice(0, 200),
+  );
+  const healthDupes = await invoke("health");
+  check("health mentions the duplicates found", healthDupes.findings?.some((f) => f.kind === "duplicates" && f.fix === "duplicates"), JSON.stringify(healthDupes.findings?.map((f) => f.kind)));
+  // the view: search the current scan of the fixture from the UI
+  await scan(dupeFixture, false);
+  const dupNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Duplicates|Tệp trùng/.test(b.innerText))");
+  check("Duplicates is in the sidebar", dupNav >= 0);
+  await nav(dupNav);
+  await sleep(500);
+  await evaluate("document.querySelector('[data-find]')?.click()");
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-dupes-summary]')")); i++) await sleep(250);
+  check("Duplicates view lists the groups", await evaluate("document.querySelectorAll('.group').length >= 1 && document.querySelector('[data-dupes-summary]').innerText.length > 10"));
+  await shot("14-duplicates");
+  await evaluate("document.querySelector('[data-recycle]')?.click()");
+  await sleep(300);
+  check("Duplicates asks before moving anything", await evaluate("!!document.querySelector('.dialog [data-confirm]')"));
+  await evaluate("document.querySelector('.dialog footer .btn').click()");
+
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"]]) {
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");
@@ -663,6 +755,7 @@ try {
     /* app already gone */
   }
   try {
+    await invoke("history_forget", { root: dupeFixture });
     const removed = await invoke("history_forget", { root: fixture });
     if (removed !== 2) console.log(`note: forgot ${JSON.stringify(removed)} fixture snapshot(s)`);
   } catch {
@@ -680,6 +773,7 @@ try {
   rmSync(rulesDir, { recursive: true, force: true });
   rmSync(devFixture, { recursive: true, force: true });
   rmSync(devRulesDir, { recursive: true, force: true });
+  rmSync(dupeFixture, { recursive: true, force: true });
 }
 
 if (failures.length) {

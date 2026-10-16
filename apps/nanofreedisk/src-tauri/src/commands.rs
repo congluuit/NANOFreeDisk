@@ -9,6 +9,7 @@ use std::time::Duration;
 
 pub mod clean;
 pub mod devcache;
+pub mod dupes;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
 use nfd_core::insights::OldLargeOptions;
@@ -40,11 +41,19 @@ pub struct AppState {
     encyclopedia: std::sync::OnceLock<nfd_rules::encyclopedia::Matcher>,
     /// Folder given on the command line, handed to the UI once.
     startup: Mutex<Option<String>>,
+    /// Folder given with `--dupes` ("Find duplicates here"), handed to the UI once.
+    startup_dupes: Mutex<Option<String>>,
 }
 
 impl AppState {
     pub fn set_startup_path(&self, path: Option<String>) {
         if let Ok(mut slot) = self.startup.lock() {
+            *slot = path;
+        }
+    }
+
+    pub fn set_startup_dupes(&self, path: Option<String>) {
+        if let Ok(mut slot) = self.startup_dupes.lock() {
             *slot = path;
         }
     }
@@ -56,6 +65,16 @@ pub fn take_startup_path(state: State<'_, AppState>) -> CmdResult<Option<String>
     Ok(state.startup.lock().map_err(|e| err("internal", e))?.take())
 }
 
+/// The folder the app was started with through "Find duplicates here", once.
+#[tauri::command]
+pub fn take_startup_dupes(state: State<'_, AppState>) -> CmdResult<Option<String>> {
+    Ok(state
+        .startup_dupes
+        .lock()
+        .map_err(|e| err("internal", e))?
+        .take())
+}
+
 /// Whether the Explorer menu points at this executable.
 #[tauri::command]
 pub fn shell_menu_status() -> CmdResult<bool> {
@@ -64,19 +83,27 @@ pub fn shell_menu_status() -> CmdResult<bool> {
         .is_some_and(|c| c.eq_ignore_ascii_case(&nfd_platform::shell_menu::command_line(&exe))))
 }
 
-/// Add or remove "Analyze with NANOFreeDisk" in Explorer's right-click menu
-/// (per user, `HKCU` only). `caption` is the menu text in the UI language.
+/// Add or remove "Analyze with NANOFreeDisk" and "Find duplicates here" in
+/// Explorer's right-click menu (per user, `HKCU` only). The captions are the menu
+/// texts in the UI language.
 #[tauri::command]
-pub fn shell_menu_set(enabled: bool, caption: String) -> CmdResult<bool> {
+pub fn shell_menu_set(
+    enabled: bool,
+    caption: String,
+    dupes_caption: Option<String>,
+) -> CmdResult<bool> {
     if enabled {
         let exe = std::env::current_exe().map_err(|e| err("os", e))?;
-        let caption = caption.trim();
-        let caption = if caption.is_empty() {
-            "Analyze with NANOFreeDisk"
-        } else {
-            caption
+        let pick = |text: &str, default: &'static str| -> String {
+            let text = text.trim();
+            if text.is_empty() { default } else { text }.to_owned()
         };
-        nfd_platform::shell_menu::register(&exe, caption).map_err(|e| err("os", e))?;
+        let caption = pick(&caption, "Analyze with NANOFreeDisk");
+        let dupes = pick(
+            dupes_caption.as_deref().unwrap_or_default(),
+            "Find duplicates here",
+        );
+        nfd_platform::shell_menu::register(&exe, &caption, &dupes).map_err(|e| err("os", e))?;
     } else {
         nfd_platform::shell_menu::unregister().map_err(|e| err("os", e))?;
     }
@@ -697,6 +724,20 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
         });
     let mut score = health::score_with(&facts, scan.as_ref(), junk.as_ref());
     hwmon::add_heat_findings(&app, &mut score);
+    // information only: what the last duplicate search found
+    if let Some((bytes, groups, root)) = app.state::<dupes::DupeState>().summary() {
+        if bytes > 0 {
+            score.findings.push(health::Finding {
+                kind: "duplicates",
+                severity: health::Severity::Info,
+                penalty: 0,
+                subject: root,
+                value: groups as f64,
+                bytes,
+                fix: "duplicates",
+            });
+        }
+    }
     Ok(score)
 }
 

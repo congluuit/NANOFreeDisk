@@ -132,7 +132,7 @@ pub fn plan(
 /// The last check before a copy is touched (see the module documentation).
 pub struct Verifier<'a> {
     source: &'a dyn Source,
-    groups: HashMap<u32, &'a DupeGroup>,
+    groups: HashMap<u32, DupeGroup>,
     /// Keepers already hashed in this run, and the answer.
     keepers: HashMap<PathBuf, Result<(), Refusal>>,
     ctx: Ctx<'a>,
@@ -155,11 +155,13 @@ fn refusal(code: &'static str, message: impl Into<String>) -> Refusal {
 }
 
 impl<'a> Verifier<'a> {
+    /// A verifier for the groups of one search (it keeps its own copy, so it can
+    /// travel to a worker thread).
     #[must_use]
-    pub fn new(source: &'a dyn Source, groups: &'a [DupeGroup]) -> Self {
+    pub fn new(source: &'a dyn Source, groups: impl IntoIterator<Item = DupeGroup>) -> Self {
         Self {
             source,
-            groups: groups.iter().map(|g| (g.id, g)).collect(),
+            groups: groups.into_iter().map(|g| (g.id, g)).collect(),
             keepers: HashMap::new(),
             ctx: Ctx::default(),
         }
@@ -181,7 +183,7 @@ impl<'a> Verifier<'a> {
         let Origin::Duplicate { group } = item.origin else {
             return Ok(());
         };
-        let g = *self
+        let g = self
             .groups
             .get(&group)
             .ok_or_else(|| refusal("not-a-duplicate", "the group is not in the search result"))?;

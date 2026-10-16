@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Uninstalling the MSI removes the per-user Explorer menu "Analyze with NANOFreeDisk"
-     (A7): the same keys nfd_platform::shell_menu writes. Referenced from tauri.conf.json
+     and "Find duplicates here" (A7): the same keys nfd_platform::shell_menu writes. Referenced from tauri.conf.json
      (bundle.windows.wix.fragmentPaths / componentRefs). -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
@@ -10,6 +10,9 @@
         <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Directory\shell\NANOFreeDisk" Action="removeOnUninstall" />
         <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\NANOFreeDisk" Action="removeOnUninstall" />
         <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\NANOFreeDisk" Action="removeOnUninstall" />
+        <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Directory\shell\NANOFreeDiskDupes" Action="removeOnUninstall" />
+        <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\NANOFreeDiskDupes" Action="removeOnUninstall" />
+        <RemoveRegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\NANOFreeDiskDupes" Action="removeOnUninstall" />
         <RemoveRegistryKey Root="HKCU" Key="Software\NANOFreeDisk" Action="removeOnUninstall" />
       </Component>
     </DirectoryRef>

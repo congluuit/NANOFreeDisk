@@ -8,6 +8,7 @@ import { minBytesFor } from "./treemap";
 import { intlLocale, t } from "./i18n.svelte";
 import { buildReport } from "./report";
 import { app, askDelete, fail, navigate, oldLargeOptions, select, toast } from "./state.svelte";
+import { openDupesFor } from "./dupes/state.svelte";
 import { paletteVars, resolvePalette } from "./theme";
 
 export interface ItemMenuOptions {
@@ -45,6 +46,20 @@ export function itemMenu(id: number, opts: ItemMenuOptions = {}): MenuItem[] {
           .detail(id)
           .then((d) => navigator.clipboard.writeText(d.path))
           .then(() => toast(t("copied"), "ok"))
+          .catch(fail),
+    },
+    {
+      icon: "duplicates",
+      label: "action-find-dupes",
+      hint: t("action-find-dupes-hint"),
+      run: () =>
+        api
+          .detail(id)
+          .then((d) => {
+            // a file: look in its folder
+            const folder = d.kind === "dir" ? d.path : d.path.replace(/[\\/][^\\/]*$/, "");
+            openDupesFor(folder);
+          })
           .catch(fail),
     },
   ];

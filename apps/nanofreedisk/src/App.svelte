@@ -27,7 +27,9 @@
   import CleanActivity from "./lib/views/CleanActivity.svelte";
   import Hardware from "./lib/views/Hardware.svelte";
   import DevCache from "./lib/views/DevCache.svelte";
+  import Duplicates from "./lib/views/Duplicates.svelte";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
+  import { openStartupDupes } from "./lib/dupes/state.svelte";
 
   const NAV: { id: View | null; icon: string; label: string; phase?: string }[] = [
     { id: "home", icon: "home", label: "nav-home" },
@@ -38,7 +40,7 @@
     { id: "activity", icon: "undo", label: "nav-activity" },
     { id: "hardware", icon: "cpu", label: "nav-hardware" },
     { id: "devcache", icon: "devcache", label: "nav-devcache" },
-    { id: null, icon: "duplicates", label: "nav-duplicates", phase: "Phase 5" },
+    { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
     { id: null, icon: "monitor", label: "nav-monitor", phase: "Phase 6" },
     { id: null, icon: "health", label: "nav-health", phase: "Phase 7" },
   ];
@@ -59,6 +61,7 @@
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
+      await openStartupDupes();
     })();
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey && e.key === ",") {
@@ -170,6 +173,8 @@
       <Hardware />
     {:else if app.view === "devcache"}
       <DevCache />
+    {:else if app.view === "duplicates"}
+      <Duplicates />
     {:else}
       <Settings />
     {/if}

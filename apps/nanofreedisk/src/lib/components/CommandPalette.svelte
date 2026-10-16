@@ -41,6 +41,7 @@
       ["oldlarge", "nav-oldlarge", "drive"],
       ["tidy", "nav-tidy", "folder"],
       ["devcache", "nav-devcache", "devcache"],
+      ["duplicates", "nav-duplicates", "duplicates"],
       ["settings", "nav-settings", "settings"],
     ];
     for (const [view, id, icon] of nav) {

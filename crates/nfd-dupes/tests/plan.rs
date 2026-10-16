@@ -321,7 +321,7 @@ fn run(dir: &Path, report: &DupeReport) -> exec::Operation {
     let sel = auto_select(&report.groups, &KeepStrategy::Auto);
     let p = plan(&report.groups, &sel, Action::Quarantine).expect("plan");
     let gate = SafetyGate::new(&|_: &str| None);
-    let mut verifier = Verifier::new(&LiveSource, &report.groups);
+    let mut verifier = Verifier::new(&LiveSource, report.groups.clone());
     exec::execute_verified(
         &p,
         &gate,

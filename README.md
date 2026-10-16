@@ -239,7 +239,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | ✅ done — plus age heatmap, empty folders / broken shortcuts / orphan junctions, Explorer menu, `nfd diff` / `nfd explain` ([demo](docs/assets/demo/nanofreedisk-demo.webp)) |
 | 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ⏳ |
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
-| 5 | Duplicate finder | 🚧 in progress — `nfd dupes` (size → partial → full BLAKE3, hash cache) |
+| 5 | Duplicate finder | 🚧 in progress — Duplicates view, "Find duplicates here", `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ⏳ |
 | 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ⏳ |
 | 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ⏳ |

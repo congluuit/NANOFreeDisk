@@ -1,0 +1,236 @@
+// Duplicates view state (PHASE5_DUPLICATES §2.6): scope, the last search, the copy
+// kept and the copies removed per group, and the running removal.
+
+import { on } from "../api";
+import type { CleanProgress, OperationResult } from "../clean/types";
+import { formatSize } from "../format";
+import { intlLocale, t } from "../i18n.svelte";
+import { app, fail, toast } from "../state.svelte";
+import { dupesApi } from "./api";
+import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, KeepStrategy, Scope, Selection } from "./types";
+
+/** Extensions of each file-kind filter (lower case, no dot). */
+export const KINDS: Record<Exclude<FileKind, "all">, string[]> = {
+  images: ["jpg", "jpeg", "png", "gif", "webp", "bmp", "heic", "heif", "tif", "tiff", "dng", "cr2", "cr3", "nef", "arw", "raf", "orf", "rw2"],
+  videos: ["mp4", "mkv", "mov", "avi", "wmv", "webm", "m4v", "mts", "m2ts", "3gp"],
+  music: ["mp3", "flac", "wav", "m4a", "aac", "ogg", "opus", "wma"],
+  documents: ["pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx", "odt", "ods", "odp", "rtf", "txt", "epub"],
+  archives: ["zip", "rar", "7z", "tar", "gz", "bz2", "xz", "iso", "img", "cab"],
+};
+
+export interface Pick {
+  keep: string;
+  remove: string[];
+}
+
+export const dupes = $state({
+  scope: "current" as Scope,
+  folders: [] as string[],
+  kind: "all" as FileKind,
+  /** Expert: also list application folders (never pre-selected). */
+  includeAppDirs: false,
+  /** Expert: compare bytes after hashing. */
+  paranoid: false,
+  report: null as DupeReport | null,
+  /** Search running (progress of the current step). */
+  searching: null as DupeProgress | null,
+  strategy: "auto" as KeepStrategy,
+  /** Per group id: the copy kept and the copies to remove. */
+  picks: {} as Record<number, Pick>,
+  /** Groups rendered so far (the list grows on demand). */
+  shown: 60,
+  expanded: [] as number[],
+  confirm: null as null | DupeAction,
+  running: null as CleanProgress | null,
+  last: null as OperationResult | null,
+  thumbs: {} as Record<string, string | null>,
+});
+
+/** Risky to remove: never pre-selected, extra confirmation. */
+export function risky(c: FileCopy): boolean {
+  return c.flags.cloud || c.flags.git || c.flags.appDir || c.flags.readonly;
+}
+
+function toPicks(sel: Selection[], groups: DupeGroup[]): Record<number, Pick> {
+  const out: Record<number, Pick> = {};
+  for (const g of groups) out[g.id] = { keep: g.copies[0]?.path ?? "", remove: [] };
+  for (const s of sel) out[s.group] = { keep: s.keep, remove: [...s.remove] };
+  return out;
+}
+
+/** Selections for the backend: groups with something to remove. */
+export function selections(): Selection[] {
+  return Object.entries(dupes.picks)
+    .filter(([, p]) => p.remove.length > 0)
+    .map(([id, p]) => ({ group: Number(id), keep: p.keep, remove: p.remove }));
+}
+
+/** Copies (and their size) currently selected for removal. */
+export function selectedTotals(): { files: number; bytes: number; groups: number; risky: FileCopy[] } {
+  let files = 0;
+  let bytes = 0;
+  let groups = 0;
+  const flagged: FileCopy[] = [];
+  for (const g of dupes.report?.groups ?? []) {
+    const p = dupes.picks[g.id];
+    if (!p?.remove.length) continue;
+    groups++;
+    for (const c of g.copies) {
+      if (!p.remove.includes(c.path)) continue;
+      files++;
+      bytes += g.size;
+      if (risky(c)) flagged.push(c);
+    }
+  }
+  return { files, bytes, groups, risky: flagged };
+}
+
+export function setKeep(group: number, path: string): void {
+  const p = dupes.picks[group];
+  if (!p) return;
+  dupes.picks[group] = { keep: path, remove: p.remove.filter((x) => x !== path) };
+}
+
+export function toggleRemove(group: number, path: string): void {
+  const p = dupes.picks[group];
+  if (!p || p.keep === path) return;
+  dupes.picks[group] = {
+    keep: p.keep,
+    remove: p.remove.includes(path) ? p.remove.filter((x) => x !== path) : [...p.remove, path],
+  };
+}
+
+/** Re-pick every group with `strategy` (the backend applies the keep rules). */
+export async function applyStrategy(strategy: KeepStrategy): Promise<void> {
+  dupes.strategy = strategy;
+  app.settings.dupeKeep = strategy;
+  if (!dupes.report) return;
+  try {
+    dupes.picks = toPicks(await dupesApi.select(strategy), dupes.report.groups);
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Remove nothing: keep every copy. */
+export function clearPicks(): void {
+  for (const id of Object.keys(dupes.picks)) dupes.picks[Number(id)].remove = [];
+}
+
+let progressOff: (() => void) | null = null;
+let cleanOff: (() => void) | null = null;
+
+/** Extensions of the chosen kind (empty = every file). */
+export function extensions(): string[] {
+  return dupes.kind === "all" ? [] : KINDS[dupes.kind];
+}
+
+/** Test hook: the GUI smoke test keeps its fixture out of the hash cache. */
+const useCache = (): boolean => !(globalThis as { __nfdNoDupeCache?: boolean }).__nfdNoDupeCache;
+
+/** Search the chosen scope. */
+export async function findDupes(): Promise<void> {
+  if (dupes.searching) return;
+  const paths = dupes.scope === "current" ? [] : [...dupes.folders];
+  if (dupes.scope === "folders" && !paths.length) return;
+  dupes.searching = { phase: dupes.scope === "current" ? "collect" : "scan", done: 0, total: 0, bytes: 0, totalBytes: 0, path: paths[0] ?? "" };
+  dupes.last = null;
+  try {
+    progressOff ??= await on<DupeProgress>("dupes-progress", (p) => {
+      if (dupes.searching) dupes.searching = p;
+    });
+    const report = await dupesApi.find(paths, {
+      minSize: Math.max(1, Math.round(app.settings.dupeMinMb * 2 ** 20)),
+      includeAppDirs: dupes.includeAppDirs,
+      paranoid: dupes.paranoid,
+      extensions: extensions(),
+      useCache: useCache(),
+    });
+    dupes.report = report;
+    dupes.shown = 60;
+    dupes.expanded = report.groups.slice(0, 3).map((g) => g.id);
+    dupes.thumbs = {};
+    dupes.picks = toPicks(await dupesApi.select(dupes.strategy), report.groups);
+  } catch (e) {
+    const code = e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
+    if (code === "cancelled") toast(t("dupes-cancelled"));
+    else fail(e);
+  } finally {
+    dupes.searching = null;
+  }
+}
+
+/** "Find duplicates here" from Analyze or Explorer. */
+export function openDupesFor(path: string): void {
+  app.view = "duplicates";
+  dupes.scope = "folders";
+  dupes.folders = [path];
+  void findDupes();
+}
+
+/** The folder the app was started with through "Find duplicates here". */
+export async function openStartupDupes(): Promise<void> {
+  try {
+    await on<string>("open-dupes", (path) => path && openDupesFor(path));
+    const path = await dupesApi.takeStartup();
+    if (path) openDupesFor(path);
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Remove the selected copies (already confirmed). */
+export async function runDupes(action: DupeAction): Promise<void> {
+  const sel = selections();
+  if (dupes.running || !sel.length) return;
+  dupes.running = { done: 0, total: 0, freed: 0, path: "" };
+  dupes.last = null;
+  try {
+    cleanOff ??= await on<CleanProgress>("clean-progress", (p) => {
+      if (dupes.running) dupes.running = p;
+    });
+    const result = await dupesApi.run(sel, action);
+    dupes.last = result;
+    toast(
+      t("clean-result", { size: formatSize(result.freed, intlLocale()), done: result.done + result.partial, skipped: result.skipped + result.failed }),
+      result.failed ? "error" : "ok",
+    );
+    if (result.journalError) toast(t("clean-journal-failed", { error: result.journalError }), "error");
+  } catch (e) {
+    fail(e);
+  } finally {
+    dupes.running = null;
+    app.version++;
+    try {
+      const fresh = await dupesApi.report();
+      dupes.report = fresh;
+      if (fresh) dupes.picks = toPicks(await dupesApi.select(dupes.strategy), fresh.groups);
+    } catch (e) {
+      fail(e);
+    }
+  }
+}
+
+/** Preview of an image copy (loaded once). */
+export async function loadThumb(path: string): Promise<void> {
+  if (path in dupes.thumbs) return;
+  dupes.thumbs[path] = null;
+  try {
+    dupes.thumbs[path] = await dupesApi.thumbnail(path);
+  } catch {
+    dupes.thumbs[path] = null;
+  }
+}
+
+/** The equivalent `nfd dupes` command (Expert mode). */
+export function cliCommand(action?: DupeAction): string {
+  const paths = dupes.scope === "current" ? dupes.report?.roots ?? [] : dupes.folders;
+  const parts = ["nfd dupes", ...paths.map((p) => `"${p}"`), `--min-size ${app.settings.dupeMinMb}MB`];
+  const ext = extensions();
+  if (ext.length) parts.push(`--ext ${ext.join(",")}`);
+  if (dupes.includeAppDirs) parts.push("--include-app-dirs");
+  if (dupes.paranoid) parts.push("--paranoid");
+  parts.push(`--keep ${dupes.strategy}`);
+  if (action) parts.push(`--action ${action}`, "--apply");
+  return parts.join(" ");
+}
