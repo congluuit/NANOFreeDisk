@@ -1,8 +1,10 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
-//! Ships `scan` (Phase 1) and `rules list` / `rules validate`. Cleaning, dedupe, watch
+//! Ships `scan` (Phase 1), `diff` (scan history, Phase 2) and `rules list` /
+//! `rules validate`. Cleaning, dedupe, watch
 //! and health commands arrive with their phases (see `docs/PLAN.md` §4.7).
 
+mod diff;
 mod scan;
 
 use std::path::PathBuf;
@@ -34,6 +36,16 @@ enum Command {
     },
     /// Scan a path and report what uses the space (never follows junctions or symlinks).
     Scan(scan::ScanArgs),
+    /// What changed between two saved scans of a folder (`nfd scan --save`, or the app).
+    Diff(diff::DiffArgs),
+    /// What is this folder, and what happens if it is deleted? (Folder Encyclopedia)
+    Explain {
+        /// File or folder to look up (its nearest described parent is used).
+        path: PathBuf,
+        /// Language of the text: en or vi.
+        #[arg(long, default_value = "en")]
+        lang: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -65,7 +77,35 @@ fn run() -> anyhow::Result<ExitCode> {
     match cli.command {
         Command::Rules { action } => rules(action),
         Command::Scan(args) => scan::run(args),
+        Command::Diff(args) => diff::run(args),
+        Command::Explain { path, lang } => explain(&path, &lang),
     }
+}
+
+fn explain(path: &std::path::Path, lang: &str) -> anyhow::Result<ExitCode> {
+    let platform = nfd_platform::Native;
+    let matcher = nfd_rules::encyclopedia::Matcher::new(
+        nfd_rules::encyclopedia::builtin(),
+        &platform.resolver(),
+    );
+    let full = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+    let Some(hit) = matcher.lookup(&full, &|p| p.exists()) else {
+        println!("No encyclopedia article for {}.", full.display());
+        return Ok(ExitCode::SUCCESS);
+    };
+    let a = hit.article;
+    let text = a
+        .text
+        .get(lang)
+        .or_else(|| a.text.get("en"))
+        .context("article has no text")?;
+    let about = full.ancestors().nth(hit.depth_up).unwrap_or(&full);
+    println!("{} [{}]", text.title, a.risk);
+    if hit.inside {
+        println!("(inside {})", about.display());
+    }
+    println!("\n{}", text.body.replace("**", "").replace('`', ""));
+    Ok(ExitCode::SUCCESS)
 }
 
 fn rules(action: RulesAction) -> anyhow::Result<ExitCode> {
@@ -73,7 +113,18 @@ fn rules(action: RulesAction) -> anyhow::Result<ExitCode> {
         RulesAction::Validate { dir } => {
             let packs = nfd_rules::load_dir(&dir)
                 .with_context(|| format!("loading rule packs from {}", dir.display()))?;
-            let findings = nfd_rules::validate(&packs);
+            let mut findings = nfd_rules::validate(&packs);
+            // rules/encyclopedia/*.md (Folder Encyclopedia), when present
+            let enc_dir = dir.join("encyclopedia");
+            if enc_dir.is_dir() {
+                let articles = nfd_rules::encyclopedia::load_dir(&enc_dir)
+                    .with_context(|| format!("loading {}", enc_dir.display()))?;
+                findings.extend(nfd_rules::encyclopedia::validate(&articles));
+                findings.extend(nfd_rules::encyclopedia::validate_rule_links(
+                    &articles, &packs,
+                ));
+                println!("{} encyclopedia article(s)", articles.len());
+            }
             for f in &findings {
                 println!("{f}");
             }

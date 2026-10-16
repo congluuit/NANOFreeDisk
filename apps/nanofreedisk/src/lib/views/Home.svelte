@@ -40,7 +40,7 @@
       <button class="btn ghost" onclick={refreshVolumes} title={t("home-refresh")}>
         <Icon name="refresh" />
       </button>
-      <button class="btn primary" onclick={scanFolder}>
+      <button class="btn primary" onclick={scanFolder} data-effect title={t("hint-scan")}>
         <Icon name="folder" />{t("home-scan-folder")}
       </button>
     </div>
@@ -54,7 +54,7 @@
       <strong>{t("home-action-free")}</strong>
       <span class="muted">{t("home-action-free-hint")}</span>
     </button>
-    <button class="action card" onclick={analyzeSystem} disabled={!system && !app.summary}>
+    <button class="action card" onclick={analyzeSystem} disabled={!system && !app.summary} data-effect title={t("hint-scan")}>
       <span class="ic"><Icon name="analyze" size={26} /></span>
       <strong>{t("home-action-analyze")}</strong>
       <span class="muted">{t("home-action-analyze-hint")}</span>
@@ -91,7 +91,7 @@
         {:else}
           <div class="muted small">{t("drive-not-ready")}</div>
         {/if}
-        <button class="btn" disabled={!v.ready} onclick={() => startScan(v.root)}>
+        <button class="btn" disabled={!v.ready} onclick={() => startScan(v.root)} data-effect title={t("hint-scan")}>
           <Icon name="analyze" />{t("drive-scan")}
         </button>
       </article>

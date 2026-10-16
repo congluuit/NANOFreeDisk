@@ -9,6 +9,8 @@
 
 pub mod appearance;
 pub mod fsinfo;
+pub mod owner;
+pub mod shell_menu;
 pub mod trash;
 pub mod volumes;
 

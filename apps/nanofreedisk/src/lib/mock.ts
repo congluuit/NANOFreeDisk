@@ -339,6 +339,21 @@ function mockDiff(older: number, newer: number) {
   };
 }
 
+const MOCK_ARTICLES = [
+  {
+    id: "pagefile", risk: "protected", path: "C:\\pagefile.sys", title: "Page file (virtual memory)",
+    body: "Disk space Windows uses as extra memory when RAM is full.\n\n**If you delete it:** programs can crash with `out of memory` errors.\n\n**Instead:** move or resize it under Virtual memory.",
+  },
+  {
+    id: "cargo-registry", risk: "caution", path: "C:\\Users\\nano\\.cargo\\registry", title: "Cargo registry and git cache (Rust)",
+    body: "Downloaded crates for every Rust project you built.\n\n**If you delete it:** the next build downloads everything again.\n\n**Instead:** `cargo cache --autoclean`.",
+  },
+  {
+    id: "windows-folder", risk: "protected", path: "C:\\Windows", title: "Windows",
+    body: "The operating system itself.\n\n**If you delete anything here:** Windows may stop working. Use Disk Cleanup instead.",
+  },
+];
+
 const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
@@ -452,6 +467,51 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
     return { rows: broken.slice(0, limit), checked: lnks.length, unchecked: 0, unreadable: 0 };
   },
   save_html_report: () => undefined,
+  age_matrix: ({ id, limit }) => {
+    const now = Math.floor(Date.now() / 1000);
+    const BOUNDS = [30, 182, 365, 730, 1826];
+    const col = (m: number) => {
+      const d = (now - m) / 86_400;
+      const i = BOUNDS.findIndex((b) => d < b);
+      return i < 0 ? 5 : i;
+    };
+    const rowFor = (kid: number) => {
+      const bytes = Array(7).fill(0);
+      const files = Array(7).fill(0);
+      const items = entries[kid].kind === "file" ? [kid] : descendants(kid);
+      for (const i of items) {
+        if (entries[i].kind !== "file" || entries[i].removed) continue;
+        bytes[col(entries[i].mtime)] += entries[i].size;
+        files[col(entries[i].mtime)]++;
+      }
+      return { id: kid, name: entries[kid].name, kind: entries[kid].kind, direct: false, total: bytes.reduce((a, b) => a + b, 0), bytes, files };
+    };
+    const rows = sortedKids(id).filter((k) => entries[k].kind === "dir").map(rowFor).filter((r) => r.total > 0);
+    const direct = sortedKids(id).filter((k) => entries[k].kind === "file").map(rowFor);
+    if (direct.length) {
+      const d = direct.reduce((acc, r) => ({ ...acc, bytes: acc.bytes.map((b: number, i: number) => b + r.bytes[i]), files: acc.files.map((b: number, i: number) => b + r.files[i]), total: acc.total + r.total }));
+      rows.push({ ...d, id, name: entries[id].name, kind: "dir", direct: true });
+    }
+    rows.sort((a, b) => b.total - a.total);
+    const shown = rows.slice(0, limit);
+    const other = Array(7).fill(0);
+    for (const r of rows.slice(limit)) r.bytes.forEach((b: number, i: number) => (other[i] += b));
+    const totals = Array(7).fill(0);
+    const files = Array(7).fill(0);
+    for (const r of rows) r.bytes.forEach((b: number, i: number) => ((totals[i] += b), (files[i] += r.files[i])));
+    return { bucketDays: BOUNDS, rows: shown, other, totals, files };
+  },
+  owner: ({ id }) => (path(id).toLowerCase().startsWith("c:\\windows") ? "NT SERVICE\\TrustedInstaller" : path(id).toLowerCase().startsWith("c:\\users\\nano") ? "NANO-PC\\nano" : "BUILTIN\\Administrators"),
+  broken_links: ({ id, limit }) => {
+    const links = descendants(id).filter((i) => entries[i].kind === "junction");
+    const rows = links.slice(0, limit).map((i) => ({ ...located(i), target: "C:\\Users\\nano\\AppData-old", status: "missing" }));
+    return { rows, checked: links.length, unchecked: 0, unreadable: 0 };
+  },
+  explain: ({ id }) => {
+    const p = path(id);
+    const hit = MOCK_ARTICLES.find((a) => p.toLowerCase() === a.path.toLowerCase() || p.toLowerCase().startsWith(a.path.toLowerCase() + "\\"));
+    return hit ? { ...hit, inside: p.toLowerCase() !== hit.path.toLowerCase(), rules: [] } : null;
+  },
   history_snapshots: ({ root }) =>
     historyCleared || String(root).toLowerCase() !== "c:\\" ? [] : [...historyIds].reverse().map(snapshotRow),
   history_diff: ({ older, newer }) => mockDiff(older, newer),

@@ -336,6 +336,7 @@ report-title = Disk report
 report-generated = Generated { $date } · NANOFreeDisk { $version }
 report-treemap = What fills the space
 report-children = Largest items
+report-changes = What changed since { $date }
 report-drive-share = Share of the drive
 report-footer = Created by NANOFreeDisk { $version } — read-only analysis, nothing was changed or deleted. No telemetry.
 
@@ -389,6 +390,52 @@ settings-history-count = { $count ->
 settings-history-clear = Clear history
 settings-history-clear-confirm = Delete every saved scan? "What changed?" will start over from the next scan.
 settings-history-cleared = Scan history cleared.
+
+## Folder Encyclopedia
+
+encyclopedia-title = What is this?
+encyclopedia-inside = Inside:
+encyclopedia-note = From the Folder Encyclopedia (rules/encyclopedia). Information only — NANOFreeDisk never deletes anything because of it.
+risk-safe = Safe to remove
+risk-caution = Remove with care
+risk-advanced = Experts only
+risk-protected = Do not delete
+
+## Age heatmap, owner, broken links
+
+analyze-tab-age = Age
+age-hint = Space by when files were last modified. Darker cells hold more bytes; click a folder to open it.
+age-col-0 = < 1 month
+age-col-1 = 1–6 months
+age-col-2 = 6–12 months
+age-col-3 = 1–2 years
+age-col-4 = 2–5 years
+age-col-5 = > 5 years
+age-col-6 = No date
+age-direct = Files directly here
+age-other = Everything else
+age-total = Total
+details-owner = Owner
+details-owner-hint = The account that owns this item (from its Windows security settings).
+tidy-junctions-title = Broken junctions and symbolic links
+tidy-junctions-summary = { $checked } links checked. A link whose target is gone shows an error when opened.
+tidy-junctions-none = No broken junctions or symbolic links.
+
+## "If you do this…" hints (G4)
+
+hint-scan = If you do this: the folder is read (nothing is changed) and, if scan history is on, a summary of sizes is saved on this PC.
+hint-rescan = If you do this: the folder is read again and these results are replaced; with scan history on, a new snapshot is saved.
+hint-cancel-scan = If you do this: the scan stops and its partial results are discarded. Nothing on disk changes.
+hint-export = If you do this: a new file is written where you choose; nothing else changes.
+hint-theme = If you do this: the colors change right away; switch back at any time.
+hint-theme-import = If you do this: your custom colors are replaced by the file's. Export first to keep them.
+hint-theme-reset = If you do this: your custom color changes are dropped and the preset colors come back.
+hint-theme-preset = If you do this: the theme switches to Custom based on this preset; your previous custom colors are replaced.
+hint-mode = If you do this: only what is shown changes; no setting or file is touched.
+hint-language = If you do this: the app switches language immediately.
+hint-font = If you do this: the text size changes right away.
+hint-history-toggle = If you turn this off: new scans are no longer saved; saved ones stay until you clear them.
+hint-history-clear = If you do this: every saved scan is deleted from this PC (you are asked first). Your files are not touched.
 
 ## Errors
 

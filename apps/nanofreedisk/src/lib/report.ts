@@ -4,9 +4,9 @@
 // string (see `actions.ts`).
 
 import { CATEGORIES, categoryOf, tokenOf } from "./colors.ts";
-import { formatCount, formatDate, formatPercent, formatSize } from "./format.ts";
+import { daysBetween, formatCount, formatDate, formatDelta, formatPercent, formatSize } from "./format.ts";
 import { layoutTreemap } from "./treemap.ts";
-import type { Detail, ExtRow, Located, Node, OldLargeRows, Slice, Summary } from "./types";
+import type { Detail, Diff, ExtRow, Located, Node, OldLargeRows, Slice, Summary } from "./types";
 
 export type Translate = (id: string, args?: Record<string, string | number>) => string;
 
@@ -19,6 +19,8 @@ export interface ReportInput {
   topFiles: Located[];
   extensions: ExtRow[];
   oldLarge: OldLargeRows | null;
+  /** "What changed?" against the previous saved scan of the same folder, if any. */
+  changes?: Diff | null;
   /** CSS variables (`paletteVars`), without the `--` prefix. */
   vars: Record<string, string>;
   dark: boolean;
@@ -146,6 +148,30 @@ export function buildReport(input: ReportInput, t: Translate): string {
     )}</section>`;
   }
 
+  let changes = "";
+  if (input.changes) {
+    const d = input.changes;
+    const head = [
+      t("changes-summary", {
+        days: daysBetween(d.older.startedAt, d.newer.startedAt),
+        size: formatDelta(d.onDiskDelta, locale),
+        files: (d.filesDelta > 0 ? "+" : "") + formatCount(d.filesDelta, locale),
+      }),
+      d.freeDelta != null ? t("changes-free", { size: formatDelta(d.freeDelta, locale) }) : "",
+    ].filter(Boolean);
+    const rows = (key: string, list: { path: string; delta: number }[]) =>
+      list.slice(0, 15).map((c) => [esc(t(key)), `<span class="path">${esc(c.path)}</span>`, esc(formatDelta(c.delta, locale))]);
+    const all = [
+      ...rows("changes-grew", d.grew),
+      ...rows("changes-shrank", d.shrank),
+      ...rows("changes-files-up", d.filesUp),
+      ...rows("changes-files-down", d.filesDown),
+    ];
+    changes = `<section><h2>${esc(t("report-changes", { date: new Date(d.older.startedAt * 1000).toLocaleString(locale) }))}</h2><p class="muted">${esc(head.join(" · "))}</p>${
+      all.length ? table([t("col-type"), t("col-path"), t("col-size")], all, [2]) : `<p class="muted">${esc(t("changes-none"))}</p>`
+    }</section>`;
+  }
+
   const generated = new Date(input.generatedAt).toLocaleString(locale);
   const truncated = input.slice.truncated ? `<p class="muted">${esc(t("analyze-truncated"))}</p>` : "";
   return `<!doctype html>
@@ -198,6 +224,7 @@ footer { margin-top: 24px; font-size: .85em; color: var(--text-muted); }
 <section><h2>${esc(t("report-children"))}</h2>${children}</section>
 <section><h2>${esc(t("analyze-tab-top"))}</h2>${files}</section>
 <section><h2>${esc(t("analyze-tab-ext"))}</h2>${exts}</section>
+${changes}
 ${oldLarge}
 <footer>${esc(t("report-footer", { version: input.version }))}</footer>
 </main>

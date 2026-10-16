@@ -31,6 +31,28 @@ use rusqlite::{Connection, params};
 use serde::Serialize;
 use thiserror::Error;
 
+/// Application identifier: the desktop app keeps its data in a folder of this name.
+pub const APP_ID: &str = "vn.io.nanodev.nanofreedisk";
+
+/// Where the desktop app keeps the history (`%LOCALAPPDATA%\<APP_ID>\history.db` on
+/// Windows, the XDG data folder elsewhere), so the CLI reads the same file.
+#[must_use]
+pub fn default_path() -> Option<std::path::PathBuf> {
+    let env = |k: &str| {
+        std::env::var_os(k)
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+    };
+    let base = if cfg!(windows) {
+        env("LOCALAPPDATA")?
+    } else if cfg!(target_os = "macos") {
+        env("HOME")?.join("Library").join("Application Support")
+    } else {
+        env("XDG_DATA_HOME").or_else(|| env("HOME").map(|h| h.join(".local").join("share")))?
+    };
+    Some(base.join(APP_ID).join("history.db"))
+}
+
 /// `PRAGMA user_version` written by this version.
 pub const SCHEMA_VERSION: i64 = 1;
 

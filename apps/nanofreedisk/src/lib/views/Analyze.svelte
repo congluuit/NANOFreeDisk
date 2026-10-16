@@ -6,6 +6,7 @@
   import { formatCount, formatDuration, formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, askDelete, expert, fail, navigate, select, startScan, toast } from "../state.svelte";
+  import AgePanel from "../components/AgePanel.svelte";
   import ChangesPanel from "../components/ChangesPanel.svelte";
   import CliHint from "../components/CliHint.svelte";
   import ContextMenu, { type MenuItem } from "../components/ContextMenu.svelte";
@@ -18,7 +19,7 @@
   import TreeList from "../components/TreeList.svelte";
   import type { Detail, ExtRow, Located, ScanIssue } from "../types";
 
-  type Tab = "top" | "ext" | "changes" | "search" | "issues";
+  type Tab = "top" | "ext" | "age" | "changes" | "search" | "issues";
   let tab = $state<Tab>("top");
   let current = $state<Detail | null>(null);
   let top = $state<Located[]>([]);
@@ -74,11 +75,11 @@
       x: r.left,
       y: r.bottom + 4,
       items: [
-        { icon: "export", label: "analyze-export-html", run: () => void exportHtmlReport() },
+        { icon: "export", label: "analyze-export-html", hint: t("hint-export"), run: () => void exportHtmlReport() },
         ...(expert()
           ? [
-              { icon: "export", label: "analyze-export-json", disabled: !inTauri, run: () => exportAs("json") },
-              { icon: "export", label: "analyze-export-csv", disabled: !inTauri, run: () => exportAs("csv") },
+              { icon: "export", label: "analyze-export-json", hint: t("hint-export"), disabled: !inTauri, run: () => exportAs("json") },
+              { icon: "export", label: "analyze-export-csv", hint: t("hint-export"), disabled: !inTauri, run: () => exportAs("csv") },
             ]
           : []),
       ],
@@ -116,10 +117,10 @@
           <Icon name="sunburst" size={16} />
         </button>
       </div>
-      <button class="btn ghost" onclick={() => startScan(s.root)} title={t("analyze-rescan")}>
+      <button class="btn ghost" onclick={() => startScan(s.root)} data-effect title={t("hint-rescan")}>
         <Icon name="refresh" size={16} />{t("analyze-rescan")}
       </button>
-      <button class="btn ghost" onclick={exportMenu}>
+      <button class="btn ghost" onclick={exportMenu} data-effect title={t("hint-export")}>
         <Icon name="export" size={16} />{t("analyze-export")}
       </button>
     </div>
@@ -182,6 +183,7 @@
           <div class="tabbar" role="tablist">
             <button role="tab" aria-selected={tab === "top"} class:on={tab === "top"} onclick={() => (tab = "top")}>{t("analyze-tab-top")}</button>
             <button role="tab" aria-selected={tab === "ext"} class:on={tab === "ext"} onclick={() => (tab = "ext")}>{t("analyze-tab-ext")}</button>
+            <button role="tab" data-tab="age" aria-selected={tab === "age"} class:on={tab === "age"} onclick={() => (tab = "age")}>{t("analyze-tab-age")}</button>
             <button role="tab" data-tab="changes" aria-selected={tab === "changes"} class:on={tab === "changes"} onclick={() => (tab = "changes")}>{t("analyze-tab-changes")}</button>
             <button role="tab" aria-selected={tab === "search"} class:on={tab === "search"} onclick={() => (tab = "search")} disabled={!app.search}>
               {t("analyze-tab-search")}{#if app.search}<span class="count">{formatCount(app.search.result.matched, loc)}</span>{/if}
@@ -213,6 +215,8 @@
                   {/each}
                 </tbody>
               </table>
+            {:else if tab === "age"}
+              <AgePanel />
             {:else if tab === "changes"}
               <ChangesPanel />
             {:else if tab === "search" && app.search}

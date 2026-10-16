@@ -4,6 +4,8 @@
 
 import type {
   AppInfo,
+  AgeMatrix,
+  Article,
   DeletePlan,
   Detail,
   Diff,
@@ -87,6 +89,10 @@ export const api = {
   historyClear: () => call<void>("history_clear"),
   historyForget: (root: string) => call<number>("history_forget", { root }),
   findPath: (path: string) => call<number | null>("find_path", { path }),
+  explain: (id: number, lang: string) => call<Article | null>("explain", { id, lang }),
+  ageMatrix: (id: number, limit: number) => call<AgeMatrix>("age_matrix", { id, limit }),
+  owner: (id: number) => call<string | null>("owner", { id }),
+  brokenLinks: (id: number, limit: number) => call<ShortcutRows>("broken_links", { id, limit }),
   health: () => call<HealthScore>("health"),
   reveal: (id: number) => call<void>("reveal", { id }),
   openItem: (id: number) => call<void>("open_item", { id }),

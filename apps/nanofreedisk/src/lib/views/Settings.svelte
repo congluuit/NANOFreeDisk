@@ -95,7 +95,7 @@
 
   <div class="block card">
     <h2>{t("settings-language")}</h2>
-    <select bind:value={app.settings.locale} aria-label={t("settings-language")}>
+    <select bind:value={app.settings.locale} aria-label={t("settings-language")} data-effect title={t("hint-language")}>
       <option value="system">{t("settings-language-system")}</option>
       {#each LOCALES as l (l.id)}
         <option value={l.id}>{l.label}</option>
@@ -107,7 +107,7 @@
     <h2>{t("settings-theme")}</h2>
     <div class="modes" role="radiogroup" aria-label={t("settings-theme")}>
       {#each MODES as m (m.id)}
-        <button role="radio" aria-checked={theme.mode === m.id} class="mode" class:on={theme.mode === m.id} onclick={() => setMode(m.id)}>
+        <button role="radio" aria-checked={theme.mode === m.id} class="mode" class:on={theme.mode === m.id} onclick={() => setMode(m.id)} data-effect title={t("hint-theme")}>
           <Icon name={m.icon} size={20} />
           {t(`settings-theme-${m.id}`)}
         </button>
@@ -134,9 +134,9 @@
           </select>
         </label>
         <span class="grow"></span>
-        <button class="btn" onclick={importTheme} disabled={!inTauri}><Icon name="folder" size={16} />{t("settings-theme-import")}</button>
-        <button class="btn" onclick={exportTheme} disabled={!inTauri}><Icon name="export" size={16} />{t("settings-theme-export")}</button>
-        <button class="btn ghost" onclick={() => (app.settings.theme.overrides = {})}>{t("settings-theme-reset")}</button>
+        <button class="btn" onclick={importTheme} disabled={!inTauri} data-effect title={t("hint-theme-import")}><Icon name="folder" size={16} />{t("settings-theme-import")}</button>
+        <button class="btn" onclick={exportTheme} disabled={!inTauri} data-effect title={t("hint-export")}><Icon name="export" size={16} />{t("settings-theme-export")}</button>
+        <button class="btn ghost" onclick={() => (app.settings.theme.overrides = {})} data-effect title={t("hint-theme-reset")}>{t("settings-theme-reset")}</button>
       </div>
 
       {#each issues as i (i.fg + i.bg)}
@@ -161,7 +161,8 @@
         {#each Object.entries(PRESETS) as [id, p] (id)}
           <button
             class="preset"
-            title={p.label}
+            data-effect
+            title={`${p.label} — ${t("hint-theme-preset")}`}
             onclick={() => (app.settings.theme = { mode: "custom", preset: id as PresetId, overrides: {} })}
           >
             <span class="sample" style="background: {p.colors.bg}; border-color: {p.colors.border}">
@@ -181,7 +182,7 @@
     <h2>{t("mode-label")}</h2>
     <div class="modes two" role="radiogroup" aria-label={t("mode-label")}>
       {#each ["simple", "expert"] as const as m (m)}
-        <button role="radio" aria-checked={app.settings.mode === m} class="mode" class:on={app.settings.mode === m} onclick={() => (app.settings.mode = m)}>
+        <button role="radio" aria-checked={app.settings.mode === m} class="mode" class:on={app.settings.mode === m} onclick={() => (app.settings.mode = m)} data-effect title={t("hint-mode")}>
           <Icon name={m === "simple" ? "home" : "devcache"} size={20} />
           <span class="mtext">
             <strong>{t(`mode-${m}`)}</strong>
@@ -194,8 +195,8 @@
 
   <div class="block card">
     <h2>{t("settings-history")}</h2>
-    <label class="toggle">
-      <input type="checkbox" bind:checked={app.settings.history} />
+    <label class="toggle" title={t("hint-history-toggle")}>
+      <input type="checkbox" bind:checked={app.settings.history} data-effect title={t("hint-history-toggle")} />
       <span>{t("settings-history-keep")}</span>
     </label>
     <p class="muted small">{t("settings-history-hint")}</p>
@@ -205,7 +206,7 @@
         {#if app.settings.mode === "expert"}<code class="muted small ellipsis" title={history.path}>{history.path}</code>{/if}
       {/if}
       <span class="grow"></span>
-      <button class="btn" onclick={clearHistory} disabled={!history?.snapshots}>
+      <button class="btn" onclick={clearHistory} disabled={!history?.snapshots} data-effect title={t("hint-history-clear")}>
         <Icon name="trash" size={16} />{t("settings-history-clear")}
       </button>
     </div>
@@ -221,6 +222,8 @@
         step="0.05"
         bind:value={app.settings.fontScale}
         aria-label={t("settings-font-scale")}
+        data-effect
+        title={t("hint-font")}
       />
       <span class="num">{Math.round(app.settings.fontScale * 100)}%</span>
     </div>

@@ -321,6 +321,7 @@ report-title = Báo cáo ổ đĩa
 report-generated = Tạo lúc { $date } · NANOFreeDisk { $version }
 report-treemap = Thứ gì chiếm dung lượng
 report-children = Mục lớn nhất
+report-changes = Thay đổi kể từ { $date }
 report-drive-share = Tỷ lệ trên ổ đĩa
 report-footer = Tạo bởi NANOFreeDisk { $version } — chỉ phân tích, không thay đổi hay xóa gì. Không thu thập dữ liệu.
 
@@ -370,6 +371,52 @@ settings-history-count = Đã lưu { $count } lần quét
 settings-history-clear = Xóa lịch sử
 settings-history-clear-confirm = Xóa mọi lần quét đã lưu? "Có gì thay đổi?" sẽ bắt đầu lại từ lần quét tới.
 settings-history-cleared = Đã xóa lịch sử quét.
+
+## Bách khoa thư mục
+
+encyclopedia-title = Đây là gì?
+encyclopedia-inside = Nằm trong:
+encyclopedia-note = Từ Bách khoa thư mục (rules/encyclopedia). Chỉ để tham khảo — NANOFreeDisk không bao giờ tự xóa gì dựa trên nó.
+risk-safe = Xóa an toàn
+risk-caution = Xóa cẩn thận
+risk-advanced = Chỉ dành cho chuyên gia
+risk-protected = Không được xóa
+
+## Heatmap tuổi tệp, chủ sở hữu, liên kết hỏng
+
+analyze-tab-age = Tuổi tệp
+age-hint = Dung lượng theo thời điểm tệp được sửa lần cuối. Ô càng đậm càng nhiều dữ liệu; bấm vào thư mục để mở.
+age-col-0 = < 1 tháng
+age-col-1 = 1–6 tháng
+age-col-2 = 6–12 tháng
+age-col-3 = 1–2 năm
+age-col-4 = 2–5 năm
+age-col-5 = > 5 năm
+age-col-6 = Không có ngày
+age-direct = Tệp nằm ngay ở đây
+age-other = Phần còn lại
+age-total = Tổng
+details-owner = Chủ sở hữu
+details-owner-hint = Tài khoản sở hữu mục này (theo thiết lập bảo mật của Windows).
+tidy-junctions-title = Junction và symbolic link hỏng
+tidy-junctions-summary = Đã kiểm tra { $checked } liên kết. Liên kết mất đích sẽ báo lỗi khi mở.
+tidy-junctions-none = Không có junction hay symbolic link hỏng.
+
+## Gợi ý "Nếu bấm thì…" (G4)
+
+hint-scan = Nếu bấm: thư mục chỉ được đọc (không thay đổi gì) và nếu bật lịch sử quét, bản tóm tắt dung lượng được lưu trên máy này.
+hint-rescan = Nếu bấm: thư mục được đọc lại và kết quả này được thay thế; nếu bật lịch sử quét, một snapshot mới được lưu.
+hint-cancel-scan = Nếu bấm: quá trình quét dừng và kết quả dở dang bị bỏ. Không có gì trên ổ đĩa thay đổi.
+hint-export = Nếu bấm: một tệp mới được ghi vào chỗ bạn chọn; không thay đổi gì khác.
+hint-theme = Nếu bấm: màu sắc đổi ngay; có thể đổi lại bất cứ lúc nào.
+hint-theme-import = Nếu bấm: màu tùy chỉnh hiện tại bị thay bằng màu trong tệp. Hãy xuất ra trước nếu muốn giữ.
+hint-theme-reset = Nếu bấm: các thay đổi màu tùy chỉnh bị bỏ và màu của preset quay lại.
+hint-theme-preset = Nếu bấm: theme chuyển sang Tùy chỉnh dựa trên preset này; màu tùy chỉnh trước đó bị thay.
+hint-mode = Nếu bấm: chỉ thay đổi những gì được hiển thị; không đụng tới cài đặt hay tệp nào.
+hint-language = Nếu bấm: ứng dụng đổi ngôn ngữ ngay lập tức.
+hint-font = Nếu bấm: cỡ chữ đổi ngay.
+hint-history-toggle = Nếu tắt: các lần quét mới không được lưu nữa; các lần đã lưu vẫn còn cho tới khi bạn xóa.
+hint-history-clear = Nếu bấm: mọi lần quét đã lưu bị xóa khỏi máy này (có hỏi trước). Tệp của bạn không bị đụng tới.
 
 ## Errors
 

@@ -72,7 +72,7 @@
               <span class="dot"></span>
               <span class="txt">{text(f)}</span>
               {#if f.penalty}<span class="pts muted">−{f.penalty}</span>{/if}
-              <button class="btn ghost" onclick={() => fix(f)}>{t(`health-fix-${f.fix}`)}<Icon name="chevron" size={14} /></button>
+              <button class="btn ghost" onclick={() => fix(f)} title={f.fix === "home" || !app.summary ? t("hint-scan") : undefined}>{t(`health-fix-${f.fix}`)}<Icon name="chevron" size={14} /></button>
             </li>
           {/each}
         </ul>

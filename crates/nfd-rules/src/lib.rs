@@ -4,6 +4,8 @@
 //! This crate owns the schema, the loader and the validator. Matching against a real
 //! filesystem (glob expansion, age filters, process checks) arrives in Phase 3.
 
+pub mod encyclopedia;
+
 use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};

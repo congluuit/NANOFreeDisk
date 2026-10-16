@@ -5,6 +5,7 @@
 //!   time, and old installers / disk images left in `Downloads` folders.
 //! * [`empty_folders`] — folders that contain nothing but (possibly nested) empty
 //!   folders.
+//! * [`age_matrix`] — bytes by last-modified age, per child folder (A9 heatmap).
 //!
 //! Both only *list*; anything the user then removes still goes through
 //! [`crate::safety`].
@@ -274,6 +275,123 @@ pub fn empty_folders(
     out
 }
 
+/// Upper bounds (days, exclusive) of the [`age_matrix`] columns; the last column is
+/// everything older, then one column for files without a usable date.
+pub const AGE_BUCKET_DAYS: [i64; 5] = [30, 182, 365, 730, 1826];
+/// Number of columns: the bounded buckets, "older", "unknown date".
+pub const AGE_COLUMNS: usize = AGE_BUCKET_DAYS.len() + 2;
+
+fn age_column(mtime: i64, now: i64) -> usize {
+    if mtime <= 0 {
+        return AGE_COLUMNS - 1;
+    }
+    let days = (now - mtime).max(0) / DAY;
+    AGE_BUCKET_DAYS
+        .iter()
+        .position(|&b| days < b)
+        .unwrap_or(AGE_BUCKET_DAYS.len())
+}
+
+/// One row of [`AgeMatrix`]: a direct child of the folder (or "files directly in
+/// it" when `id` is the folder itself).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AgeRow {
+    pub id: EntryId,
+    /// Counted on-disk bytes per column.
+    pub bytes: Vec<u64>,
+    pub files: Vec<u64>,
+    pub total: u64,
+}
+
+/// Bytes by last-modified age below a folder, split by its direct children.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct AgeMatrix {
+    /// Biggest children first; at most the requested number (the rest are summed in
+    /// `other`).
+    pub rows: Vec<AgeRow>,
+    pub other: Vec<u64>,
+    /// Column totals over everything below the folder.
+    pub totals: Vec<u64>,
+    pub files: Vec<u64>,
+}
+
+/// Age heatmap data for the folder `under` at time `now` (Unix seconds), keeping the
+/// `limit` largest children as rows. Hard-link duplicates and removed entries are
+/// skipped, like everywhere else.
+#[must_use]
+pub fn age_matrix(
+    tree: &ScanTree,
+    ends: &[u32],
+    under: EntryId,
+    now: i64,
+    limit: usize,
+) -> AgeMatrix {
+    let entries = scope(tree, ends, under);
+    let base = under.index() + 1;
+    // row of each entry: the direct child of `under` it lives in (pre-order)
+    let mut row_of = vec![usize::MAX; entries.len()];
+    let mut children: Vec<EntryId> = Vec::new();
+    let mut rows: Vec<AgeRow> = Vec::new();
+    let mut out = AgeMatrix {
+        other: vec![0; AGE_COLUMNS],
+        totals: vec![0; AGE_COLUMNS],
+        files: vec![0; AGE_COLUMNS],
+        ..AgeMatrix::default()
+    };
+    // files directly inside `under` get their own row (id = under)
+    let mut direct = AgeRow {
+        id: under,
+        bytes: vec![0; AGE_COLUMNS],
+        files: vec![0; AGE_COLUMNS],
+        total: 0,
+    };
+    for e in entries {
+        let i = e.id.index() - base;
+        let parent = e.parent.unwrap_or(under);
+        let row = if parent == under {
+            children.push(e.id);
+            rows.push(AgeRow {
+                id: e.id,
+                bytes: vec![0; AGE_COLUMNS],
+                files: vec![0; AGE_COLUMNS],
+                total: 0,
+            });
+            rows.len() - 1
+        } else {
+            row_of[parent.index() - base]
+        };
+        row_of[i] = row;
+        if e.removed || e.hardlink_dup || e.kind != EntryKind::File {
+            continue;
+        }
+        let col = age_column(e.mtime, now);
+        let size = e.counted().1;
+        out.totals[col] += size;
+        out.files[col] += 1;
+        let target = if parent == under {
+            &mut direct
+        } else {
+            &mut rows[row]
+        };
+        target.bytes[col] += size;
+        target.files[col] += 1;
+        target.total += size;
+    }
+    if direct.total > 0 {
+        rows.push(direct);
+    }
+    rows.retain(|r| r.total > 0);
+    rows.sort_by(|a, b| b.total.cmp(&a.total).then(a.id.cmp(&b.id)));
+    for r in rows.iter().skip(limit) {
+        for (o, b) in out.other.iter_mut().zip(&r.bytes) {
+            *o += b;
+        }
+    }
+    rows.truncate(limit);
+    out.rows = rows;
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::PathBuf;
@@ -379,6 +497,37 @@ mod tests {
         let r = old_and_large(&t, &ends, EntryId(6), &OldLargeOptions::at(NOW));
         assert_eq!(names(&t, &r.large), ["win.ISO"]);
         assert_eq!(r.installers.matched, 2);
+    }
+
+    #[test]
+    fn age_matrix_buckets_and_rows() {
+        let t = tree(&[
+            (None, "scan", Dir, 0, 0),
+            (Some(0), "a", Dir, 0, 0),                           // 1
+            (Some(1), "new.bin", File, 100, NOW - DAY),          // < 30 d
+            (Some(1), "deep", Dir, 0, 0),                        // 3
+            (Some(3), "old.bin", File, 50, NOW - 3 * 365 * DAY), // 2–5 y
+            (Some(0), "b", Dir, 0, 0),                           // 5
+            (Some(5), "mid.bin", File, 300, NOW - 200 * DAY),    // 6–12 m
+            (Some(0), "loose.txt", File, 7, 0),                  // unknown date, direct
+            (Some(0), "c", Dir, 0, 0),                           // 8 small
+            (Some(8), "x", File, 1, NOW - 10 * 365 * DAY),       // > 5 y
+        ]);
+        let ends = subtree_ends(&t.entries);
+        let m = age_matrix(&t, &ends, EntryId(0), NOW, 2);
+        assert_eq!(m.totals, [100, 0, 300, 0, 50, 1, 7]);
+        assert_eq!(m.files, [1, 0, 1, 0, 1, 1, 1]);
+        let rows: Vec<(u32, u64)> = m.rows.iter().map(|r| (r.id.0, r.total)).collect();
+        assert_eq!(rows, [(5, 300), (1, 150)]);
+        assert_eq!(m.rows[1].bytes, [100, 0, 0, 0, 50, 0, 0]);
+        // c (1 byte) and the loose file (7 bytes, row "scan" itself) are folded
+        assert_eq!(m.other, [0, 0, 0, 0, 0, 1, 7]);
+        let all = age_matrix(&t, &ends, EntryId(0), NOW, 10);
+        assert!(all.rows.iter().any(|r| r.id == EntryId(0) && r.total == 7));
+        // scoped below a
+        let a = age_matrix(&t, &ends, EntryId(1), NOW, 10);
+        assert_eq!(a.totals, [100, 0, 0, 0, 50, 0, 0]);
+        assert_eq!(a.rows.iter().map(|r| r.id.0).collect::<Vec<_>>(), [1, 3]);
     }
 
     #[test]

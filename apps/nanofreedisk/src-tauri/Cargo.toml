@@ -21,11 +21,13 @@ tauri-build = { version = "2", features = [] }
 nfd-core = { workspace = true }
 nfd-history = { workspace = true }
 nfd-platform = { workspace = true }
+nfd-rules = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tauri = { version = "2", features = [] }
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
 
 [dev-dependencies]
 tempfile = { workspace = true }

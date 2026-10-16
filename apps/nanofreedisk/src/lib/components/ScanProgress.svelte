@@ -22,7 +22,7 @@
       <p class="muted">{t("scan-errors", { count: formatCount(p.errors, loc) })}</p>
     {/if}
     <p class="hint muted">{t("scan-hint")}</p>
-    <button class="btn" onclick={() => api.cancelScan().catch(fail)}>{t("scan-cancel")}</button>
+    <button class="btn" onclick={() => api.cancelScan().catch(fail)} data-effect title={t("hint-cancel-scan")}>{t("scan-cancel")}</button>
   </div>
 </div>
 

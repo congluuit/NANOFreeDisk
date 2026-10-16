@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 nfd-core = { workspace = true }
+nfd-history = { workspace = true }
 nfd-rules = { workspace = true }
 nfd-platform = { workspace = true }
 anyhow = { workspace = true }

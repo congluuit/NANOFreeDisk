@@ -154,6 +154,32 @@ pub struct ShortcutRows {
     pub unreadable: u64,
 }
 
+/// One row of the age heatmap (A9).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgeRowDto {
+    pub id: u32,
+    pub name: String,
+    pub kind: EntryKind,
+    /// The folder's own files (row for the folder itself).
+    pub direct: bool,
+    pub total: u64,
+    pub bytes: Vec<u64>,
+    pub files: Vec<u64>,
+}
+
+/// Bytes by last-modified age below a folder (A9).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgeDto {
+    /// Upper bounds of the bounded columns, in days.
+    pub bucket_days: Vec<i64>,
+    pub rows: Vec<AgeRowDto>,
+    pub other: Vec<u64>,
+    pub totals: Vec<u64>,
+    pub files: Vec<u64>,
+}
+
 /// Verdict for one shortcut file, computed without holding the session.
 #[derive(Debug, Clone)]
 pub struct ShortcutCheck {
@@ -436,6 +462,50 @@ impl Session {
         })
     }
 
+    /// Age heatmap of the folder `id` (A9) at `now`, `limit` biggest children.
+    #[must_use]
+    pub fn age(&self, id: u32, now: i64, limit: usize) -> Option<AgeDto> {
+        self.get(id)?;
+        let m = insights::age_matrix(&self.tree, &self.ends, EntryId(id), now, limit);
+        Some(AgeDto {
+            bucket_days: insights::AGE_BUCKET_DAYS.to_vec(),
+            rows: m
+                .rows
+                .into_iter()
+                .map(|r| {
+                    let e = self.tree.entry(r.id);
+                    AgeRowDto {
+                        id: r.id.0,
+                        name: self.node(e).name,
+                        kind: e.kind,
+                        direct: r.id.0 == id,
+                        total: r.total,
+                        bytes: r.bytes,
+                        files: r.files,
+                    }
+                })
+                .collect(),
+            other: m.other,
+            totals: m.totals,
+            files: m.files,
+        })
+    }
+
+    /// Every live junction and symbolic link below `id` with its path, for
+    /// [`check_links`].
+    #[must_use]
+    pub fn link_entries(&self, id: u32) -> Vec<(u32, PathBuf)> {
+        let Some(e) = self.get(id) else {
+            return Vec::new();
+        };
+        let range = e.id.index() + 1..self.ends[e.id.index()] as usize;
+        self.tree.entries[range]
+            .iter()
+            .filter(|e| matches!(e.kind, EntryKind::Junction | EntryKind::Symlink) && !e.removed)
+            .map(|e| (e.id.0, self.tree.path(e.id)))
+            .collect()
+    }
+
     /// Every live `.lnk` file below `id` with its path, for [`check_shortcuts`].
     #[must_use]
     pub fn shortcut_files(&self, id: u32) -> Vec<(u32, PathBuf)> {
@@ -693,6 +763,46 @@ pub fn check_shortcuts(
         .collect()
 }
 
+/// Resolve junctions / symbolic links (A3 "orphan junctions"): `read_link` returns
+/// the stored target, `probe` as in [`check_shortcuts`]. Relative symlink targets are
+/// resolved against the link's folder.
+pub fn check_links(
+    links: &[(u32, PathBuf)],
+    read_link: &impl Fn(&Path) -> Option<PathBuf>,
+    probe: &impl Fn(&Path) -> Option<bool>,
+) -> Vec<ShortcutCheck> {
+    links
+        .iter()
+        .map(|(id, path)| {
+            let target = read_link(path).map(|t| {
+                let t = if t.is_relative() {
+                    path.parent().unwrap_or(path).join(t)
+                } else {
+                    t
+                };
+                let s = strip_verbatim(&t).to_string_lossy().replace('/', "\\");
+                let s = s.strip_prefix(r"\??\").map_or(s.clone(), str::to_owned);
+                if s.starts_with(r"\\") {
+                    Target::Network(s)
+                } else if s.as_bytes().get(1) == Some(&b':') {
+                    Target::Local(s)
+                } else {
+                    Target::Unknown
+                }
+            });
+            let status = target.as_ref().map(|t| match t {
+                Target::Local(p) if probe(Path::new(p)).is_none() => Status::Unchecked,
+                _ => shortcut::status(t, &|p| probe(p).unwrap_or(true)),
+            });
+            ShortcutCheck {
+                id: *id,
+                target,
+                status,
+            }
+        })
+        .collect()
+}
+
 fn kind_code(kind: EntryKind) -> u8 {
     match kind {
         EntryKind::File | EntryKind::Other => 0,
@@ -777,6 +887,47 @@ mod tests {
         let crumbs: Vec<&str> = d.ancestors.iter().map(|c| c.name.as_str()).collect();
         assert_eq!(&crumbs[1..], ["a", "b", "big.bin"]);
         assert!(d.share > 0.5 && d.share < 1.0);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn orphan_junctions_are_found() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        fs::create_dir_all(root.join("target-ok")).expect("mkdir");
+        fs::create_dir_all(root.join("target-gone")).expect("mkdir");
+        for (link, target) in [("ok-link", "target-ok"), ("orphan", "target-gone")] {
+            let status = std::process::Command::new("cmd")
+                .args(["/C", "mklink", "/J"])
+                .arg(root.join(link))
+                .arg(root.join(target))
+                .output()
+                .expect("mklink");
+            assert!(status.status.success(), "{status:?}");
+        }
+        fs::remove_dir(root.join("target-gone")).expect("rmdir");
+        let tree = scan(root, &ScanOptions::default(), None).expect("scan");
+        let s = Session::new(tree, 0, 0);
+        let links = s.link_entries(0);
+        assert_eq!(links.len(), 2);
+        let checks = check_links(&links, &|p| fs::read_link(p).ok(), &|p| Some(p.exists()));
+        let rows = s.shortcut_rows(&checks, 10);
+        let names: Vec<&str> = rows
+            .rows
+            .iter()
+            .map(|r| r.located.node.name.as_str())
+            .collect();
+        assert_eq!(names, ["orphan"]);
+        assert!(
+            rows.rows[0].target.ends_with("target-gone"),
+            "{}",
+            rows.rows[0].target
+        );
+        assert!(!rows.rows[0].target.starts_with(r"\\?\"));
+        assert_eq!(rows.rows[0].status, Status::Missing);
+
+        let age = s.age(0, i64::MAX / 2, 10).expect("age");
+        assert_eq!(age.bucket_days.len() + 2, age.totals.len());
     }
 
     #[test]

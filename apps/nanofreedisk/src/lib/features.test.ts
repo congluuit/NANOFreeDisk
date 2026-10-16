@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import { cliArg, nfdScan, sizeFlag } from "./cli.ts";
 import { daysBetween, formatDelta } from "./format.ts";
+import { renderArticle } from "./md.ts";
 import { fold, fuzzyScore, rank } from "./palette.ts";
 import { buildReport, esc, treemapSvg } from "./report.ts";
 import type { Detail, Slice, Summary } from "./types.ts";
@@ -109,6 +110,31 @@ test("report is one self-contained document", () => {
   assert.ok(html.includes("analyze-truncated"));
   assert.ok(html.includes("ol-summary(files=1"));
   assert.equal((html.match(/<x>/g) ?? []).length, 0);
+  assert.ok(!html.includes("report-changes"), "no history, no section");
+});
+
+test("report includes What changed? when a diff is given", () => {
+  const snap = { id: 1, root: "C:\\", volume: "c:\\", startedAt: 0, elapsedMs: 0, files: 1, dirs: 1, onDisk: 1, volumeTotal: 1, volumeFree: 1, issues: 0, dirFloor: 0, fileFloor: 0 };
+  const folder: Detail = {
+    id: 0, name: "C:\\", kind: "dir", logical: 1, onDisk: 1, files: 1, mtime: 0, attrs: [], hasChildren: false,
+    hardlinkDup: false, path: "C:\\", ancestors: [], share: 1,
+  };
+  const html = buildReport(
+    {
+      folder, slice: slice(), children: [], extensions: [], topFiles: [], oldLarge: null,
+      summary: { root: "C:\\", rootId: 0, elapsedMs: 0, scannedAt: 0, issues: 0, mode: "standard", volumeTotal: 0, volumeFree: 0,
+        stats: { files: 1, dirs: 1, symlinks: 0, junctions: 0, mount_points: 0, other: 0, hardlink_dups: 0, logical: 1, on_disk: 1, errors: 0, approximate: 0 } },
+      changes: {
+        older: snap, newer: { ...snap, id: 2, startedAt: 7 * 86_400 }, onDiskDelta: 2 ** 30, filesDelta: 3, freeDelta: -(2 ** 30),
+        grew: [{ path: "Games\\<big>", depth: 1, before: 0, after: 2 ** 30, delta: 2 ** 30, filesDelta: 3 }], shrank: [], filesUp: [], filesDown: [],
+      },
+      vars: {}, dark: false, version: "1", generatedAt: 0, locale: "en-US",
+    },
+    t,
+  );
+  assert.ok(html.includes("report-changes(date="));
+  assert.ok(html.includes("changes-summary(days=7,size=+1.0 GB,files=+3)"));
+  assert.ok(html.includes("Games\\&#60;big&#62;"));
 });
 
 test("signed size changes and day counts", () => {
@@ -117,4 +143,11 @@ test("signed size changes and day counts", () => {
   assert.equal(formatDelta(0), "0 B");
   assert.equal(daysBetween(0, 7 * 86_400 + 3600), 7);
   assert.equal(daysBetween(10, 0), 0);
+});
+
+test("encyclopedia markdown is escaped and minimal", () => {
+  assert.equal(
+    renderArticle("Line one\nwraps.\n\n**If you delete it:** run `a <b> **c**`.\n\n<script>x</script>"),
+    "<p>Line one wraps.</p><p><strong>If you delete it:</strong> run <code>a &lt;b&gt; **c**</code>.</p><p>&lt;script&gt;x&lt;/script&gt;</p>",
+  );
 });

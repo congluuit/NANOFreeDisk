@@ -49,6 +49,14 @@ pub struct ScanArgs {
     /// de-duplicated either way.
     #[arg(long)]
     exact_links: bool,
+
+    /// Save a snapshot to the scan history (the desktop app's, or --db) for `nfd diff`.
+    #[arg(long)]
+    save: bool,
+
+    /// History database used by --save [default: the desktop app's].
+    #[arg(long, value_name = "FILE", requires = "save")]
+    db: Option<PathBuf>,
 }
 
 fn parse_size_arg(s: &str) -> Result<u64, String> {
@@ -57,6 +65,9 @@ fn parse_size_arg(s: &str) -> Result<u64, String> {
 
 pub fn run(args: ScanArgs) -> anyhow::Result<ExitCode> {
     let tree = scan_with_progress(&args)?;
+    if args.save {
+        save(&tree, args.db.clone())?;
+    }
     let stdout = io::stdout();
     let mut out = BufWriter::new(stdout.lock());
     let written = if args.json {
@@ -73,6 +84,33 @@ pub fn run(args: ScanArgs) -> anyhow::Result<ExitCode> {
         Err(e) if e.kind() != io::ErrorKind::BrokenPipe => Err(e).context("writing output"),
         _ => Ok(ExitCode::SUCCESS),
     }
+}
+
+/// Store the scan in the history, with the free space of its volume.
+fn save(tree: &ScanTree, db: Option<PathBuf>) -> anyhow::Result<()> {
+    let root = tree.root.to_string_lossy().to_lowercase();
+    let volume = nfd_platform::volumes::list()
+        .into_iter()
+        .filter(|v| root.starts_with(&v.root.to_string_lossy().to_lowercase()))
+        .max_by_key(|v| v.root.as_os_str().len());
+    let (name, state) = volume.map_or_else(
+        || (String::new(), nfd_history::VolumeState::default()),
+        |v| {
+            (
+                v.root.to_string_lossy().into_owned(),
+                nfd_history::VolumeState {
+                    total: v.total,
+                    free: v.free,
+                },
+            )
+        },
+    );
+    let mut history = crate::diff::open_history(db)?;
+    let id = history
+        .record(tree, &name, state, &nfd_history::RecordOptions::default())
+        .context("saving the scan to the history")?;
+    eprintln!("saved scan #{id} to the history (compare later with `nfd diff`)");
+    Ok(())
 }
 
 fn scan_with_progress(args: &ScanArgs) -> anyhow::Result<ScanTree> {

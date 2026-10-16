@@ -161,7 +161,7 @@
         <button class="btn ghost" disabled={!rows?.rows.length} onclick={() => (selected = rows?.rows.map((r) => r.id) ?? [])}>
           {t("ol-select-all")}
         </button>
-        <button class="btn danger-outline" disabled={!selected.length} title={t("action-recycle-hint")} onclick={() => askDelete(selected)}>
+        <button class="btn danger-outline" disabled={!selected.length} data-effect title={t("action-recycle-hint")} onclick={() => askDelete(selected)}>
           <Icon name="trash" size={16} />{selected.length ? t("action-recycle-n", { count: selected.length }) : t("action-recycle")}
         </button>
       </div>

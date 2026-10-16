@@ -82,6 +82,13 @@ export async function exportHtmlReport(): Promise<void> {
       api.extensions(id, 25),
       api.oldAndLarge(id, { ...oldLargeOptions(), limit: 1 }).catch(() => null),
     ]);
+    // "What changed?" against the previous saved scan of the scanned folder
+    let changes = null;
+    if (app.snapshot != null) {
+      const newer = app.snapshot;
+      const older = (await api.historySnapshots(summary.root).catch(() => [])).find((s) => s.id !== newer);
+      if (older) changes = await api.historyDiff(older.id, newer, 10 * 2 ** 20, 15).catch(() => null);
+    }
     const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
     const palette = resolvePalette(app.settings.theme, dark, app.info?.accent ?? null);
     const html = buildReport(
@@ -93,6 +100,7 @@ export async function exportHtmlReport(): Promise<void> {
         topFiles,
         extensions,
         oldLarge,
+        changes,
         vars: paletteVars(palette.colors, palette.dark),
         dark: palette.dark,
         version: app.info?.version ?? "",

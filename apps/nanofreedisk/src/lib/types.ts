@@ -248,6 +248,41 @@ export interface HealthScore {
   findings: Finding[];
 }
 
+export interface AgeRow {
+  id: number;
+  name: string;
+  kind: EntryKind;
+  /** The folder's own files. */
+  direct: boolean;
+  total: number;
+  bytes: number[];
+  files: number[];
+}
+
+/** Bytes by last-modified age (A9). Columns: < 30 d, < 6 m, < 1 y, < 2 y, < 5 y, older, unknown. */
+export interface AgeMatrix {
+  bucketDays: number[];
+  rows: AgeRow[];
+  other: number[];
+  totals: number[];
+  files: number[];
+}
+
+export type Risk = "safe" | "caution" | "advanced" | "protected";
+
+/** Folder Encyclopedia article (A5), already in the UI language. */
+export interface Article {
+  id: string;
+  risk: Risk;
+  title: string;
+  /** Markdown subset, see `md.ts`. */
+  body: string;
+  /** The entry is inside the folder the article is about. */
+  inside: boolean;
+  path: string;
+  rules: string[];
+}
+
 export type BlockReason =
   | "volume-root"
   | "system-dir"

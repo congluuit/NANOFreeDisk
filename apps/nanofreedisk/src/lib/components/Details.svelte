@@ -1,12 +1,50 @@
 <script lang="ts">
   import { api } from "../api";
   import { formatCount, formatDate, formatPercent, formatSize } from "../format";
-  import { intlLocale, t } from "../i18n.svelte";
+  import { i18n, intlLocale, t } from "../i18n.svelte";
+  import { renderArticle } from "../md";
   import { app, askDelete, expert, fail, navigate, toast } from "../state.svelte";
   import Icon from "./Icon.svelte";
-  import type { Detail } from "../types";
+  import type { Article, Detail } from "../types";
 
   let detail = $state<Detail | null>(null);
+  let article = $state<Article | null>(null);
+  let showArticle = $state(true);
+  let owner = $state<string | null>(null);
+
+  // A9: owner account of the focused entry (read from its security descriptor)
+  $effect(() => {
+    const id = app.focus;
+    owner = null;
+    if (id == null) return;
+    let cancelled = false;
+    api
+      .owner(id)
+      .then((o) => !cancelled && (owner = o))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  });
+
+  // Folder Encyclopedia (A5): "What is this?" for the focused entry or its parent
+  $effect(() => {
+    const id = app.focus;
+    const lang = i18n.locale;
+    void app.version;
+    if (id == null) {
+      article = null;
+      return;
+    }
+    let cancelled = false;
+    api
+      .explain(id, lang)
+      .then((a) => !cancelled && (article = a))
+      .catch(() => !cancelled && (article = null));
+    return () => {
+      cancelled = true;
+    };
+  });
   const loc = $derived(intlLocale());
   const rootId = $derived(app.summary?.rootId ?? 0);
   const targets = $derived(app.selected.length ? app.selected : detail && detail.id !== rootId ? [detail.id] : []);
@@ -66,6 +104,27 @@
         {#if detail.hardlinkDup}<span class="chip">{t("attr-hardlink")}</span>{/if}
       </div>
     {/if}
+    {#if owner}
+      <p class="owner muted small" title={t("details-owner-hint")}>{t("details-owner")}: <span class="mono">{owner}</span></p>
+    {/if}
+    {#if article}
+      <div class="article risk-{article.risk}">
+        <button class="ahead" onclick={() => (showArticle = !showArticle)} aria-expanded={showArticle}>
+          <Icon name="shield" size={16} />
+          <span class="ellipsis">
+            <span class="muted">{article.inside ? t("encyclopedia-inside") : t("encyclopedia-title")}</span>
+            <strong>{article.title}</strong>
+          </span>
+          <span class="risk">{t(`risk-${article.risk}`)}</span>
+        </button>
+        {#if showArticle}
+          <!-- escaped by renderArticle (md.ts) -->
+          <div class="abody">{@html renderArticle(article.body)}</div>
+          {#if article.inside}<p class="muted small mono ellipsis" title={article.path}>{article.path}</p>{/if}
+          <p class="muted small">{t("encyclopedia-note")}</p>
+        {/if}
+      </div>
+    {/if}
     <div class="actions">
       {#if detail.kind === "dir" && detail.id !== app.current}
         <button class="btn" onclick={() => navigate(detail!.id)}><Icon name="zoom" size={16} />{t("action-zoom")}</button>
@@ -77,6 +136,7 @@
       <span class="grow"></span>
       <button
         class="btn danger-outline"
+        data-effect
         disabled={!targets.length}
         title={t("action-recycle-hint")}
         onclick={() => askDelete(targets)}
@@ -159,5 +219,60 @@
   .hint {
     margin: 0;
     font-size: 0.8em;
+  }
+  .article {
+    margin: 8px 0;
+    border: 1px solid var(--border);
+    border-left: 4px solid var(--risk-safe);
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    padding: 6px 10px;
+    max-height: 40vh;
+    overflow: auto;
+  }
+  .article.risk-caution {
+    border-left-color: var(--risk-caution);
+  }
+  .article.risk-advanced {
+    border-left-color: var(--risk-advanced);
+  }
+  .article.risk-protected {
+    border-left-color: var(--risk-protected);
+  }
+  .ahead {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    border: none;
+    background: none;
+    padding: 2px 0;
+    text-align: left;
+  }
+  .ahead > span.ellipsis {
+    flex: 1;
+    display: flex;
+    gap: 6px;
+  }
+  .risk {
+    font-size: 0.78em;
+    padding: 0 6px;
+    border-radius: 4px;
+    border: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  .abody :global(p) {
+    margin: 6px 0;
+    font-size: 0.92em;
+  }
+  .abody :global(code) {
+    font-family: "Cascadia Mono", Consolas, ui-monospace, monospace;
+    font-size: 0.9em;
+    padding: 0 3px;
+    border-radius: 3px;
+    background: var(--surface);
+  }
+  .owner {
+    margin: 4px 0 0;
   }
 </style>

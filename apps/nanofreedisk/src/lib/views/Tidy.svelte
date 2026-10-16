@@ -14,6 +14,7 @@
 
   let empty = $state<EmptyRows | null>(null);
   let links = $state<ShortcutRows | null>(null);
+  let junctions = $state<ShortcutRows | null>(null);
   let checking = $state(false);
   let selected = $state<number[]>([]);
   let menu: { x: number; y: number; items: MenuItem[] } | null = $state(null);
@@ -26,6 +27,7 @@
     if (!app.summary) return;
     let cancelled = false;
     api.emptyFolders(id, 2000).then((r) => !cancelled && (empty = r)).catch(fail);
+    api.brokenLinks(id, 2000).then((r) => !cancelled && (junctions = r)).catch(fail);
     checking = true;
     api
       .brokenShortcuts(id, 2000)
@@ -106,6 +108,23 @@
           <ItemTable rows={links.rows} {selected} onselect={toggle} oncontext={context} onreveal={reveal} aux={{ label: t("tidy-target"), value: target, wide: true }} />
         {:else if links && !checking}
           <p class="muted none"><Icon name="check" size={18} />{t("tidy-links-none")}</p>
+        {/if}
+      </div>
+    </div>
+
+    <div class="card block">
+      <h2>
+        <Icon name="link" size={18} />{t("tidy-junctions-title")}
+        {#if junctions}<span class="count">{formatCount(junctions.rows.length, loc)}</span>{/if}
+      </h2>
+      {#if junctions}
+        <p class="muted small">{t("tidy-junctions-summary", { checked: junctions.checked })}</p>
+      {/if}
+      <div class="body">
+        {#if junctions?.rows.length}
+          <ItemTable rows={junctions.rows} {selected} onselect={toggle} oncontext={context} onreveal={reveal} aux={{ label: t("tidy-target"), value: target, wide: true }} />
+        {:else if junctions}
+          <p class="muted none"><Icon name="check" size={18} />{t("tidy-junctions-none")}</p>
         {/if}
       </div>
     </div>

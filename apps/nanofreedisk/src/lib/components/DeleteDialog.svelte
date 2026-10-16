@@ -130,7 +130,7 @@
 
     <footer>
       <button class="btn cancel" onclick={close} disabled={busy}>{t("delete-cancel")}</button>
-      <button class="btn danger" onclick={go} disabled={!canGo} title={t("action-recycle-hint")}>
+      <button class="btn danger" onclick={go} disabled={!canGo} data-effect title={t("action-recycle-hint")}>
         <Icon name="trash" size={16} />
         {busy ? t("delete-working") : t("delete-confirm")}
       </button>

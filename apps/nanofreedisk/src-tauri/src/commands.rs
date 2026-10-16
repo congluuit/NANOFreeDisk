@@ -20,8 +20,8 @@ use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
 use tauri_plugin_opener::OpenerExt;
 
 use crate::session::{
-    self, DeletePlan, Detail, EmptyRows, ExtRow, Located, Node, OldLargeRows, SearchRows, Session,
-    ShortcutRows, Slice,
+    self, AgeDto, DeletePlan, Detail, EmptyRows, ExtRow, Located, Node, OldLargeRows, SearchRows,
+    Session, ShortcutRows, Slice,
 };
 
 /// Shared application state.
@@ -32,6 +32,51 @@ pub struct AppState {
     scan_seq: AtomicU32,
     /// Scan history, opened on first use (`None` inside = not opened yet).
     history: Mutex<Option<History>>,
+    /// Folder Encyclopedia with this machine's paths expanded (built on first use).
+    encyclopedia: std::sync::OnceLock<nfd_rules::encyclopedia::Matcher>,
+    /// Folder given on the command line, handed to the UI once.
+    startup: Mutex<Option<String>>,
+}
+
+impl AppState {
+    pub fn set_startup_path(&self, path: Option<String>) {
+        if let Ok(mut slot) = self.startup.lock() {
+            *slot = path;
+        }
+    }
+}
+
+/// The folder the app was started with (A7), once; `None` afterwards.
+#[tauri::command]
+pub fn take_startup_path(state: State<'_, AppState>) -> CmdResult<Option<String>> {
+    Ok(state.startup.lock().map_err(|e| err("internal", e))?.take())
+}
+
+/// Whether the Explorer menu points at this executable.
+#[tauri::command]
+pub fn shell_menu_status() -> CmdResult<bool> {
+    let exe = std::env::current_exe().map_err(|e| err("os", e))?;
+    Ok(nfd_platform::shell_menu::registered_command()
+        .is_some_and(|c| c.eq_ignore_ascii_case(&nfd_platform::shell_menu::command_line(&exe))))
+}
+
+/// Add or remove "Analyze with NANOFreeDisk" in Explorer's right-click menu
+/// (per user, `HKCU` only). `caption` is the menu text in the UI language.
+#[tauri::command]
+pub fn shell_menu_set(enabled: bool, caption: String) -> CmdResult<bool> {
+    if enabled {
+        let exe = std::env::current_exe().map_err(|e| err("os", e))?;
+        let caption = caption.trim();
+        let caption = if caption.is_empty() {
+            "Analyze with NANOFreeDisk"
+        } else {
+            caption
+        };
+        nfd_platform::shell_menu::register(&exe, caption).map_err(|e| err("os", e))?;
+    } else {
+        nfd_platform::shell_menu::unregister().map_err(|e| err("os", e))?;
+    }
+    shell_menu_status()
 }
 
 /// Error sent to the UI.
@@ -501,6 +546,95 @@ pub async fn history_forget(
     root: String,
 ) -> CmdResult<usize> {
     with_history(&app, &state, |h| h.forget(&root))
+}
+
+/// A Folder Encyclopedia article in one language (A5).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArticleDto {
+    id: String,
+    risk: nfd_core::RiskLevel,
+    title: String,
+    body: String,
+    /// The entry is inside the folder the article is about.
+    inside: bool,
+    /// The folder the article is about.
+    path: String,
+    rules: Vec<String>,
+}
+
+/// "What is this?" for an entry of the loaded scan: the article for it or its
+/// nearest described ancestor, in `lang` (falls back to English). Read-only.
+#[tauri::command]
+pub fn explain(state: State<'_, AppState>, id: u32, lang: String) -> CmdResult<Option<ArticleDto>> {
+    let path = with_session(&state, |s| s.path(id))?.ok_or_else(|| err("not-found", id))?;
+    let matcher = state.encyclopedia.get_or_init(|| {
+        let platform = nfd_platform::Native;
+        nfd_rules::encyclopedia::Matcher::new(
+            nfd_rules::encyclopedia::builtin(),
+            &platform.resolver(),
+        )
+    });
+    let Some(hit) = matcher.lookup(&path, &|p| p.exists()) else {
+        return Ok(None);
+    };
+    let a = hit.article;
+    let text = a.text.get(&lang).or_else(|| a.text.get("en"));
+    let matched = path
+        .ancestors()
+        .nth(hit.depth_up)
+        .unwrap_or(&path)
+        .to_string_lossy()
+        .into_owned();
+    Ok(text.map(|t| ArticleDto {
+        id: a.id.clone(),
+        risk: a.risk,
+        title: t.title.clone(),
+        body: t.body.clone(),
+        inside: hit.inside,
+        path: matched,
+        rules: a.rules.clone(),
+    }))
+}
+
+/// Bytes by last-modified age below `id`, per child (A9 heatmap).
+#[tauri::command]
+pub fn age_matrix(state: State<'_, AppState>, id: u32, limit: usize) -> CmdResult<AgeDto> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX));
+    with_session(&state, |s| s.age(id, now, limit.min(100)))?.ok_or_else(|| err("not-found", id))
+}
+
+/// Owner account of an entry (A9), read from its security descriptor.
+#[tauri::command]
+pub async fn owner(state: State<'_, AppState>, id: u32) -> CmdResult<Option<String>> {
+    let path = with_session(&state, |s| s.path(id))?.ok_or_else(|| err("not-found", id))?;
+    Ok(nfd_platform::owner::owner_name(&path))
+}
+
+/// Junctions and symbolic links below `id` whose target is gone (A3); read-only.
+#[tauri::command]
+pub async fn broken_links(
+    state: State<'_, AppState>,
+    id: u32,
+    limit: usize,
+) -> CmdResult<ShortcutRows> {
+    let links = with_session(&state, |s| s.link_entries(id))?;
+    let remote: Vec<String> = volumes::list()
+        .into_iter()
+        .filter(|v| matches!(v.kind, VolumeKind::Network | VolumeKind::Optical))
+        .map(|v| v.root.to_string_lossy().to_lowercase())
+        .collect();
+    let probe = |p: &Path| {
+        let s = p.to_string_lossy().to_lowercase();
+        if remote.iter().any(|r| s.starts_with(r.as_str())) {
+            return None;
+        }
+        Some(p.try_exists().unwrap_or(true))
+    };
+    let checks = session::check_links(&links, &|p| std::fs::read_link(p).ok(), &probe);
+    with_session(&state, |s| s.shortcut_rows(&checks, limit.min(10_000)))
 }
 
 /// Id of the entry at `path` (relative to the scanned folder) in the loaded scan.

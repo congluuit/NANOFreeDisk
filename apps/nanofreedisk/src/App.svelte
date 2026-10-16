@@ -122,7 +122,8 @@
           role="radio"
           aria-checked={app.settings.mode === m}
           class:on={app.settings.mode === m}
-          title={t(`mode-${m}-hint`)}
+          data-effect
+          title={`${t(`mode-${m}-hint`)} ${t("hint-mode")}`}
           onclick={() => (app.settings.mode = m)}
         >
           {t(`mode-${m}`)}
