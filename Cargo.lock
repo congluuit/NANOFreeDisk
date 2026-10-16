@@ -2217,6 +2217,7 @@ name = "nanofreedisk"
 version = "0.1.0"
 dependencies = [
  "nfd-core",
+ "nfd-devtools",
  "nfd-helper",
  "nfd-history",
  "nfd-hwinfo",
@@ -2273,6 +2274,7 @@ dependencies = [
  "clap",
  "indicatif",
  "nfd-core",
+ "nfd-devtools",
  "nfd-history",
  "nfd-hwinfo",
  "nfd-platform",
@@ -2293,6 +2295,19 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "nfd-devtools"
+version = "0.1.0"
+dependencies = [
+ "nfd-core",
+ "nfd-platform",
+ "nfd-rules",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
 ]
 
 [[package]]
@@ -2341,6 +2356,7 @@ dependencies = [
  "globset",
  "nfd-core",
  "nfd-platform",
+ "rayon",
  "serde",
  "tempfile",
  "thiserror 2.0.21",

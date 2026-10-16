@@ -50,7 +50,7 @@ impl CleanState {
     }
 }
 
-fn app_local(app: &AppHandle) -> Option<PathBuf> {
+pub(super) fn app_local(app: &AppHandle) -> Option<PathBuf> {
     app.path().app_local_data_dir().ok()
 }
 
@@ -58,7 +58,7 @@ fn roots(app: &AppHandle) -> QuarantineRoots {
     QuarantineRoots::new(app_local(app).as_deref())
 }
 
-fn audit_dir(app: &AppHandle) -> Option<PathBuf> {
+pub(super) fn audit_dir(app: &AppHandle) -> Option<PathBuf> {
     app_local(app).map(|d| d.join("logs"))
 }
 
@@ -68,7 +68,7 @@ fn gate() -> SafetyGate {
 
 /// Store a finished operation in the journal and the audit log. Journal problems are
 /// returned as text (the operation itself already happened).
-fn journal(app: &AppHandle, state: &AppState, op: &Operation) -> Option<String> {
+pub(super) fn journal(app: &AppHandle, state: &AppState, op: &Operation) -> Option<String> {
     if let Some(dir) = audit_dir(app) {
         let _ = nfd_history::audit::append(&dir, op);
     }
@@ -116,6 +116,20 @@ fn scan_dto(c: &Cached, packs: &[nfd_rules::Pack]) -> CleanScanDto {
     }
 }
 
+/// The built-in packs, or the packs of `rules_dir` (tests), which must validate.
+pub(super) fn load_packs(rules_dir: Option<String>) -> CmdResult<Vec<nfd_rules::Pack>> {
+    match rules_dir {
+        Some(dir) => {
+            let packs = nfd_rules::load_dir(Path::new(&dir)).map_err(|e| err("rules", e))?;
+            if nfd_rules::has_errors(&nfd_rules::validate(&packs)) {
+                return Err(err("rules", "the rule packs do not validate"));
+            }
+            Ok(packs)
+        }
+        None => nfd_rules::builtin_packs().map_err(|e| err("rules", e)),
+    }
+}
+
 /// Match the rule packs on this machine (read-only). `rules_dir` replaces the
 /// built-in packs (tests); such packs must validate. Also purges quarantines older
 /// than 7 days.
@@ -129,16 +143,7 @@ pub async fn clean_scan(
     let _ = with_history(&app, &state, |h| {
         h.purge_expired(&roots(&app), exec::unix_now(), None)
     });
-    let packs = match rules_dir {
-        Some(dir) => {
-            let packs = nfd_rules::load_dir(Path::new(&dir)).map_err(|e| err("rules", e))?;
-            if nfd_rules::has_errors(&nfd_rules::validate(&packs)) {
-                return Err(err("rules", "the rule packs do not validate"));
-            }
-            packs
-        }
-        None => nfd_rules::builtin_packs().map_err(|e| err("rules", e))?,
-    };
+    let packs = load_packs(rules_dir)?;
     let packs2 = packs.clone();
     let report = tauri::async_runtime::spawn_blocking(move || {
         let resolve = nfd_platform::Native.resolver();
@@ -167,19 +172,9 @@ pub struct CandidateDto {
     newest: i64,
 }
 
-/// The largest items one rule would clean (preview).
-#[tauri::command]
-pub fn clean_items(
-    clean: State<'_, CleanState>,
-    rule_id: String,
-    limit: usize,
-) -> CmdResult<Vec<CandidateDto>> {
-    let guard = clean.report.lock().map_err(|e| err("internal", e))?;
-    let cached = guard
-        .as_ref()
-        .ok_or_else(|| err("no-clean-scan", "no rule scan yet"))?;
-    let mut items: Vec<CandidateDto> = cached
-        .report
+/// The `limit` largest candidates of one rule (preview).
+pub(super) fn largest(report: &MatchReport, rule_id: &str, limit: usize) -> Vec<CandidateDto> {
+    let mut items: Vec<CandidateDto> = report
         .candidates
         .iter()
         .filter(|c| c.rule_id == rule_id)
@@ -193,7 +188,21 @@ pub fn clean_items(
         .collect();
     items.sort_by_key(|c| std::cmp::Reverse(c.bytes));
     items.truncate(limit);
-    Ok(items)
+    items
+}
+
+/// The largest items one rule would clean (preview).
+#[tauri::command]
+pub fn clean_items(
+    clean: State<'_, CleanState>,
+    rule_id: String,
+    limit: usize,
+) -> CmdResult<Vec<CandidateDto>> {
+    let guard = clean.report.lock().map_err(|e| err("internal", e))?;
+    let cached = guard
+        .as_ref()
+        .ok_or_else(|| err("no-clean-scan", "no rule scan yet"))?;
+    Ok(largest(&cached.report, &rule_id, limit))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -228,7 +237,7 @@ pub struct OperationDto {
     journal_error: Option<String>,
 }
 
-fn op_dto(op: &Operation, journal_error: Option<String>) -> OperationDto {
+pub(super) fn op_dto(op: &Operation, journal_error: Option<String>) -> OperationDto {
     OperationDto {
         id: op.id.clone(),
         freed: op.freed(),
@@ -257,54 +266,54 @@ fn op_dto(op: &Operation, journal_error: Option<String>) -> OperationDto {
     }
 }
 
-/// Clean every candidate of `rule_ids` from the last rule scan. 🟠 Advanced rules
-/// need `expert`; `permanent` (Expert, 🟢 Safe only) skips the quarantine. Progress
-/// streams as `clean-progress`; [`clean_cancel`] stops between items.
-#[tauri::command]
-pub async fn clean_run(
-    app: AppHandle,
-    window: WebviewWindow,
-    state: State<'_, AppState>,
-    clean: State<'_, CleanState>,
-    rule_ids: Vec<String>,
+/// A plan for every candidate of the ticked `rule_ids`: 🟠 Advanced rules only in
+/// Expert mode, `permanent` (Expert, 🟢 Safe only) skips the quarantine.
+pub(super) fn rules_plan(
+    report: &MatchReport,
+    rule_ids: &[String],
     expert: bool,
     permanent: bool,
-) -> CmdResult<OperationDto> {
-    let mut plan = {
-        let guard = clean.report.lock().map_err(|e| err("internal", e))?;
-        let cached = guard
-            .as_ref()
-            .ok_or_else(|| err("no-clean-scan", "no rule scan yet"))?;
-        let items = cached
-            .report
-            .plan_items()
-            .into_iter()
-            .filter(|i| i.rule_id.as_ref().is_some_and(|r| rule_ids.contains(r)))
-            .collect();
-        plan::build(
-            items,
-            PlanOptions {
-                expert,
-                include_caution: true,
-                permanent: permanent && expert,
-            },
-        )
-    };
+) -> CleanPlan {
+    let items = report
+        .plan_items()
+        .into_iter()
+        .filter(|i| i.rule_id.as_ref().is_some_and(|r| rule_ids.contains(r)))
+        .collect();
+    let mut plan = plan::build(
+        items,
+        PlanOptions {
+            expert,
+            include_caution: true,
+            permanent: permanent && expert,
+        },
+    );
     // the user ticked these rules: everything they cover may go, Advanced in
     // Expert mode only (the planner already dropped Protected)
     for item in &mut plan.items {
         item.selected = item.level() != RiskLevel::Advanced || expert;
     }
+    plan
+}
+
+/// Run `plan` through the SafetyGate and the executor on a worker thread, streaming
+/// `clean-progress`; `cancel` stops between items. The operation is journaled as
+/// `kind`.
+pub(super) async fn execute_plan(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    state: &State<'_, AppState>,
+    plan: CleanPlan,
+    kind: &str,
+    cancel: Arc<AtomicBool>,
+) -> CmdResult<OperationDto> {
     if plan.selected().next().is_none() {
         return Err(err("nothing-to-clean", "the rules have nothing to clean"));
     }
-    let cancel = Arc::new(AtomicBool::new(false));
-    *clean.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
     let opts = ExecOptions {
         op_id: exec::new_op_id(exec::unix_now()),
-        kind: "clean".into(),
-        owner: owner_handle(&window),
-        roots: roots(&app),
+        kind: kind.into(),
+        owner: owner_handle(window),
+        roots: roots(app),
         now: exec::unix_now(),
     };
     let emitter = app.clone();
@@ -326,11 +335,37 @@ pub async fn clean_run(
     })
     .await
     .map_err(|e| err("internal", e))?;
+    let journal_error = journal(app, state, &op);
+    Ok(op_dto(&op, journal_error))
+}
+
+/// Clean every candidate of `rule_ids` from the last rule scan. 🟠 Advanced rules
+/// need `expert`; `permanent` (Expert, 🟢 Safe only) skips the quarantine. Progress
+/// streams as `clean-progress`; [`clean_cancel`] stops between items.
+#[tauri::command]
+pub async fn clean_run(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    clean: State<'_, CleanState>,
+    rule_ids: Vec<String>,
+    expert: bool,
+    permanent: bool,
+) -> CmdResult<OperationDto> {
+    let plan = {
+        let guard = clean.report.lock().map_err(|e| err("internal", e))?;
+        let cached = guard
+            .as_ref()
+            .ok_or_else(|| err("no-clean-scan", "no rule scan yet"))?;
+        rules_plan(&cached.report, &rule_ids, expert, permanent)
+    };
+    let cancel = Arc::new(AtomicBool::new(false));
+    *clean.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
+    let result = execute_plan(&app, &window, &state, plan, "clean", cancel).await;
     *clean.cancel.lock().map_err(|e| err("internal", e))? = None;
     // the candidates are stale now: the next visit rescans
     *clean.report.lock().map_err(|e| err("internal", e))? = None;
-    let journal_error = journal(&app, &state, &op);
-    Ok(op_dto(&op, journal_error))
+    result
 }
 
 /// Stop a running clean after the current item.

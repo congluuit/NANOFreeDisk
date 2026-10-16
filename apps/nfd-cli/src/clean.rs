@@ -32,7 +32,7 @@ pub enum Level {
 }
 
 impl Level {
-    const fn max(self) -> RiskLevel {
+    pub const fn max(self) -> RiskLevel {
         match self {
             Self::Safe => RiskLevel::Safe,
             Self::Caution => RiskLevel::Caution,
@@ -78,6 +78,9 @@ pub struct CleanArgs {
     /// Also list items too deep to show by default.
     #[arg(long, default_value_t = 20)]
     pub top: usize,
+    /// The command named in the dry-run hint (`nfd devcache clean` reuses these args).
+    #[arg(skip)]
+    pub command: Option<String>,
 }
 
 pub fn load_packs(dir: Option<&Path>) -> anyhow::Result<Vec<nfd_rules::Pack>> {
@@ -132,7 +135,8 @@ pub fn run(args: CleanArgs) -> anyhow::Result<ExitCode> {
     } else {
         print_report(&report, &plan, args.top);
         println!(
-            "\nDry run: nothing was deleted. Run `nfd clean --apply{}` to clean the selected items.",
+            "\nDry run: nothing was deleted. Run `{} --apply{}` to clean the selected items.",
+            args.command.as_deref().unwrap_or("nfd clean"),
             match args.level {
                 Level::Safe => "",
                 Level::Caution => " --level caution",

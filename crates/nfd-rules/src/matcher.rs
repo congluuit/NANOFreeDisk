@@ -13,6 +13,10 @@
 //! or an unreadable sub-folder. Then it is split and only what may go is proposed.
 //! Every candidate is checked with the lexical [`SafetyGate`] right away; refused ones
 //! are counted, never proposed.
+//!
+//! The paths of 🔴 Protected rules ("🔒 Keep": config, credentials, extensions,
+//! memories…) are an `exclude` of **every** rule, so a broad cache rule can never
+//! sweep up something another rule promises to keep.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -22,6 +26,7 @@ use nfd_core::RiskLevel;
 use nfd_core::plan::{DeleteMode, PlanItem};
 use nfd_core::safety::{Origin, SafetyGate};
 use nfd_platform::fsinfo::{self, FileInfo, LinkKind};
+use rayon::prelude::*;
 use serde::Serialize;
 
 use crate::{Pack, Rule, expand};
@@ -199,6 +204,8 @@ struct CompiledRule {
 #[derive(Debug, Clone)]
 pub struct Matcher {
     rules: Vec<CompiledRule>,
+    /// Paths of 🔴 Protected rules, excluded from every rule.
+    keep: Vec<GlobMatcher>,
     gate: SafetyGate,
 }
 
@@ -262,6 +269,7 @@ impl Matcher {
     #[must_use]
     pub fn new(packs: &[Pack], resolve: &impl Fn(&str) -> Option<String>, platform: &str) -> Self {
         let mut rules = Vec::new();
+        let mut keep = Vec::new();
         for pack in packs {
             for rule in &pack.rules {
                 if !rule.platform.iter().any(|p| p == platform) {
@@ -273,6 +281,14 @@ impl Matcher {
                     .filter_map(|p| expand(p, resolve))
                     .filter_map(|p| compile_path(&p))
                     .collect();
+                if rule.level == RiskLevel::Protected {
+                    keep.extend(
+                        rule.paths
+                            .iter()
+                            .filter_map(|p| expand(p, resolve))
+                            .filter_map(|p| glob(&p.replace('\\', "/"), true)),
+                    );
+                }
                 let exclude = rule
                     .exclude
                     .iter()
@@ -289,6 +305,7 @@ impl Matcher {
         }
         Self {
             rules,
+            keep,
             gate: SafetyGate::new(resolve),
         }
     }
@@ -303,72 +320,87 @@ impl Matcher {
     #[must_use]
     pub fn scan(
         &self,
-        keep: &dyn Fn(&Rule, &str) -> bool,
+        keep: &(dyn Fn(&Rule, &str) -> bool + Sync),
         opts: &MatchOptions,
         running: &[String],
     ) -> MatchReport {
+        // rules are independent: walk them in parallel, report them in pack order
+        let results: Vec<Option<(RuleSummary, Vec<Candidate>)>> = self
+            .rules
+            .par_iter()
+            .map(|compiled| {
+                keep(&compiled.rule, &compiled.pack)
+                    .then(|| self.scan_rule(compiled, opts, running))
+                    .flatten()
+            })
+            .collect();
         let mut report = MatchReport::default();
-        for compiled in &self.rules {
-            let rule = &compiled.rule;
-            if !keep(rule, &compiled.pack) {
-                continue;
-            }
-            let mut summary = RuleSummary {
-                rule_id: rule.id.clone(),
-                pack_id: compiled.pack.clone(),
-                app: rule.app.clone(),
-                vendor: rule.vendor.clone(),
-                category: rule.category.clone(),
-                level: Some(rule.level),
-                impact: rule.impact.clone(),
-                impact_vi: rule.impact_vi.clone(),
-                requires_closed: rule.requires_closed.clone(),
-                running: rule
-                    .requires_closed
-                    .iter()
-                    .filter(|exe| nfd_platform::locks::is_running(running, exe))
-                    .cloned()
-                    .collect(),
-                ..RuleSummary::default()
-            };
-            if rule.level == RiskLevel::Protected {
-                if opts.include_protected {
-                    report.rules.push(summary);
-                }
-                continue;
-            }
-            let mut walk = Walk {
-                rule: compiled,
-                opts,
-                gate: &self.gate,
-                cutoff: opts.now - i64::from(rule.min_age_days) * 86_400,
-                out: Vec::new(),
-                summary: &mut summary,
-            };
-            for path in &compiled.paths {
-                walk.start(path);
-            }
-            let mut found = walk.out;
-            // Two paths of one rule may overlap; keep the outermost.
-            found.sort_by_key(|a| slash(&a.path));
-            let mut kept: Vec<Candidate> = Vec::with_capacity(found.len());
-            for c in found {
-                let key = slash(&c.path).to_lowercase();
-                let nested = kept.iter().rev().any(|k| {
-                    let outer = slash(&k.path).to_lowercase();
-                    key == outer || key.starts_with(&format!("{outer}/"))
-                });
-                if !nested {
-                    kept.push(c);
-                }
-            }
-            summary.candidates = kept.len();
-            summary.bytes = kept.iter().map(|c| c.bytes).sum();
-            summary.files = kept.iter().map(|c| c.files).sum();
-            report.candidates.extend(kept);
+        for (summary, candidates) in results.into_iter().flatten() {
+            report.candidates.extend(candidates);
             report.rules.push(summary);
         }
         report
+    }
+
+    /// One rule: its summary and candidates (`None` = a Protected rule left out).
+    fn scan_rule(
+        &self,
+        compiled: &CompiledRule,
+        opts: &MatchOptions,
+        running: &[String],
+    ) -> Option<(RuleSummary, Vec<Candidate>)> {
+        let rule = &compiled.rule;
+        let mut summary = RuleSummary {
+            rule_id: rule.id.clone(),
+            pack_id: compiled.pack.clone(),
+            app: rule.app.clone(),
+            vendor: rule.vendor.clone(),
+            category: rule.category.clone(),
+            level: Some(rule.level),
+            impact: rule.impact.clone(),
+            impact_vi: rule.impact_vi.clone(),
+            requires_closed: rule.requires_closed.clone(),
+            running: rule
+                .requires_closed
+                .iter()
+                .filter(|exe| nfd_platform::locks::is_running(running, exe))
+                .cloned()
+                .collect(),
+            ..RuleSummary::default()
+        };
+        if rule.level == RiskLevel::Protected {
+            return opts.include_protected.then_some((summary, Vec::new()));
+        }
+        let mut walk = Walk {
+            rule: compiled,
+            keep: &self.keep,
+            opts,
+            gate: &self.gate,
+            cutoff: opts.now - i64::from(rule.min_age_days) * 86_400,
+            out: Vec::new(),
+            summary: &mut summary,
+        };
+        for path in &compiled.paths {
+            walk.start(path);
+        }
+        let mut found = walk.out;
+        // Two paths of one rule may overlap; keep the outermost.
+        found.sort_by_key(|a| slash(&a.path));
+        let mut kept: Vec<Candidate> = Vec::with_capacity(found.len());
+        for c in found {
+            let key = slash(&c.path).to_lowercase();
+            let nested = kept.iter().rev().any(|k| {
+                let outer = slash(&k.path).to_lowercase();
+                key == outer || key.starts_with(&format!("{outer}/"))
+            });
+            if !nested {
+                kept.push(c);
+            }
+        }
+        summary.candidates = kept.len();
+        summary.bytes = kept.iter().map(|c| c.bytes).sum();
+        summary.files = kept.iter().map(|c| c.files).sum();
+        Some((summary, kept))
     }
 
     /// Rules (with their pack id) whose paths match `path` as a whole — for
@@ -435,6 +467,7 @@ fn match_parts(parts: &[Part], names: &[&str]) -> bool {
 
 struct Walk<'a> {
     rule: &'a CompiledRule,
+    keep: &'a [GlobMatcher],
     opts: &'a MatchOptions,
     gate: &'a SafetyGate,
     cutoff: i64,
@@ -549,7 +582,11 @@ impl Walk<'_> {
 
     fn excluded(&self, path: &Path) -> bool {
         let text = slash(path);
-        self.rule.exclude.iter().any(|e| e.is_match(&text))
+        self.rule
+            .exclude
+            .iter()
+            .chain(self.keep)
+            .any(|e| e.is_match(&text))
     }
 
     /// Propose `path` (a match): as a whole if possible, else split.
@@ -842,6 +879,33 @@ verified_on = 2026-10-16
         assert_eq!(names(&report, root), ["D/sub/b.bin"]);
         fs::remove_dir(&link).expect("rm link");
         fs::remove_dir(&inner).expect("rm link");
+    }
+
+    #[test]
+    fn protected_rules_are_kept_out_of_every_rule() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        write(&root.join("A/cache/x.bin"), 1);
+        write(&root.join("A/settings.json"), 1);
+        write(&root.join("A/memory/notes.md"), 1);
+        let mut packs = vec![pack(r#""${LOCALAPPDATA}/A/**""#, "")];
+        let mut keep = packs[0].rules[0].clone();
+        keep.id = "t.keep".into();
+        keep.level = RiskLevel::Protected;
+        keep.paths = vec![
+            "${LOCALAPPDATA}/A/settings.json".into(),
+            "${LOCALAPPDATA}/A/memory/**".into(),
+        ];
+        packs[0].rules.push(keep);
+        let root_text = slash(root);
+        let resolve = move |v: &str| (v == "LOCALAPPDATA").then(|| root_text.clone());
+        let report = Matcher::new(&packs, &resolve, std::env::consts::OS).scan(
+            &|_, _| true,
+            &MatchOptions::default(),
+            &[],
+        );
+        assert_eq!(names(&report, root), ["A/cache"]);
+        assert!(report.rules[0].skipped >= 2);
     }
 
     #[test]

@@ -1,0 +1,480 @@
+# NANOFreeDisk rule pack: IDEs & editors
+# Schema: see docs/DEVTOOL_CACHE_CATALOG.md §2 and crates/nfd-rules/src/lib.rs
+# Caches, logs and crash reports are 🟢; workspace state, Local History and hot-exit
+# backups are 🟡; settings, keymaps, extensions and keys are 🔴 (listed as "kept").
+# Build artifacts inside projects are not rules: see nfd-devtools::artifacts (C9).
+
+[pack]
+id          = "ide-editors"
+name        = "IDEs & editors"
+version     = "0.1.0"
+description = "Caches, logs and state of VS Code and its forks, JetBrains IDEs, Visual Studio, Android Studio, Sublime Text, Zed, Neovim, Obsidian, Postman and Docker Desktop."
+devcache    = true
+
+# ───────────────────────────── VS Code ─────────────────────────────
+
+[[rule]]
+id              = "microsoft.vscode.cache"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Code/Cache/**", "${APPDATA}/Code/CachedData/**", "${APPDATA}/Code/CachedExtensionVSIXs/**",
+  "${APPDATA}/Code/CachedProfilesData/**", "${APPDATA}/Code/Code Cache/**", "${APPDATA}/Code/GPUCache/**",
+  "${APPDATA}/Code/DawnCache/**", "${APPDATA}/Code/DawnGraphiteCache/**", "${APPDATA}/Code/DawnWebGPUCache/**",
+  "${APPDATA}/Code/Service Worker/CacheStorage/**", "${APPDATA}/Code/blob_storage/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Code.exe"]
+impact          = "Chromium caches, compiled extension data and downloaded extension packages. VS Code rebuilds them and opens a little slower once."
+impact_vi       = "Bộ đệm Chromium, dữ liệu extension đã biên dịch và gói extension đã tải. VS Code tự tạo lại, mở chậm hơn một lần."
+docs            = "https://code.visualstudio.com/docs/setup/uninstall#_clean-uninstall"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.logs"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/logs/**", "${APPDATA}/Code/Crashpad/completed/**", "${APPDATA}/Code/Crashpad/reports/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["Code.exe"]
+impact          = "Old logs and crash reports. You only lose material for bug reports."
+impact_vi       = "Nhật ký và báo cáo lỗi cũ. Bạn chỉ mất tư liệu để báo lỗi."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.workspace-state"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/User/workspaceStorage/**", "${APPDATA}/Code/User/History/**"]
+level           = "caution"
+min_age_days    = 30
+requires_closed = ["Code.exe"]
+impact          = "Per-workspace state (open editors, extension data such as AI chats per project) and Local History (the file timeline). Your files are untouched."
+impact_vi       = "Trạng thái theo workspace (tab đang mở, dữ liệu extension như chat AI theo dự án) và Local History (dòng thời gian của tệp). Tệp của bạn không bị ảnh hưởng."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.backups"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/Backups/**"]
+level           = "caution"
+min_age_days    = 7
+requires_closed = ["Code.exe"]
+impact          = "Hot-exit copies of files you never saved. Deleting loses those unsaved edits; only folders older than 7 days are offered."
+impact_vi       = "Bản sao hot-exit của tệp bạn chưa từng lưu. Xóa sẽ mất các chỉnh sửa chưa lưu đó; chỉ đề xuất thư mục cũ hơn 7 ngày."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.config"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Code/User/settings.json", "${APPDATA}/Code/User/keybindings.json", "${APPDATA}/Code/User/snippets/**",
+  "${APPDATA}/Code/User/profiles/**", "${APPDATA}/Code/User/globalStorage/state.vscdb*", "${HOME}/.vscode/extensions/**",
+]
+level           = "protected"
+impact          = "Settings, keybindings, snippets, profiles, global state and installed extensions."
+impact_vi       = "Thiết lập, phím tắt, snippet, profile, trạng thái chung và extension đã cài."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vscode.cli-cache"
+vendor          = "Microsoft"
+app             = "Visual Studio Code"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${HOME}/.vscode/cli/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["code-tunnel.exe", "Code.exe"]
+impact          = "Downloaded servers of the `code tunnel` CLI; fetched again the next time you open a tunnel."
+impact_vi       = "Server đã tải của CLI `code tunnel`; sẽ được tải lại khi bạn mở tunnel lần sau."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── VS Code forks ─────────────────────────────
+
+[[rule]]
+id              = "vscodium.cache"
+vendor          = "VSCodium"
+app             = "VSCodium"
+category        = "ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/VSCodium/Cache/**", "${APPDATA}/VSCodium/CachedData/**", "${APPDATA}/VSCodium/CachedExtensionVSIXs/**",
+  "${APPDATA}/VSCodium/Code Cache/**", "${APPDATA}/VSCodium/GPUCache/**", "${APPDATA}/VSCodium/DawnCache/**",
+  "${APPDATA}/VSCodium/Service Worker/CacheStorage/**", "${APPDATA}/VSCodium/logs/**", "${APPDATA}/VSCodium/Crashpad/completed/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["VSCodium.exe"]
+impact          = "Caches and logs of VSCodium; rebuilt automatically, settings and extensions are kept."
+impact_vi       = "Bộ đệm và nhật ký của VSCodium; được tạo lại tự động, giữ nguyên thiết lập và extension."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "codeium.windsurf.cache"
+vendor          = "Codeium"
+app             = "Windsurf"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Windsurf/Cache/**", "${APPDATA}/Windsurf/CachedData/**", "${APPDATA}/Windsurf/CachedExtensionVSIXs/**",
+  "${APPDATA}/Windsurf/Code Cache/**", "${APPDATA}/Windsurf/GPUCache/**", "${APPDATA}/Windsurf/DawnCache/**",
+  "${APPDATA}/Windsurf/Service Worker/CacheStorage/**", "${APPDATA}/Windsurf/logs/**", "${HOME}/.codeium/windsurf/logs/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Windsurf.exe"]
+impact          = "Editor caches and logs of Windsurf; rebuilt automatically. Cascade history and memories are not touched."
+impact_vi       = "Bộ đệm và nhật ký trình soạn thảo của Windsurf; được tạo lại tự động. Không đụng lịch sử Cascade và memories."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "aws.kiro.cache"
+vendor          = "AWS"
+app             = "Kiro"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Kiro/Cache/**", "${APPDATA}/Kiro/CachedData/**", "${APPDATA}/Kiro/Code Cache/**", "${APPDATA}/Kiro/GPUCache/**",
+  "${APPDATA}/Kiro/DawnCache/**", "${APPDATA}/Kiro/Service Worker/CacheStorage/**", "${APPDATA}/Kiro/logs/**",
+  "${HOME}/.kiro/logs/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Kiro.exe"]
+impact          = "Editor caches and logs of Kiro; rebuilt automatically. Specs and steering files are kept."
+impact_vi       = "Bộ đệm và nhật ký của Kiro; được tạo lại tự động. Giữ nguyên specs và steering."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "aws.kiro.config"
+vendor          = "AWS"
+app             = "Kiro"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Kiro/User/settings.json", "${HOME}/.kiro/settings/**", "${HOME}/.kiro/specs/**", "${HOME}/.kiro/steering/**"]
+level           = "protected"
+impact          = "Kiro settings, specs and steering documents you wrote."
+impact_vi       = "Thiết lập Kiro, specs và tài liệu steering bạn đã viết."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "bytedance.trae.cache"
+vendor          = "ByteDance"
+app             = "Trae"
+category        = "ai-ide"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Trae/Cache/**", "${APPDATA}/Trae/CachedData/**", "${APPDATA}/Trae/Code Cache/**", "${APPDATA}/Trae/GPUCache/**",
+  "${APPDATA}/Trae/DawnCache/**", "${APPDATA}/Trae/Service Worker/CacheStorage/**", "${APPDATA}/Trae/logs/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Trae.exe"]
+impact          = "Editor caches and logs of Trae; rebuilt automatically."
+impact_vi       = "Bộ đệm và nhật ký trình soạn thảo của Trae; được tạo lại tự động."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── JetBrains ─────────────────────────────
+
+[[rule]]
+id              = "jetbrains.caches"
+vendor          = "JetBrains"
+app             = "JetBrains IDEs"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/JetBrains/*/caches/**", "${LOCALAPPDATA}/JetBrains/*/index/**", "${LOCALAPPDATA}/JetBrains/*/jcef_cache/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["idea64.exe", "rider64.exe", "pycharm64.exe", "webstorm64.exe", "clion64.exe", "goland64.exe", "phpstorm64.exe", "rustrover64.exe", "datagrip64.exe", "rubymine64.exe"]
+impact          = "IDE caches and indexes. The next start re-indexes your projects (minutes on large ones); settings and plugins are kept."
+impact_vi       = "Bộ đệm và chỉ mục của IDE. Lần mở sau sẽ lập chỉ mục lại dự án (vài phút với dự án lớn); giữ nguyên thiết lập và plugin."
+docs            = "https://www.jetbrains.com/help/idea/directories-used-by-the-ide-to-store-settings-caches-plugins-and-logs.html"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "jetbrains.logs"
+vendor          = "JetBrains"
+app             = "JetBrains IDEs"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/JetBrains/*/log/**", "${LOCALAPPDATA}/JetBrains/*/tmp/**", "${LOCALAPPDATA}/JetBrains/*/compile-server/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["idea64.exe", "rider64.exe", "pycharm64.exe", "webstorm64.exe", "clion64.exe", "goland64.exe", "phpstorm64.exe", "rustrover64.exe", "datagrip64.exe", "rubymine64.exe"]
+impact          = "Logs, temp files and the build server's caches; the next build is a full one."
+impact_vi       = "Nhật ký, tệp tạm và bộ đệm của build server; lần build sau sẽ build lại toàn bộ."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "jetbrains.toolbox.cache"
+vendor          = "JetBrains"
+app             = "Toolbox App"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/JetBrains/Toolbox/cache/**", "${LOCALAPPDATA}/JetBrains/Toolbox/logs/**", "${LOCALAPPDATA}/JetBrains/Toolbox/download/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["jetbrains-toolbox.exe"]
+impact          = "Toolbox App caches, logs and finished downloads. Installed IDEs are not touched (remove old versions in Toolbox)."
+impact_vi       = "Bộ đệm, nhật ký và bản tải xong của Toolbox App. Không đụng IDE đã cài (gỡ bản cũ trong Toolbox)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "jetbrains.config"
+vendor          = "JetBrains"
+app             = "JetBrains IDEs"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${APPDATA}/JetBrains/**", "${LOCALAPPDATA}/JetBrains/Toolbox/apps/**"]
+level           = "protected"
+impact          = "Settings, keymaps, plugins and the IDEs installed by Toolbox. Uninstall old IDE versions from the Toolbox App."
+impact_vi       = "Thiết lập, keymap, plugin và IDE do Toolbox cài. Gỡ phiên bản IDE cũ trong Toolbox App."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Visual Studio ─────────────────────────────
+
+[[rule]]
+id              = "microsoft.visualstudio.component-cache"
+vendor          = "Microsoft"
+app             = "Visual Studio"
+category        = "ide"
+platform        = ["windows"]
+paths           = [
+  "${LOCALAPPDATA}/Microsoft/VisualStudio/*/ComponentModelCache/**", "${LOCALAPPDATA}/Microsoft/VisualStudio/*/ImageLibrary/**",
+  "${LOCALAPPDATA}/Microsoft/VisualStudio/*/Designer/ShadowCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["devenv.exe"]
+impact          = "MEF component, image and designer caches; Visual Studio rebuilds them at the next start (the usual fix for broken extensions)."
+impact_vi       = "Bộ đệm thành phần MEF, hình ảnh và designer; Visual Studio tạo lại ở lần mở sau (cách sửa thường dùng khi extension lỗi)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.visualstudio.installer-packages"
+vendor          = "Microsoft"
+app             = "Visual Studio"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Microsoft/VisualStudio/Packages/**"]
+level           = "advanced"
+requires_closed = ["devenv.exe", "setup.exe", "vs_installer.exe"]
+impact          = "Installer package cache used to modify or repair Visual Studio. Repairs and new workloads download the packages again."
+impact_vi       = "Bộ đệm gói của trình cài đặt dùng để sửa đổi/sửa chữa Visual Studio. Khi sửa hoặc thêm workload sẽ phải tải lại."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Android ─────────────────────────────
+
+[[rule]]
+id              = "google.android-studio.caches"
+vendor          = "Google"
+app             = "Android Studio"
+category        = "ide"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Google/AndroidStudio*/caches/**", "${LOCALAPPDATA}/Google/AndroidStudio*/log/**", "${LOCALAPPDATA}/Google/AndroidStudio*/tmp/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["studio64.exe"]
+impact          = "Android Studio caches, logs and temp files; projects are re-indexed at the next start."
+impact_vi       = "Bộ đệm, nhật ký và tệp tạm của Android Studio; dự án được lập chỉ mục lại ở lần mở sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.android.system-images"
+vendor          = "Google"
+app             = "Android SDK"
+category        = "sdk"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Android/Sdk/system-images/**"]
+level           = "advanced"
+requires_closed = ["emulator.exe", "qemu-system-x86_64.exe", "studio64.exe"]
+impact          = "Emulator system images (GBs each). Emulators using them stop booting until you download them again in the SDK Manager; prefer `sdkmanager --uninstall`."
+impact_vi       = "Image hệ thống của emulator (mỗi cái vài GB). Emulator dùng chúng sẽ không khởi động được cho tới khi tải lại trong SDK Manager; nên dùng `sdkmanager --uninstall`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.android.avd-snapshots"
+vendor          = "Google"
+app             = "Android Emulator"
+category        = "sdk"
+platform        = ["windows"]
+paths           = ["${HOME}/.android/avd/*.avd/snapshots/**"]
+level           = "caution"
+requires_closed = ["emulator.exe", "qemu-system-x86_64.exe"]
+impact          = "Saved emulator snapshots (quick boot). The next start is a cold boot and in-emulator state since the last boot is lost."
+impact_vi       = "Snapshot đã lưu của emulator (quick boot). Lần mở sau phải cold boot và mất trạng thái bên trong emulator từ lần khởi động trước."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.android.keys"
+vendor          = "Google"
+app             = "Android SDK"
+category        = "sdk"
+platform        = ["windows"]
+paths           = ["${HOME}/.android/adbkey", "${HOME}/.android/adbkey.pub", "${HOME}/.android/debug.keystore", "${HOME}/.android/avd/*.avd/config.ini"]
+level           = "protected"
+impact          = "ADB keys, the debug signing keystore and emulator definitions. Losing the keystore changes your debug app signature."
+impact_vi       = "Khóa ADB, keystore ký bản debug và định nghĩa emulator. Mất keystore sẽ đổi chữ ký ứng dụng debug."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Other editors & tools ─────────────────────────────
+
+[[rule]]
+id              = "sublimehq.sublime-text.cache"
+vendor          = "Sublime HQ"
+app             = "Sublime Text"
+category        = "editor"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Sublime Text/Cache/**", "${LOCALAPPDATA}/Sublime Text/Index/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["sublime_text.exe"]
+impact          = "Syntax cache and the symbol index; rebuilt in the background."
+impact_vi       = "Bộ đệm cú pháp và chỉ mục symbol; được tạo lại ở chế độ nền."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "zed.cache"
+vendor          = "Zed Industries"
+app             = "Zed"
+category        = "editor"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Zed/logs/**", "${LOCALAPPDATA}/Zed/languages/**", "${LOCALAPPDATA}/Zed/node/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["zed.exe"]
+impact          = "Logs and the language servers / Node runtime Zed downloads; fetched again when needed."
+impact_vi       = "Nhật ký cùng language server / Node mà Zed tự tải; sẽ được tải lại khi cần."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "zed.history"
+vendor          = "Zed Industries"
+app             = "Zed"
+category        = "editor"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Zed/db/**"]
+level           = "caution"
+requires_closed = ["zed.exe"]
+impact          = "Workspace history and session state (recent projects, open tabs)."
+impact_vi       = "Lịch sử workspace và trạng thái phiên (dự án gần đây, tab đang mở)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "neovim.logs"
+vendor          = "Neovim"
+app             = "Neovim"
+category        = "editor"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/nvim-data/log", "${LOCALAPPDATA}/nvim-data/*.log"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["nvim.exe"]
+impact          = "Neovim and plugin log files."
+impact_vi       = "Tệp nhật ký của Neovim và plugin."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "notepadpp.backup"
+vendor          = "Notepad++"
+app             = "Notepad++"
+category        = "editor"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Notepad++/backup/**"]
+level           = "caution"
+min_age_days    = 30
+requires_closed = ["notepad++.exe"]
+impact          = "Snapshots of tabs you never saved. Deleting loses those unsaved texts; only files older than 30 days are offered."
+impact_vi       = "Bản lưu tạm của tab chưa từng lưu. Xóa sẽ mất các văn bản chưa lưu đó; chỉ đề xuất tệp cũ hơn 30 ngày."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "obsidian.cache"
+vendor          = "Obsidian"
+app             = "Obsidian"
+category        = "editor"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/obsidian/Cache/**", "${APPDATA}/obsidian/Code Cache/**", "${APPDATA}/obsidian/GPUCache/**",
+  "${APPDATA}/obsidian/DawnCache/**", "${APPDATA}/obsidian/DawnGraphiteCache/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Obsidian.exe"]
+impact          = "Electron caches of the Obsidian app. Your vaults live elsewhere and are never touched."
+impact_vi       = "Bộ đệm Electron của ứng dụng Obsidian. Vault của bạn nằm chỗ khác và không bao giờ bị đụng."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "postman.cache"
+vendor          = "Postman"
+app             = "Postman"
+category        = "tool"
+platform        = ["windows"]
+paths           = [
+  "${APPDATA}/Postman/Cache/**", "${APPDATA}/Postman/Code Cache/**", "${APPDATA}/Postman/GPUCache/**",
+  "${APPDATA}/Postman/Partitions/*/Cache/**", "${APPDATA}/Postman/Partitions/*/Code Cache/**", "${APPDATA}/Postman/logs/**",
+]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Postman.exe"]
+impact          = "Electron caches and logs of Postman; collections and environments are kept."
+impact_vi       = "Bộ đệm Electron và nhật ký của Postman; giữ nguyên collection và environment."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "postman.data"
+vendor          = "Postman"
+app             = "Postman"
+category        = "tool"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Postman/storage/**", "${APPDATA}/Postman/IndexedDB/**", "${APPDATA}/Postman/Local Storage/**"]
+level           = "protected"
+impact          = "Local workspaces, collections, environments and the login session."
+impact_vi       = "Workspace cục bộ, collection, environment và phiên đăng nhập."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "docker.desktop.logs"
+vendor          = "Docker"
+app             = "Docker Desktop"
+category        = "tool"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Docker/log/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["Docker Desktop.exe"]
+impact          = "Docker Desktop logs; only material for bug reports is lost."
+impact_vi       = "Nhật ký của Docker Desktop; chỉ mất tư liệu để báo lỗi."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "docker.desktop.disk"
+vendor          = "Docker"
+app             = "Docker Desktop"
+category        = "tool"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Docker/wsl/**"]
+level           = "protected"
+impact          = "The virtual disk holding every image, container and volume. Free space with `docker system prune`, then compact it (`wsl --shutdown` + Optimize-VHD)."
+impact_vi       = "Ổ ảo chứa mọi image, container và volume. Giải phóng bằng `docker system prune`, rồi nén lại (`wsl --shutdown` + Optimize-VHD)."
+verified_on     = 2026-10-16

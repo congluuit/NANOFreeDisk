@@ -13,6 +13,7 @@ homepage.workspace = true
 nfd-core = { workspace = true }
 nfd-platform = { workspace = true }
 globset = { workspace = true }
+rayon = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }

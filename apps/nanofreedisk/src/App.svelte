@@ -26,6 +26,8 @@
   import Clean from "./lib/views/Clean.svelte";
   import CleanActivity from "./lib/views/CleanActivity.svelte";
   import Hardware from "./lib/views/Hardware.svelte";
+  import DevCache from "./lib/views/DevCache.svelte";
+  import { scheduleReminder } from "./lib/devcache/state.svelte";
 
   const NAV: { id: View | null; icon: string; label: string; phase?: string }[] = [
     { id: "home", icon: "home", label: "nav-home" },
@@ -35,7 +37,7 @@
     { id: "clean", icon: "clean", label: "nav-clean" },
     { id: "activity", icon: "undo", label: "nav-activity" },
     { id: "hardware", icon: "cpu", label: "nav-hardware" },
-    { id: null, icon: "devcache", label: "nav-devcache", phase: "Phase 4" },
+    { id: "devcache", icon: "devcache", label: "nav-devcache" },
     { id: null, icon: "duplicates", label: "nav-duplicates", phase: "Phase 5" },
     { id: null, icon: "monitor", label: "nav-monitor", phase: "Phase 6" },
     { id: null, icon: "health", label: "nav-health", phase: "Phase 7" },
@@ -54,6 +56,7 @@
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
       startThermalSync();
+      scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
     })();
@@ -165,6 +168,8 @@
       <CleanActivity />
     {:else if app.view === "hardware"}
       <Hardware />
+    {:else if app.view === "devcache"}
+      <DevCache />
     {:else}
       <Settings />
     {/if}

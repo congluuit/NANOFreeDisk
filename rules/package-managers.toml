@@ -1,0 +1,533 @@
+# NANOFreeDisk rule pack: package managers & toolchain caches
+# Schema: see docs/DEVTOOL_CACHE_CATALOG.md §3 and crates/nfd-rules/src/lib.rs
+# Download caches that the tool fills again by itself are 🟢; stores that projects link
+# into or that are slow to rebuild are 🟡 (the DevCache view also offers the tool's own
+# cleanup command, nfd-devtools::stores). Installed tools, toolchains, environments,
+# credentials and config are 🔴: remove toolchains with their own uninstaller.
+
+[pack]
+id          = "package-managers"
+name        = "Package managers & toolchains"
+version     = "0.1.0"
+description = "Download caches and stores of npm, pnpm, Yarn, Bun, Deno, pip, uv, Poetry, Conda, Cargo, rustup, Go, NuGet, .NET, Gradle, Maven, Composer, Scoop, Chocolatey, winget, vcpkg, Dart/Flutter, Playwright and Electron."
+devcache    = true
+
+# ───────────────────────────── JavaScript ─────────────────────────────
+
+[[rule]]
+id              = "npm.cache"
+vendor          = "npm"
+app             = "npm"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/npm-cache/_cacache/**", "${LOCALAPPDATA}/npm-cache/_npx/**", "${LOCALAPPDATA}/npm-cache/_logs/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+impact          = "npm's download cache, npx packages and logs. Packages are downloaded again on the next install (same as `npm cache clean --force`)."
+impact_vi       = "Bộ đệm tải về của npm, gói npx và nhật ký. Gói sẽ được tải lại ở lần cài sau (giống `npm cache clean --force`)."
+docs            = "https://docs.npmjs.com/cli/commands/npm-cache"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "pnpm.store"
+vendor          = "pnpm"
+app             = "pnpm"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/pnpm/store/**"]
+level           = "caution"
+requires_closed = ["pnpm.exe"]
+impact          = "The content-addressable store your projects' node_modules hard-link into. Little space is freed while projects still link to it, and every project needs `pnpm install` again; prefer `pnpm store prune`."
+impact_vi       = "Kho nội dung mà node_modules của các dự án hard-link vào. Giải phóng được ít khi dự án vẫn link tới nó, và mọi dự án phải `pnpm install` lại; nên dùng `pnpm store prune`."
+docs            = "https://pnpm.io/cli/store"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "pnpm.metadata-cache"
+vendor          = "pnpm"
+app             = "pnpm"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/pnpm-cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Registry metadata cached by pnpm; fetched again on the next install."
+impact_vi       = "Metadata registry mà pnpm lưu đệm; được tải lại ở lần cài sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "yarn.cache"
+vendor          = "Yarn"
+app             = "Yarn"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Yarn/Cache/**", "${LOCALAPPDATA}/Yarn/Berry/cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Yarn's global package cache; downloaded again on the next install (same as `yarn cache clean`)."
+impact_vi       = "Bộ đệm gói chung của Yarn; được tải lại ở lần cài sau (giống `yarn cache clean`)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "bun.cache"
+vendor          = "Oven"
+app             = "Bun"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.bun/install/cache/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["bun.exe"]
+impact          = "Bun's global install cache; packages are downloaded again when needed."
+impact_vi       = "Bộ đệm cài đặt chung của Bun; gói sẽ được tải lại khi cần."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "deno.cache"
+vendor          = "Deno"
+app             = "Deno"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/deno/deps/**", "${LOCALAPPDATA}/deno/gen/**", "${LOCALAPPDATA}/deno/npm/**", "${LOCALAPPDATA}/deno/remote/**", "${LOCALAPPDATA}/deno/registries/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["deno.exe"]
+impact          = "Downloaded remote modules, npm packages and compiled code of Deno; fetched and compiled again on next run."
+impact_vi       = "Module từ xa, gói npm và mã đã biên dịch của Deno; sẽ được tải và biên dịch lại ở lần chạy sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "nodejs.node-gyp-cache"
+vendor          = "Node.js"
+app             = "node-gyp"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/node-gyp/Cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Node.js headers downloaded to build native modules; fetched again on the next native build."
+impact_vi       = "Header Node.js tải về để build module native; sẽ được tải lại ở lần build native sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.typescript.ata-cache"
+vendor          = "Microsoft"
+app             = "TypeScript"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Microsoft/TypeScript/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Code.exe", "devenv.exe"]
+impact          = "Type definitions the TypeScript language service downloads for editors (automatic type acquisition); downloaded again on demand."
+impact_vi       = "Định nghĩa kiểu mà TypeScript tự tải cho trình soạn thảo (automatic type acquisition); sẽ tải lại khi cần."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "electron.cache"
+vendor          = "OpenJS Foundation"
+app             = "Electron"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/electron/Cache/**", "${LOCALAPPDATA}/electron-builder/Cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Electron and electron-builder downloads (runtimes, NSIS, code-signing tools); fetched again by the next build."
+impact_vi       = "Bản tải của Electron và electron-builder (runtime, NSIS, công cụ ký số); được tải lại ở lần build sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.playwright.browsers"
+vendor          = "Microsoft"
+app             = "Playwright"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/ms-playwright/**"]
+level           = "caution"
+impact          = "Browsers downloaded for Playwright tests. Tests fail until you run `npx playwright install` again."
+impact_vi       = "Trình duyệt tải về cho test Playwright. Test sẽ lỗi cho tới khi chạy lại `npx playwright install`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.puppeteer.browsers"
+vendor          = "Google"
+app             = "Puppeteer"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.cache/puppeteer/**"]
+level           = "caution"
+impact          = "Chrome builds downloaded by Puppeteer; downloaded again on the next `npm install` of a project that uses it."
+impact_vi       = "Bản Chrome do Puppeteer tải; sẽ tải lại ở lần `npm install` sau của dự án dùng nó."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Python ─────────────────────────────
+
+[[rule]]
+id              = "python.pip.cache"
+vendor          = "Python"
+app             = "pip"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/pip/Cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "pip's wheel and HTTP cache; packages are downloaded again on the next install (same as `pip cache purge`)."
+impact_vi       = "Bộ đệm wheel và HTTP của pip; gói được tải lại ở lần cài sau (giống `pip cache purge`)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "astral.uv.cache"
+vendor          = "Astral"
+app             = "uv"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/uv/cache/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["uv.exe"]
+impact          = "uv's package cache. Existing virtual environments keep working; packages are downloaded again on the next install (same as `uv cache clean`)."
+impact_vi       = "Bộ đệm gói của uv. Môi trường ảo hiện có vẫn chạy; gói được tải lại ở lần cài sau (giống `uv cache clean`)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "astral.uv.python"
+vendor          = "Astral"
+app             = "uv"
+category        = "toolchain"
+platform        = ["windows"]
+paths           = ["${APPDATA}/uv/python/**", "${APPDATA}/uv/tools/**"]
+level           = "protected"
+impact          = "Python versions and tools installed by uv. Remove them with `uv python uninstall` / `uv tool uninstall`."
+impact_vi       = "Phiên bản Python và công cụ do uv cài. Gỡ bằng `uv python uninstall` / `uv tool uninstall`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "python.poetry.cache"
+vendor          = "Python"
+app             = "Poetry"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/pypoetry/Cache/cache/**", "${LOCALAPPDATA}/pypoetry/Cache/artifacts/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Poetry's package and artifact cache; downloaded again on the next install. Virtual environments are a separate rule."
+impact_vi       = "Bộ đệm gói và artifact của Poetry; được tải lại ở lần cài sau. Môi trường ảo là rule riêng."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "python.poetry.virtualenvs"
+vendor          = "Python"
+app             = "Poetry"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/pypoetry/Cache/virtualenvs/**"]
+level           = "caution"
+min_age_days    = 30
+requires_closed = ["python.exe", "poetry.exe"]
+impact          = "Virtual environments Poetry created for your projects. Each project needs `poetry install` again; environments unused for 30 days are offered."
+impact_vi       = "Môi trường ảo Poetry tạo cho dự án. Mỗi dự án phải `poetry install` lại; chỉ đề xuất môi trường không dùng 30 ngày."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anaconda.conda.pkgs"
+vendor          = "Anaconda"
+app             = "Conda"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/miniconda3/pkgs/**", "${HOME}/anaconda3/pkgs/**", "${HOME}/miniforge3/pkgs/**", "${HOME}/mambaforge/pkgs/**"]
+level           = "caution"
+requires_closed = ["conda.exe", "python.exe", "mamba.exe"]
+impact          = "Downloaded and extracted packages. Environments made with copies keep working; prefer `conda clean --all`, which keeps packages still linked into environments."
+impact_vi       = "Gói đã tải và giải nén. Môi trường tạo bằng bản sao vẫn chạy; nên dùng `conda clean --all` (giữ lại gói còn được môi trường link tới)."
+docs            = "https://docs.conda.io/projects/conda/en/latest/commands/clean.html"
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "anaconda.conda.envs"
+vendor          = "Anaconda"
+app             = "Conda"
+category        = "toolchain"
+platform        = ["windows"]
+paths           = ["${HOME}/miniconda3/envs/**", "${HOME}/anaconda3/envs/**", "${HOME}/miniforge3/envs/**", "${HOME}/.conda/environments.txt"]
+level           = "protected"
+impact          = "Your Conda environments. Remove one with `conda env remove -n <name>`."
+impact_vi       = "Các môi trường Conda của bạn. Gỡ bằng `conda env remove -n <tên>`."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Rust ─────────────────────────────
+
+[[rule]]
+id              = "rust.cargo.registry-cache"
+vendor          = "Rust"
+app             = "Cargo"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.cargo/registry/cache/**", "${HOME}/.cargo/registry/src/**", "${HOME}/.cargo/git/checkouts/**", "${HOME}/.cargo/git/db/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["cargo.exe", "rust-analyzer.exe"]
+impact          = "Downloaded crate archives, their extracted sources and git dependencies. Cargo downloads them again on the next build (offline builds need network once)."
+impact_vi       = "Crate đã tải, mã nguồn giải nén và dependency git. Cargo sẽ tải lại ở lần build sau (build offline cần mạng một lần)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "rust.cargo.registry-index"
+vendor          = "Rust"
+app             = "Cargo"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.cargo/registry/index/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["cargo.exe", "rust-analyzer.exe"]
+impact          = "The crates.io index cache; fetched again on the next build."
+impact_vi       = "Bộ đệm chỉ mục crates.io; được tải lại ở lần build sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "rust.rustup.downloads"
+vendor          = "Rust"
+app             = "rustup"
+category        = "toolchain"
+platform        = ["windows"]
+paths           = ["${HOME}/.rustup/downloads/**", "${HOME}/.rustup/tmp/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["rustup.exe"]
+impact          = "Partial and finished toolchain downloads left by rustup."
+impact_vi       = "Bản tải toolchain dở dang hoặc đã xong mà rustup để lại."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "rust.keep"
+vendor          = "Rust"
+app             = "rustup"
+category        = "toolchain"
+platform        = ["windows"]
+paths           = ["${HOME}/.rustup/toolchains/**", "${HOME}/.rustup/settings.toml", "${HOME}/.cargo/bin/**", "${HOME}/.cargo/config.toml", "${HOME}/.cargo/credentials.toml"]
+level           = "protected"
+impact          = "Installed toolchains, cargo-installed tools, config and registry tokens. Remove old toolchains with `rustup toolchain uninstall` (Toolchains tab)."
+impact_vi       = "Toolchain đã cài, công cụ cài bằng cargo, cấu hình và token registry. Gỡ toolchain cũ bằng `rustup toolchain uninstall` (tab Toolchain)."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Go ─────────────────────────────
+
+[[rule]]
+id              = "go.build-cache"
+vendor          = "Go"
+app             = "Go"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/go-build/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["go.exe", "gopls.exe"]
+impact          = "Go's build cache; the next builds and test runs are slower once (same as `go clean -cache`)."
+impact_vi       = "Bộ đệm build của Go; lần build và chạy test sau chậm hơn một lần (giống `go clean -cache`)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "go.modcache"
+vendor          = "Go"
+app             = "Go"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/go/pkg/mod/**"]
+level           = "caution"
+requires_closed = ["go.exe", "gopls.exe"]
+impact          = "Downloaded Go modules (read-only files). Every module is downloaded again by the next build; prefer `go clean -modcache`."
+impact_vi       = "Module Go đã tải (tệp chỉ đọc). Mọi module sẽ được tải lại ở lần build sau; nên dùng `go clean -modcache`."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── .NET ─────────────────────────────
+
+[[rule]]
+id              = "microsoft.nuget.packages"
+vendor          = "Microsoft"
+app             = "NuGet"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.nuget/packages/**"]
+level           = "caution"
+requires_closed = ["devenv.exe", "dotnet.exe", "MSBuild.exe", "rider64.exe"]
+impact          = "The global packages folder. Every solution restores its packages again (`dotnet restore`); prefer `dotnet nuget locals all --clear`."
+impact_vi       = "Thư mục gói chung. Mọi solution phải restore lại gói (`dotnet restore`); nên dùng `dotnet nuget locals all --clear`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.nuget.http-cache"
+vendor          = "Microsoft"
+app             = "NuGet"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/NuGet/v3-cache/**", "${LOCALAPPDATA}/NuGet/plugins-cache/**", "${LOCALAPPDATA}/NuGet/Cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "NuGet's HTTP and plugin caches; filled again on the next restore."
+impact_vi       = "Bộ đệm HTTP và plugin của NuGet; được điền lại ở lần restore sau."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.dotnet.cli-cache"
+vendor          = "Microsoft"
+app             = ".NET SDK"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.dotnet/TelemetryStorageService/**", "${HOME}/.dotnet/toolResolverCache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Telemetry queue and the tool resolver cache of the dotnet CLI."
+impact_vi       = "Hàng đợi telemetry và bộ đệm tìm công cụ của dotnet CLI."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.vcpkg.binary-cache"
+vendor          = "Microsoft"
+app             = "vcpkg"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/vcpkg/archives/**", "${LOCALAPPDATA}/vcpkg/downloads/**"]
+level           = "caution"
+requires_closed = ["vcpkg.exe"]
+impact          = "Prebuilt binary packages and downloads of vcpkg. The next install builds C++ libraries from source again (can take long)."
+impact_vi       = "Gói nhị phân dựng sẵn và bản tải của vcpkg. Lần cài sau phải build lại thư viện C++ từ mã nguồn (có thể lâu)."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── JVM ─────────────────────────────
+
+[[rule]]
+id              = "gradle.caches"
+vendor          = "Gradle"
+app             = "Gradle"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.gradle/caches/**"]
+level           = "caution"
+requires_closed = ["java.exe", "studio64.exe", "idea64.exe"]
+impact          = "Dependencies, transforms and build caches of every Gradle build. The next build downloads and transforms everything again (slow). Stop daemons first with `gradle --stop`."
+impact_vi       = "Dependency, transform và bộ đệm build của mọi bản build Gradle. Lần build sau tải và xử lý lại tất cả (chậm). Dừng daemon trước bằng `gradle --stop`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "gradle.daemon-logs"
+vendor          = "Gradle"
+app             = "Gradle"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.gradle/daemon/*/*.log"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+impact          = "Logs of Gradle daemons."
+impact_vi       = "Nhật ký của Gradle daemon."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "gradle.wrapper-dists"
+vendor          = "Gradle"
+app             = "Gradle"
+category        = "toolchain"
+platform        = ["windows"]
+paths           = ["${HOME}/.gradle/wrapper/dists/**"]
+level           = "caution"
+min_age_days    = 30
+requires_closed = ["java.exe"]
+impact          = "Gradle distributions downloaded by `gradlew` (100–200 MB each). A project's wrapper downloads its version again on the next build; versions unused for 30 days are offered."
+impact_vi       = "Bản phân phối Gradle do `gradlew` tải (100–200 MB mỗi bản). Wrapper của dự án sẽ tải lại phiên bản của nó ở lần build sau; chỉ đề xuất bản không dùng 30 ngày."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "apache.maven.repository"
+vendor          = "Apache"
+app             = "Maven"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.m2/repository/**"]
+level           = "caution"
+requires_closed = ["java.exe", "idea64.exe"]
+impact          = "The local Maven repository. Artifacts are downloaded again; anything you `mvn install`-ed locally must be built again."
+impact_vi       = "Kho Maven cục bộ. Artifact sẽ được tải lại; những gì bạn `mvn install` cục bộ phải build lại."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "apache.maven.settings"
+vendor          = "Apache"
+app             = "Maven"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/.m2/settings.xml", "${HOME}/.m2/settings-security.xml", "${HOME}/.gradle/gradle.properties"]
+level           = "protected"
+impact          = "Maven / Gradle settings, often holding repository credentials."
+impact_vi       = "Thiết lập Maven / Gradle, thường chứa thông tin đăng nhập kho."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Others ─────────────────────────────
+
+[[rule]]
+id              = "composer.cache"
+vendor          = "Composer"
+app             = "Composer"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Composer/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Composer's download cache (global packages and auth.json live in %APPDATA% and are kept)."
+impact_vi       = "Bộ đệm tải của Composer (gói toàn cục và auth.json nằm trong %APPDATA% và được giữ)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "dart.pub-cache"
+vendor          = "Google"
+app             = "Dart / Flutter"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Pub/Cache/hosted/**", "${LOCALAPPDATA}/Pub/Cache/git/**", "${LOCALAPPDATA}/Pub/Cache/_temp/**"]
+level           = "caution"
+requires_closed = ["dart.exe", "flutter.exe"]
+impact          = "Downloaded Dart/Flutter packages; every project needs `flutter pub get` again. Globally activated tools (bin) are kept."
+impact_vi       = "Gói Dart/Flutter đã tải; mọi dự án phải chạy lại `flutter pub get`. Giữ nguyên công cụ đã kích hoạt toàn cục (bin)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "scoop.cache"
+vendor          = "Scoop"
+app             = "Scoop"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${HOME}/scoop/cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Installers Scoop downloaded; only needed to reinstall the same version offline (same as `scoop cache rm *`)."
+impact_vi       = "Bộ cài Scoop đã tải; chỉ cần khi cài lại đúng phiên bản đó mà không có mạng (giống `scoop cache rm *`)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "chocolatey.leftovers"
+vendor          = "Chocolatey"
+app             = "Chocolatey"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${PROGRAMDATA}/chocolatey/lib-bad/**", "${PROGRAMDATA}/chocolatey/lib-bkp/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 7
+requires_closed = ["choco.exe"]
+impact          = "Backups and failed installs Chocolatey left behind during upgrades (may need administrator rights; skipped otherwise)."
+impact_vi       = "Bản sao lưu và bản cài lỗi Chocolatey để lại khi nâng cấp (có thể cần quyền quản trị; nếu không sẽ bỏ qua)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "microsoft.winget.logs"
+vendor          = "Microsoft"
+app             = "winget"
+category        = "package-manager"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Packages/Microsoft.DesktopAppInstaller_*/LocalState/DiagOutputDir/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+impact          = "winget diagnostic logs."
+impact_vi       = "Nhật ký chẩn đoán của winget."
+verified_on     = 2026-10-16

@@ -1,5 +1,6 @@
 //! NANOFreeDisk desktop app (Tauri 2). The UI lives in `../src` (Svelte 5); this
-//! crate exposes the scanner, the Clean view and the Activity log as commands.
+//! crate exposes the scanner, the Clean and DevCache views and the Activity log as
+//! commands.
 //!
 //! Nothing here deletes directly: every delete goes through
 //! `Planner → SafetyGate → Executor → UndoJournal` ([`commands::clean`]).
@@ -63,6 +64,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .manage(state)
         .manage(commands::clean::CleanState::default())
+        .manage(commands::devcache::DevState::default())
         .manage(commands::hwmon::HwState::default())
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -114,6 +116,19 @@ pub fn run() {
             commands::clean::activity_restore,
             commands::clean::activity_purge,
             commands::clean::activity_forget,
+            commands::devcache::devcache_scan,
+            commands::devcache::devcache_items,
+            commands::devcache::devcache_run,
+            commands::devcache::devcache_cancel,
+            commands::devcache::devcache_unknown,
+            commands::devcache::devcache_toolchains,
+            commands::devcache::devcache_repos,
+            commands::devcache::devcache_repos_clean,
+            commands::devcache::devcache_stores,
+            commands::devcache::devcache_store_run,
+            commands::devcache::devcache_reveal,
+            commands::devcache::devcache_propose,
+            commands::devcache::devcache_notify,
             commands::hwmon::hw_inventory,
             commands::hwmon::hw_export,
             commands::hwmon::sensors_snapshot,

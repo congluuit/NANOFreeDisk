@@ -1,17 +1,20 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3), `rules list` / `rules validate`, and the Hardware
+//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores` (Phase 4), `rules list` / `rules validate`, and the Hardware
 //! Monitor's `hw` / `sensors` / `ps`. Dedupe, watch and health commands arrive with
 //! their phases (see `docs/PLAN.md` §4.7).
 
 mod clean;
+mod devcache;
 mod diff;
 mod hw;
 mod ps;
 mod quarantine;
+mod repos;
 mod scan;
 mod sensors;
+mod stores;
 
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -46,6 +49,19 @@ enum Command {
     Diff(diff::DiffArgs),
     /// Find junk with the rule packs and clean it (dry run unless --apply).
     Clean(clean::CleanArgs),
+    /// Developer caches by vendor → app → folder; clean them; find unknown ones.
+    Devcache {
+        #[command(subcommand)]
+        action: Option<devcache::DevcacheAction>,
+    },
+    /// Installed toolchains and SDKs, with the proper command to remove each (read-only).
+    Toolchains(repos::ToolchainsArgs),
+    /// Git repositories and projects under a folder, with their build output; `clean`
+    /// moves the build output to the quarantine.
+    Repos(repos::ReposArgs),
+    /// Package managers' own cache cleanup commands (`npm cache clean`, `pnpm store
+    /// prune`, …): list, or run one after confirming the exact command.
+    Stores(stores::StoresArgs),
     /// Clean / delete operations: list, restore, purge the quarantine.
     Quarantine {
         #[command(subcommand)]
@@ -114,6 +130,10 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Scan(args) => scan::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Clean(args) => clean::run(args),
+        Command::Devcache { action } => devcache::run(action),
+        Command::Toolchains(args) => repos::toolchains(&args),
+        Command::Repos(args) => repos::repos(args),
+        Command::Stores(args) => stores::run(args),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {
             action: PlanAction::Explain { path, rules },

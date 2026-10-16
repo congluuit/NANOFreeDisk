@@ -158,7 +158,10 @@ Requirements: Windows 10 1809+ / Windows 11, x64. The GUI uses the WebView2 runt
 ```text
 nfd scan <path> [--fast] [--top N] [--json|--csv] [--min-size 10MB]
 nfd clean [--rules ai-tools,browsers] [--level safe] [--dry-run] [--mode recycle|quarantine]
-nfd devcache [list|clean --vendor anthropic --level safe]
+nfd devcache [list|clean --vendor anthropic --level safe|unknown]
+nfd toolchains [--json]
+nfd repos <root> [--keep-recent 7] [--json]   ·   nfd repos clean <root> [--apply]
+nfd stores [--json]   ·   nfd stores run npm-cache-clean
 nfd dupes <path...> [--min-size 1MB] [--action list|recycle|hardlink]
 nfd watch [--interval 1s] [--top 20]
 nfd health [--json] [--watch]
@@ -235,7 +238,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 1 | Core scanner (standard + MFT), `nfd scan` | 🟡 standard mode done, MFT next |
 | 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | ✅ done — plus age heatmap, empty folders / broken shortcuts / orphan junctions, Explorer menu, `nfd diff` / `nfd explain` ([demo](docs/assets/demo/nanofreedisk-demo.webp)) |
 | 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ⏳ |
-| 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ⏳ |
+| 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
 | 5 | Duplicate finder | ⏳ |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ⏳ |
 | 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ⏳ |

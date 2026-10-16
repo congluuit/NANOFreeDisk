@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
@@ -26,6 +26,16 @@ export interface Settings {
   history: boolean;
   /** Hardware: notify when the CPU / GPU / a disk gets too hot (samples every 5 s). */
   tempAlerts: boolean;
+  /** DevCache: remind when a vendor's caches pass this many GB (0 = never). */
+  devThresholds: Record<string, number>;
+  /** DevCache: system notification when a vendor is over its threshold. */
+  devAlerts: boolean;
+  /** DevCache → Repo: folder searched for repositories. */
+  repoRoot: string;
+  /** Build output of projects active in the last N days is not pre-selected (C9). */
+  keepRecentDays: number;
+  /** Projects without activity for N days are flagged stale. */
+  staleDays: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -40,6 +50,11 @@ export const DEFAULT_SETTINGS: Settings = {
   installerDays: 30,
   history: true,
   tempAlerts: false,
+  devThresholds: { Ollama: 50, "Hugging Face": 30, JetBrains: 10 },
+  devAlerts: false,
+  repoRoot: "",
+  keepRecentDays: 7,
+  staleDays: 90,
 };
 
 interface Toast {

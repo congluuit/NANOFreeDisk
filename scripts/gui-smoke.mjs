@@ -14,7 +14,11 @@
 // Restore of the Recycle Bin move, Tidy up moving the empty folder to the quarantine
 // and back, and Clean with a rule pack that only matches the fixture (scan, clean,
 // restore, the Clean / Activity views); the Hardware view (inventory, sensors, Tasks
-// with its hard blocks). Nothing outside the fixture is ever deleted and the only
+// with its hard blocks); Phase 4: the DevCache view with a devcache pack that only
+// matches its own fixture (clean + restore, the 🔒 Keep list), the Repo tab's build
+// output (quarantine + restore), toolchains, package stores (listed, never run — a
+// command line that was not confirmed is refused), unknown folders and the guarded
+// reveal / propose commands. Nothing outside the fixture is ever deleted and the only
 // process ever ended is a `ping` the script starts itself; the fixture's history
 // snapshots and journal entries are forgotten at the end.
 
@@ -98,6 +102,60 @@ level = "safe"
 regenerates = true
 impact = "Files of the GUI smoke test fixture."
 impact_vi = "Tệp của fixture kiểm thử GUI."
+verified_on = 2026-10-16
+`,
+);
+// Phase 4: a DevCache pack and a project with build output, in their own fixture
+const devFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-dev-"));
+mkdirSync(join(devFixture, "caches", "blobs"), { recursive: true });
+writeFileSync(join(devFixture, "caches", "blobs", "x.bin"), Buffer.alloc(32 * 1024, 7));
+writeFileSync(join(devFixture, "caches", "index.db"), "idx\n");
+mkdirSync(join(devFixture, "keep"), { recursive: true });
+writeFileSync(join(devFixture, "keep", "settings.json"), "{}\n");
+const devProject = join(devFixture, "projects", "smoke-app");
+mkdirSync(join(devProject, "target", "debug"), { recursive: true });
+writeFileSync(join(devProject, "Cargo.toml"), "[package]\nname = \"smoke-app\"\n");
+writeFileSync(join(devProject, "target", "debug", "smoke-app.exe"), Buffer.alloc(16 * 1024, 8));
+const monthAgo = new Date(Date.now() - 30 * 86_400_000);
+for (const p of [
+  join(devProject, "target", "debug", "smoke-app.exe"),
+  join(devProject, "target", "debug"),
+  join(devProject, "target"),
+  join(devProject, "Cargo.toml"),
+  devProject,
+]) {
+  utimesSync(p, monthAgo, monthAgo);
+}
+const devRulesDir = mkdtempSync(join(tmpdir(), "nfd-smoke-devrules-"));
+writeFileSync(
+  join(devRulesDir, "smoke-dev.toml"),
+  `[pack]
+id = "smoke-dev"
+name = "Smoke DevCache"
+version = "0.0.1"
+devcache = true
+
+[[rule]]
+id = "smoke.dev.cache"
+vendor = "NANO Dev"
+app = "Smoke Tool"
+category = "test"
+paths = ["\${TEMP}/${basename(devFixture)}/caches/**"]
+level = "safe"
+regenerates = true
+impact = "Caches of the GUI smoke test fixture."
+impact_vi = "Bộ đệm của fixture kiểm thử GUI."
+verified_on = 2026-10-16
+
+[[rule]]
+id = "smoke.dev.keep"
+vendor = "NANO Dev"
+app = "Smoke Tool"
+category = "test"
+paths = ["\${TEMP}/${basename(devFixture)}/keep/**"]
+level = "protected"
+impact = "Settings of the GUI smoke test fixture."
+impact_vi = "Thiết lập của fixture kiểm thử GUI."
 verified_on = 2026-10-16
 `,
 );
@@ -417,9 +475,75 @@ try {
   check("Home shows the temperature card", await evaluate("document.querySelectorAll('.temps [data-temp]').length === 3"));
   await shot("8-home-health");
 
+  // Phase 4: DevCache with a pack that only matches its own fixture
+  const devNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Dev caches|Cache lập trình/.test(b.innerText))");
+  check("Dev caches is in the sidebar", devNav >= 0);
+  await evaluate(`window.__nfdDevRulesDir = ${JSON.stringify(devRulesDir)}`);
+  await nav(devNav);
+  for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('NANO Dev')")); i++) await sleep(150);
+  check("DevCache view groups the fixture vendor", await evaluate("!!document.querySelector('[data-vendor=\"NANO Dev\"]')"));
+  check("DevCache view lists what is kept", await evaluate("document.querySelector('[data-vendor=\"NANO Dev\"]')?.innerText.includes('Settings of the GUI smoke test fixture') ?? false"));
+  await shot("13-devcache");
+  const dc = await invoke("devcache_scan", { rulesDir: devRulesDir, thresholds: { "NANO Dev": 0.00001 } });
+  const dv = dc.vendors?.find((v) => v.vendor === "NANO Dev");
+  check(
+    "devcache scan: vendor → app → rule, keep list, threshold",
+    dv?.apps?.[0]?.rules?.[0]?.ruleId === "smoke.dev.cache" && dv.apps[0].kept.length === 1 && dv.safeBytes > 0 && dv.overThreshold === true && dc.vendors.length === 1,
+    JSON.stringify(dc).slice(0, 200),
+  );
+  const devItems = await invoke("devcache_items", { ruleId: "smoke.dev.cache", limit: 10 });
+  check("devcache preview lists the fixture caches", devItems.length === 2 && devItems.every((p) => p.path.startsWith(join(devFixture, "caches"))), JSON.stringify(devItems));
+  const devCleaned = await invoke("devcache_run", { ruleIds: ["smoke.dev.cache"], expert: false, permanent: false });
+  if (devCleaned.id) operations.push(devCleaned.id);
+  check(
+    "devcache clean moves the caches to the quarantine and keeps settings",
+    devCleaned.done === 2 && !existsSync(join(devFixture, "caches", "index.db")) && existsSync(join(devFixture, "keep", "settings.json")),
+    JSON.stringify(devCleaned),
+  );
+  if (devCleaned.id) {
+    const back = await invoke("activity_restore", { id: devCleaned.id });
+    check("devcache restore brings the caches back", back.length === 2 && readFileSync(join(devFixture, "caches", "index.db"), "utf8") === "idx\n", JSON.stringify(back));
+  }
+  await evaluate("delete window.__nfdDevRulesDir");
+
+  const repoScan = await invoke("devcache_repos", { root: join(devFixture, "projects"), keepRecentDays: 7, staleDays: 90, gitStatus: false });
+  const smokeRepo = repoScan.repos?.find((r) => r.name === "smoke-app");
+  const buildOut = smokeRepo?.artifacts?.find((a) => a.rel === "target");
+  check("repo finder: project and its build output", !!buildOut && buildOut.selected && buildOut.level === "safe" && smokeRepo.kinds.includes("rust"), JSON.stringify(repoScan).slice(0, 240));
+  if (buildOut) {
+    const moved = await invoke("devcache_repos_clean", { paths: [buildOut.path] });
+    if (moved.id) operations.push(moved.id);
+    check("repo build output goes to the quarantine", moved.done === 1 && !existsSync(join(devProject, "target")) && existsSync(join(devProject, "Cargo.toml")), JSON.stringify(moved));
+    if (moved.id) {
+      const back = await invoke("activity_restore", { id: moved.id });
+      check("repo build output is restored", back[0]?.status === "restored" && existsSync(join(devProject, "target", "debug", "smoke-app.exe")), JSON.stringify(back));
+    }
+  }
+  const tools = await invoke("devcache_toolchains");
+  check("toolchains: read-only inventory", Array.isArray(tools) && tools.every((x) => typeof x.family === "string" && (x.command === null || !/rmdir|del |rm -/i.test(x.command))), `${tools.length} toolchain(s)`);
+  const stores = await invoke("devcache_stores");
+  check("package stores: listed with exact command lines", Array.isArray(stores) && stores.every((x) => typeof x.commandLine === "string" && (x.undo === "redownload" || !x.runnable)), stores.map?.((x) => x.id).join(" "));
+  const runnable = stores.find?.((x) => x.runnable);
+  if (runnable) {
+    const refusedRun = await invoke("devcache_store_run", { id: runnable.id, commandLine: `${runnable.commandLine} --extra` });
+    check("package store command refuses a command line nobody confirmed", refusedRun.__error?.code === "command", JSON.stringify(refusedRun));
+  }
+  const unknownDirs = await invoke("devcache_unknown", { minMb: 50 });
+  check("unknown folders are unverified and never pre-selected", Array.isArray(unknownDirs) && unknownDirs.every((f) => f.level === "caution" && f.proposeUrl.startsWith("https://github.com/congluuit/NANOFreeDisk/issues/new?")), `${unknownDirs.length} folder(s)`);
+  const badReveal = await invoke("devcache_reveal", { path: "C:\\Windows\\System32" });
+  check("reveal only opens folders the view showed", badReveal.__error?.code === "not-found", JSON.stringify(badReveal));
+  const badUrl = await invoke("devcache_propose", { url: "https://example.com/" });
+  check("propose only opens the rule-proposal form", badUrl.__error?.code === "bad-url", JSON.stringify(badUrl));
+  for (const tab of ["toolchains", "repos", "stores", "unknown"]) {
+    await evaluate(`document.querySelector('[data-devtab=${tab}]').click()`);
+    await sleep(400);
+  }
+  check("DevCache tabs render", await evaluate("!!document.querySelector('[data-devtab=unknown][aria-selected=true]')"));
+  await evaluate("document.querySelector('[data-devtab=cache]').click()");
+
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"]]) {
+  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");
@@ -554,6 +678,8 @@ try {
   await sleep(500);
   rmSync(fixture, { recursive: true, force: true });
   rmSync(rulesDir, { recursive: true, force: true });
+  rmSync(devFixture, { recursive: true, force: true });
+  rmSync(devRulesDir, { recursive: true, force: true });
 }
 
 if (failures.length) {

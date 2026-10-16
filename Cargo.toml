@@ -24,6 +24,7 @@ nfd-hwinfo = { path = "crates/nfd-hwinfo", version = "0.1.0" }
 nfd-sensors = { path = "crates/nfd-sensors", version = "0.1.0" }
 nfd-tasks = { path = "crates/nfd-tasks", version = "0.1.0" }
 nfd-helper = { path = "crates/nfd-helper", version = "0.1.0" }
+nfd-devtools = { path = "crates/nfd-devtools", version = "0.1.0" }
 
 # external
 serde = { version = "1", features = ["derive"] }

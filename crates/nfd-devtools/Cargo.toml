@@ -1,0 +1,24 @@
+[package]
+name = "nfd-devtools"
+description = "NANOFreeDisk Dev Workspace: DevCache grouping, unknown caches, toolchains, repos, build artifacts, package-store commands"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+nfd-core = { workspace = true }
+nfd-platform = { workspace = true }
+nfd-rules = { workspace = true }
+rayon = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,7 +2,7 @@
   import { api, inTauri, pickOpenFile, pickSaveFile } from "../api";
   import type { HistoryInfo } from "../types";
   import { LOCALES, t } from "../i18n.svelte";
-  import { app, fail, toast } from "../state.svelte";
+  import { DEFAULT_SETTINGS, app, fail, toast } from "../state.svelte";
   import {
     EDITABLE_TOKENS,
     PRESETS,
@@ -51,6 +51,22 @@
     } catch (e) {
       fail(e);
     }
+  }
+
+  let newVendor = $state("");
+  function setThreshold(vendor: string, gb: number) {
+    app.settings.devThresholds = { ...app.settings.devThresholds, [vendor]: Math.max(0, Number.isFinite(gb) ? gb : 0) };
+  }
+  function removeThreshold(vendor: string) {
+    const rest = Object.fromEntries(Object.entries(app.settings.devThresholds).filter(([v]) => v !== vendor));
+    // the backend has defaults for these: 0 turns their reminder off
+    app.settings.devThresholds = vendor in DEFAULT_SETTINGS.devThresholds ? { ...rest, [vendor]: 0 } : rest;
+  }
+  function addThreshold() {
+    const v = newVendor.trim();
+    if (!v) return;
+    setThreshold(v, 10);
+    newVendor = "";
   }
 
   let history = $state<HistoryInfo | null>(null);
@@ -241,6 +257,46 @@
     </div>
   </div>
 
+  <div class="block card" data-settings="devcache">
+    <h2>{t("settings-devcache")}</h2>
+    <label class="toggle" title={t("hint-dev-alerts")}>
+      <input type="checkbox" bind:checked={app.settings.devAlerts} data-effect title={t("hint-dev-alerts")} />
+      <span>{t("settings-dev-alerts")}</span>
+    </label>
+    <p class="muted small">{t("settings-dev-thresholds-hint")}</p>
+    <ul class="thresholds">
+      {#each Object.entries(app.settings.devThresholds) as [vendor, gb] (vendor)}
+        <li class="row">
+          <span class="grow">{vendor}</span>
+          <input
+            type="number"
+            min="0"
+            step="1"
+            value={gb}
+            aria-label={t("settings-dev-threshold", { vendor })}
+            onchange={(e) => setThreshold(vendor, Number((e.currentTarget as HTMLInputElement).value))}
+            data-effect
+            title={t("hint-dev-threshold")}
+          />
+          <span class="muted small">GB</span>
+          <button class="btn ghost icon" onclick={() => removeThreshold(vendor)} aria-label={t("settings-dev-remove")} data-effect title={t("settings-dev-remove")}><Icon name="x" size={14} /></button>
+        </li>
+      {/each}
+    </ul>
+    <div class="row">
+      <input class="vendor" bind:value={newVendor} placeholder={t("settings-dev-vendor")} aria-label={t("settings-dev-vendor")} />
+      <button class="btn" disabled={!newVendor.trim()} onclick={addThreshold} data-effect title={t("hint-dev-threshold")}>{t("settings-dev-add")}</button>
+    </div>
+    <div class="row">
+      <label>{t("settings-dev-keep-recent")}
+        <input type="number" min="0" max="365" bind:value={app.settings.keepRecentDays} data-effect title={t("hint-dev-keep-recent")} />
+      </label>
+      <label>{t("settings-dev-stale")}
+        <input type="number" min="0" max="3650" bind:value={app.settings.staleDays} data-effect title={t("hint-dev-stale")} />
+      </label>
+    </div>
+  </div>
+
   <div class="block card">
     <h2>{t("settings-font-scale")}</h2>
     <div class="row">
@@ -398,6 +454,25 @@
   }
   .preset:hover .sample {
     outline: 2px solid var(--accent);
+  }
+  .thresholds {
+    list-style: none;
+    margin: 6px 0;
+    padding: 0;
+    max-width: 420px;
+  }
+  .thresholds input,
+  .row input[type="number"],
+  .vendor {
+    width: 90px;
+    padding: 4px 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    color: var(--text);
+  }
+  .vendor {
+    width: 220px;
   }
   .about {
     display: flex;

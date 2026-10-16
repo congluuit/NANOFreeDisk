@@ -7,7 +7,8 @@
 id          = "ai-tools"
 name        = "AI assistants & coding agents"
 version     = "0.1.0"
-description = "Caches, logs and session data of Claude, Codex, Gemini CLI, Copilot, Cursor, Windsurf, Ollama and friends."
+description = "Caches, logs and session data of Claude, Codex, Gemini CLI, Copilot, Cursor, Windsurf, Continue, Cline, Ollama and friends."
+devcache    = true
 
 # ───────────────────────────── Anthropic ─────────────────────────────
 
@@ -412,4 +413,190 @@ regenerates     = false
 requires_closed = ["LM Studio.exe"]
 impact          = "Downloaded GGUF models; re-download required. Conversations are NOT touched."
 impact_vi       = "Model GGUF đã tải; phải tải lại. Cuộc hội thoại KHÔNG bị đụng tới."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "lmstudio.conversations"
+vendor          = "LM Studio"
+app             = "LM Studio"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.lmstudio/conversations/**", "${HOME}/.lmstudio/settings.json"]
+level           = "protected"
+impact          = "Your chat history and LM Studio settings."
+impact_vi       = "Lịch sử chat và thiết lập LM Studio của bạn."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "huggingface.token"
+vendor          = "Hugging Face"
+app             = "Hugging Face Hub"
+category        = "llm-runtime"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.cache/huggingface/token", "${HOME}/.cache/huggingface/stored_tokens"]
+level           = "protected"
+impact          = "Your Hugging Face access tokens; deleting signs you out of `hf`."
+impact_vi       = "Token truy cập Hugging Face; xóa sẽ đăng xuất khỏi `hf`."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "ollama.logs"
+vendor          = "Ollama"
+app             = "Ollama"
+category        = "llm-runtime"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Ollama/*.log"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["ollama.exe", "ollama app.exe"]
+impact          = "Server and app logs of Ollama; models are not touched."
+impact_vi       = "Nhật ký server và ứng dụng Ollama; không đụng tới model."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "pytorch.hub-cache"
+vendor          = "PyTorch"
+app             = "PyTorch Hub"
+category        = "ml-cache"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.cache/torch/**"]
+level           = "caution"
+impact          = "Pretrained weights and repos downloaded by torch.hub / torchvision; downloaded again the next time code asks for them (can be GBs)."
+impact_vi       = "Trọng số pretrained và repo do torch.hub / torchvision tải; sẽ tải lại khi mã cần tới (có thể vài GB)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "google.keras.cache"
+vendor          = "Google"
+app             = "Keras / TensorFlow"
+category        = "ml-cache"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.keras/datasets/**", "${HOME}/.keras/models/**", "${HOME}/tensorflow_datasets/**"]
+level           = "caution"
+impact          = "Datasets and model weights downloaded by Keras and TensorFlow Datasets; downloaded again on demand."
+impact_vi       = "Dataset và trọng số model do Keras và TensorFlow Datasets tải; sẽ tải lại khi cần."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "janhq.jan.models"
+vendor          = "Jan"
+app             = "Jan"
+category        = "llm-runtime"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Jan/data/models/**"]
+level           = "caution"
+requires_closed = ["Jan.exe"]
+impact          = "Models downloaded in Jan; download them again from the Hub. Threads (chat history) are kept."
+impact_vi       = "Model đã tải trong Jan; tải lại từ Hub. Giữ nguyên thread (lịch sử chat)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "janhq.jan.threads"
+vendor          = "Jan"
+app             = "Jan"
+category        = "llm-runtime"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Jan/data/threads/**", "${APPDATA}/Jan/data/assistants/**"]
+level           = "protected"
+impact          = "Your Jan chat threads and assistants."
+impact_vi       = "Thread chat và assistant của bạn trong Jan."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "nomic.gpt4all.models"
+vendor          = "Nomic AI"
+app             = "GPT4All"
+category        = "llm-runtime"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/nomic.ai/GPT4All/*.gguf"]
+level           = "caution"
+requires_closed = ["chat.exe", "GPT4All.exe"]
+impact          = "Downloaded GGUF models of GPT4All; download them again in the app. Chats are kept."
+impact_vi       = "Model GGUF đã tải của GPT4All; tải lại trong ứng dụng. Giữ nguyên các cuộc chat."
+verified_on     = 2026-10-16
+
+# ───────────────────────────── Agent extensions & CLIs ─────────────────────────────
+
+[[rule]]
+id              = "github.copilot-cli.logs"
+vendor          = "GitHub"
+app             = "Copilot CLI"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.copilot/logs/**"]
+level           = "safe"
+regenerates     = true
+min_age_days    = 1
+requires_closed = ["copilot.exe", "copilot"]
+impact          = "Copilot CLI logs; sessions and config are kept."
+impact_vi       = "Nhật ký Copilot CLI; giữ nguyên phiên và cấu hình."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "continue.index"
+vendor          = "Continue"
+app             = "Continue"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.continue/index/**", "${HOME}/.continue/logs/**"]
+level           = "safe"
+regenerates     = true
+requires_closed = ["Code.exe", "idea64.exe"]
+impact          = "Codebase embeddings index and logs; Continue re-indexes your workspace in the background."
+impact_vi       = "Chỉ mục embedding mã nguồn và nhật ký; Continue lập chỉ mục lại workspace ở chế độ nền."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "continue.sessions"
+vendor          = "Continue"
+app             = "Continue"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.continue/sessions/**"]
+level           = "caution"
+min_age_days    = 14
+requires_closed = ["Code.exe", "idea64.exe"]
+impact          = "Saved Continue chat sessions; older than 14 days only."
+impact_vi       = "Phiên chat Continue đã lưu; chỉ phiên cũ hơn 14 ngày."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "continue.config"
+vendor          = "Continue"
+app             = "Continue"
+category        = "ai-agent"
+platform        = ["windows", "macos", "linux"]
+paths           = ["${HOME}/.continue/config.yaml", "${HOME}/.continue/config.json", "${HOME}/.continue/config.ts", "${HOME}/.continue/.env"]
+level           = "protected"
+impact          = "Continue configuration, model providers and API keys."
+impact_vi       = "Cấu hình Continue, nhà cung cấp model và API key."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "cline.tasks"
+vendor          = "Cline"
+app             = "Cline"
+category        = "ai-agent"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/tasks/**", "${APPDATA}/Code/User/globalStorage/saoudrizwan.claude-dev/checkpoints/**"]
+level           = "caution"
+min_age_days    = 14
+requires_closed = ["Code.exe"]
+impact          = "Cline task history with checkpoints and screenshots (often several GB). Old tasks can no longer be reopened or rolled back."
+impact_vi       = "Lịch sử task của Cline kèm checkpoint và ảnh chụp (thường vài GB). Không mở lại hay quay lui task cũ được nữa."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "roocode.tasks"
+vendor          = "Roo Code"
+app             = "Roo Code"
+category        = "ai-agent"
+platform        = ["windows"]
+paths           = ["${APPDATA}/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks/**", "${APPDATA}/Code/User/globalStorage/rooveterinaryinc.roo-cline/checkpoints/**"]
+level           = "caution"
+min_age_days    = 14
+requires_closed = ["Code.exe"]
+impact          = "Roo Code task history with checkpoints. Old tasks can no longer be reopened or rolled back."
+impact_vi       = "Lịch sử task của Roo Code kèm checkpoint. Không mở lại hay quay lui task cũ được nữa."
 verified_on     = 2026-10-16
