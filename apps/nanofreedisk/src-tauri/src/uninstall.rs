@@ -188,7 +188,13 @@ pub fn run(args: &[String]) -> i32 {
             .clone()
             .filter(|q| std::fs::read_dir(q).is_ok_and(|mut rd| rd.next().is_some()));
         for dir in &data_dirs {
-            let _ = uninstall::remove_data_dir(dir, keep.as_deref());
+            // WebView2 helpers may hold the profile for a moment after the app quit
+            for _ in 0..10 {
+                if uninstall::remove_data_dir(dir, keep.as_deref()).is_ok() {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(500));
+            }
             if dir.ends_with("pawnio") {
                 uninstall::remove_empty_parent(dir);
             }

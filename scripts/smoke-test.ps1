@@ -95,6 +95,15 @@ function Start-AppBriefly([string] $exe, [string] $label) {
     Start-Sleep -Seconds 8
     if ($p.HasExited) { throw "$label`: the app exited early (code $($p.ExitCode))" }
     Get-Process nanofreedisk -ErrorAction SilentlyContinue | Stop-Process -Force
+    # the WebView2 child processes outlive a killed host for a moment and keep the
+    # profile open; wait for ours so later deletes do not hit locked files
+    for ($i = 0; $i -lt 30; $i++) {
+        $webviews = @(Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" -ErrorAction SilentlyContinue |
+                Where-Object { $_.CommandLine -match 'nanodev|NANOFreeDisk|nfd-portable' })
+        if ($webviews.Count -eq 0) { break }
+        if ($i -eq 10) { $webviews | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue } }
+        Start-Sleep -Milliseconds 500
+    }
     Start-Sleep -Seconds 1
     Ok "$label started"
 }
@@ -170,7 +179,10 @@ try {
         $leak = $dataDirs | Where-Object { Test-Path $_ }
         if ($leak) { throw "portable mode wrote to the user profile: $leak" }
         Ok "data stays next to the exe"
-        Remove-Item -Recurse -Force $tmp
+        for ($i = 0; (Test-Path $tmp) -and $i -lt 20; $i++) {
+            try { Remove-Item -Recurse -Force $tmp -ErrorAction Stop } catch { Start-Sleep -Milliseconds 500 }
+        }
+        if (Test-Path $tmp) { throw "could not remove $tmp" }
     }
 
     # -- 2. NSIS (per user) ------------------------------------------
