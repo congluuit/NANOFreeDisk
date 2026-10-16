@@ -53,10 +53,7 @@ fn unix_now() -> u64 {
 }
 
 fn thermal_path(app: &AppHandle) -> Option<std::path::PathBuf> {
-    app.path()
-        .app_data_dir()
-        .ok()
-        .map(|d| d.join("thermal-24h.json"))
+    crate::paths::roaming_data(app).map(|d| d.join("thermal-24h.json"))
 }
 
 fn thermal_load(app: &AppHandle, t: &mut Thermal) {
@@ -525,7 +522,7 @@ pub async fn task_end(
 ) -> CmdResult<Vec<nfd_tasks::EndResult>> {
     #[cfg(windows)]
     {
-        let log = app.path().app_log_dir().ok().map(|d| d.join("tasks.log"));
+        let log = crate::paths::logs(&app).map(|d| d.join("tasks.log"));
         tauri::async_runtime::spawn_blocking(move || {
             let results = nfd_tasks::end_task(pid, &create_time, mode, confirmed);
             if let Some(path) = log {

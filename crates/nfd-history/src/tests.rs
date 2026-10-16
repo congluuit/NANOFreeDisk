@@ -7,6 +7,7 @@ use nfd_core::scanner::{ScanMode, ScanStats, ScanTree};
 use super::*;
 
 mod journal_tests;
+mod uninstall_tests;
 
 const MB: u64 = 1 << 20;
 const GB: u64 = 1 << 30;

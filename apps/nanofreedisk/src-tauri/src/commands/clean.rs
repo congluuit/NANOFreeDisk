@@ -18,7 +18,7 @@ use nfd_history::{ItemRow, OperationRow, RestoreResult};
 use nfd_platform::Platform;
 use nfd_rules::matcher::{MatchOptions, MatchReport, Matcher, RuleSummary};
 use serde::Serialize;
-use tauri::{AppHandle, Emitter, Manager, State, WebviewWindow};
+use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 use super::{AppState, CmdResult, err, owner_handle, with_history, with_session};
 
@@ -51,7 +51,7 @@ impl CleanState {
 }
 
 pub(super) fn app_local(app: &AppHandle) -> Option<PathBuf> {
-    app.path().app_local_data_dir().ok()
+    crate::paths::local_data(app)
 }
 
 pub(super) fn roots(app: &AppHandle) -> QuarantineRoots {

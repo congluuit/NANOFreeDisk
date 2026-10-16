@@ -10,13 +10,13 @@ use nfd_core::safety::{LiveProbe, Origin, SafetyGate};
 
 use crate::History;
 
-struct Fixture {
-    dir: tempfile::TempDir,
-    gate: SafetyGate,
-    roots: QuarantineRoots,
+pub(super) struct Fixture {
+    pub(super) dir: tempfile::TempDir,
+    pub(super) gate: SafetyGate,
+    pub(super) roots: QuarantineRoots,
 }
 
-fn fixture() -> Fixture {
+pub(super) fn fixture() -> Fixture {
     let dir = tempfile::tempdir().expect("tmp");
     let base = dir.path().to_string_lossy().replace('\\', "/");
     let resolve = move |v: &str| (v == "LOCALAPPDATA").then(|| base.clone());
@@ -31,7 +31,7 @@ fn fixture() -> Fixture {
     }
 }
 
-fn item(path: &Path) -> PlanItem {
+pub(super) fn item(path: &Path) -> PlanItem {
     let info = nfd_platform::fsinfo::file_info(path).expect("info");
     PlanItem {
         path: path.to_path_buf(),

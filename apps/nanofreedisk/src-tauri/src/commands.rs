@@ -338,10 +338,9 @@ fn volume_for(path: &Path) -> (String, u64, u64) {
 }
 
 fn history_path(app: &AppHandle) -> CmdResult<PathBuf> {
-    app.path()
-        .app_local_data_dir()
+    crate::paths::local_data(app)
         .map(|d| d.join("history.db"))
-        .map_err(|e| err("os", e))
+        .ok_or_else(|| err("os", "no data folder"))
 }
 
 /// Run `f` on the history database, opening it on first use.
@@ -833,10 +832,9 @@ pub async fn save_html_report(path: String, html: String) -> CmdResult<()> {
 }
 
 fn settings_path(app: &AppHandle) -> CmdResult<PathBuf> {
-    app.path()
-        .app_config_dir()
+    crate::paths::config(app)
         .map(|d| d.join("settings.json"))
-        .map_err(|e| err("os", e))
+        .ok_or_else(|| err("os", "no settings folder"))
 }
 
 /// The UI's settings document (opaque JSON owned by the frontend), `null` if none.

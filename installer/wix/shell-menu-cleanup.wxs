@@ -1,7 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Uninstalling the MSI removes the per-user Explorer menu "Analyze with NANOFreeDisk"
-     and "Find duplicates here" (A7): the same keys nfd_platform::shell_menu writes. Referenced from tauri.conf.json
-     (bundle.windows.wix.fragmentPaths / componentRefs). -->
+<!-- Uninstall steps of the MSI (docs/PHASE8_INSTALLERS.md §2.1 / §2.3). Referenced from
+     tauri.conf.json (bundle.windows.wix.fragmentPaths / componentRefs).
+
+     * Removes the per-user Explorer menu "Analyze with NANOFreeDisk" and "Find
+       duplicates here" (A7): the same keys nfd_platform::shell_menu writes.
+     * When the uninstall shows a UI (Apps & features, msiexec /x), runs
+       `nanofreedisk.exe` with the uninstall-cleanup flag first: files still in the quarantine are
+       put back, deleted for good or left, after a clear question. It runs in the
+       user's own process (InstallUISequence), so it sees that user's data. A silent
+       uninstall (quiet mode, GPO, Intune) has no UI sequence and leaves user data alone.
+       The MSI never removes user data folders. -->
 <Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
   <Fragment>
     <DirectoryRef Id="INSTALLDIR">
@@ -16,5 +24,11 @@
         <RemoveRegistryKey Root="HKCU" Key="Software\NANOFreeDisk" Action="removeOnUninstall" />
       </Component>
     </DirectoryRef>
+
+    <!-- "Path" is the File Id Tauri gives the main executable. -->
+    <CustomAction Id="NfdUninstallCleanup" FileKey="Path" ExeCommand="--uninstall-cleanup" Execute="immediate" Impersonate="yes" Return="ignore" />
+    <InstallUISequence>
+      <Custom Action="NfdUninstallCleanup" After="CostFinalize">REMOVE="ALL" AND NOT UPGRADINGPRODUCTCODE AND Installed</Custom>
+    </InstallUISequence>
   </Fragment>
 </Wix>

@@ -38,6 +38,7 @@ use thiserror::Error;
 pub mod audit;
 pub mod hashes;
 pub mod journal;
+pub mod uninstall;
 
 pub use hashes::{HashKey, HashRow};
 pub use journal::{ItemRow, OperationRow, RestoreResult};
@@ -45,10 +46,34 @@ pub use journal::{ItemRow, OperationRow, RestoreResult};
 /// Application identifier: the desktop app keeps its data in a folder of this name.
 pub const APP_ID: &str = "vn.io.nanodev.nanofreedisk";
 
+/// Marker file next to the executables of the portable zip.
+pub const PORTABLE_FLAG: &str = "portable.flag";
+
+/// Portable mode: when [`PORTABLE_FLAG`] sits next to the running executable, every
+/// piece of data (history, settings, logs, quarantine of the system drive, WebView2
+/// profile) lives in `data` beside it instead of the user profile. Shared by the app
+/// and `nfd.exe`, which ship side by side.
+#[must_use]
+pub fn portable_dir() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    portable_dir_for(&exe)
+}
+
+/// [`portable_dir`] for an executable at `exe`.
+#[must_use]
+pub fn portable_dir_for(exe: &Path) -> Option<std::path::PathBuf> {
+    let dir = exe.parent()?;
+    dir.join(PORTABLE_FLAG).is_file().then(|| dir.join("data"))
+}
+
 /// Where the desktop app keeps the history (`%LOCALAPPDATA%\<APP_ID>\history.db` on
-/// Windows, the XDG data folder elsewhere), so the CLI reads the same file.
+/// Windows, the XDG data folder elsewhere; `data\history.db` next to the exe in
+/// portable mode), so the CLI reads the same file.
 #[must_use]
 pub fn default_path() -> Option<std::path::PathBuf> {
+    if let Some(dir) = portable_dir() {
+        return Some(dir.join("history.db"));
+    }
     let env = |k: &str| {
         std::env::var_os(k)
             .filter(|v| !v.is_empty())

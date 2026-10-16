@@ -6,7 +6,9 @@
 //! `Planner → SafetyGate → Executor → UndoJournal` ([`commands::clean`]).
 
 mod commands;
+mod paths;
 mod session;
+mod uninstall;
 
 use tauri::{Emitter, Manager};
 
@@ -33,7 +35,8 @@ fn wants_dupes(args: &[String]) -> bool {
 
 /// Start the application.
 ///
-/// `--unregister-shell` removes the Explorer menu keys and exits (for uninstallers).
+/// `--unregister-shell` removes the Explorer menu keys and exits (for uninstallers);
+/// `--uninstall-cleanup` is the uninstallers' data step ([`uninstall`]).
 ///
 /// # Panics
 /// If the Tauri runtime cannot start (no WebView2, broken bundle).
@@ -43,6 +46,10 @@ pub fn run() {
     if args.iter().any(|a| a == "--unregister-shell") {
         let _ = nfd_platform::shell_menu::unregister();
         return;
+    }
+    // run by the uninstallers: quarantine restore/purge, data removal (no window)
+    if args.iter().any(|a| a == uninstall::FLAG) {
+        std::process::exit(uninstall::run(&args));
     }
     // elevated helper for Advanced sensors: no window, only the pipe protocol
     #[cfg(windows)]
@@ -78,6 +85,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        // the main window comes from tauri.conf.json ("create": false) so portable
+        // mode can keep the WebView2 profile next to the exe
+        .setup(|app| {
+            paths::main_window(app.handle())?;
+            Ok(())
+        })
         .manage(state)
         .manage(commands::clean::CleanState::default())
         .manage(commands::devcache::DevState::default())
