@@ -401,6 +401,8 @@ impl Fake {
         self.finals.insert(p(path), p(real));
         self
     }
+    // Only the Windows volume-boundary tests use this.
+    #[cfg_attr(not(windows), allow(dead_code))]
     fn root(mut self, root: &str, id: u64) -> Self {
         self.roots.insert(p(root), id);
         self

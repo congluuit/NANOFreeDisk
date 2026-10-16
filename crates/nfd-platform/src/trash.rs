@@ -84,7 +84,9 @@ pub fn parse_info(bytes: &[u8]) -> Option<(PathBuf, i64, u64)> {
 
 /// Items in the Recycle Bin of the volume of `original` that were deleted from
 /// exactly `original` (case-insensitive), newest first. Only the current user's bin
-/// is readable; other users' folders are skipped.
+/// is readable; other users' folders are skipped. The shell records the long form of
+/// the path, so an 8.3 short name in `original` (`C:\Users\RUNNER~1\...`) also
+/// matches.
 ///
 /// # Errors
 /// The volume's Recycle Bin cannot be listed.
@@ -98,7 +100,10 @@ pub fn find_recycled(original: &Path) -> io::Result<Vec<RecycledItem>> {
     let mut bin = PathBuf::from(prefix.as_os_str());
     bin.push(std::path::MAIN_SEPARATOR_STR);
     bin.push("$Recycle.Bin");
-    let want = original.to_string_lossy().to_lowercase();
+    let mut want = vec![original.to_string_lossy().to_lowercase()];
+    if let Some(long) = long_form(original) {
+        want.push(long.to_string_lossy().to_lowercase());
+    }
     let mut out = Vec::new();
     for sid in std::fs::read_dir(&bin)?.flatten() {
         let Ok(files) = std::fs::read_dir(sid.path()) else {
@@ -115,7 +120,7 @@ pub fn find_recycled(original: &Path) -> io::Result<Vec<RecycledItem>> {
             let Some((path, deleted_at, size)) = parse_info(&bytes) else {
                 continue;
             };
-            if path.to_string_lossy().to_lowercase() != want {
+            if !want.contains(&path.to_string_lossy().to_lowercase()) {
                 continue;
             }
             let data = sid.path().join(format!("$R{suffix}"));
@@ -132,6 +137,17 @@ pub fn find_recycled(original: &Path) -> io::Result<Vec<RecycledItem>> {
     }
     out.sort_by_key(|i| std::cmp::Reverse(i.deleted_at));
     Ok(out)
+}
+
+/// `original` with its (existing) parent folder resolved to the full long-name form,
+/// without the `\\?\` prefix `canonicalize` adds; `None` when that cannot be done.
+fn long_form(original: &Path) -> Option<PathBuf> {
+    let parent = std::fs::canonicalize(original.parent()?).ok()?;
+    let parent = parent.to_str()?.strip_prefix(r"\\?\")?;
+    if parent.starts_with(r"UNC\") {
+        return None;
+    }
+    Some(Path::new(parent).join(original.file_name()?))
 }
 
 /// Put a recycled item back where it was deleted from (like Explorer's "Restore").

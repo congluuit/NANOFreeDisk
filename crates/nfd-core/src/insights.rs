@@ -536,7 +536,13 @@ mod tests {
             (None, "Downloads", Dir, 0, 0),
             (Some(0), "a.zip", File, MB, 0),
         ]);
-        t.root = PathBuf::from(r"C:\Users\x\Downloads");
+        // Built with the native separator so the root's file name is `Downloads` on
+        // every OS (a `C:\...` literal is one opaque name on Unix).
+        t.root = ["Users", "x", "Downloads"]
+            .iter()
+            .fold(PathBuf::from(std::path::MAIN_SEPARATOR_STR), |p, c| {
+                p.join(c)
+            });
         let ends = subtree_ends(&t.entries);
         let r = old_and_large(&t, &ends, EntryId(0), &OldLargeOptions::at(NOW));
         assert_eq!(names(&t, &r.installers), ["a.zip"]);

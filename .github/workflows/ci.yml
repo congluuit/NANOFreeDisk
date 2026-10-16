@@ -62,7 +62,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - run: cargo nextest run --workspace --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
+      - run: cargo nextest run --no-fail-fast --workspace --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
       - run: cargo test --workspace --doc ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
 
   rules:
@@ -89,10 +89,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: EmbarkStudios/cargo-deny-action@v2
+      # Run cargo-deny on the runner rather than in cargo-deny-action's musl
+      # container: that container only ships a fixed toolchain and fails on our
+      # rust-toolchain.toml override ("stable-x86_64-unknown-linux-musl is not
+      # installed"). Advisory ignores and their reasons live in deny.toml.
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@v2
         with:
-          command: check
-          arguments: --all-features
+          tool: cargo-deny
+      - run: cargo deny --all-features check
 
   msrv:
     name: MSRV (1.85)

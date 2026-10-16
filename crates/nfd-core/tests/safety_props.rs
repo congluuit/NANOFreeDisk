@@ -202,10 +202,9 @@ proptest! {
             })
             .collect();
         let built = plan::build(candidates.clone(), PlanOptions { expert: true, include_caution: true, permanent: false });
-        let key = |p: &PathBuf| {
-            let s = p.to_string_lossy().replace('\\', "/");
-            if cfg!(windows) { s.to_lowercase() } else { s }
-        };
+        // Same as `safety::comparable`: case-insensitive on every OS (Windows
+        // semantics), so `a` and `A` are one item on Unix too.
+        let key = |p: &PathBuf| p.to_string_lossy().replace('\\', "/").to_lowercase();
         let inside = |inner: &str, outer: &str| inner == outer || inner.starts_with(&format!("{outer}/"));
         for (i, a) in built.items.iter().enumerate() {
             prop_assert!(a.level() != RiskLevel::Protected);
