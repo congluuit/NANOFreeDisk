@@ -23,10 +23,11 @@ use windows_sys::Win32::System::Diagnostics::Etw::{
     CONTROLTRACE_HANDLE, CloseTrace, ControlTraceW, EVENT_HEADER_FLAG_32_BIT_HEADER,
     EVENT_HEADER_FLAG_64_BIT_HEADER, EVENT_RECORD, EVENT_TRACE_CONTROL_QUERY,
     EVENT_TRACE_CONTROL_STOP, EVENT_TRACE_FLAG, EVENT_TRACE_FLAG_DISK_FILE_IO,
-    EVENT_TRACE_FLAG_FILE_IO_INIT, EVENT_TRACE_FLAG_THREAD, EVENT_TRACE_LOGFILEW,
-    EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE, EVENT_TRACE_SYSTEM_LOGGER_MODE, OpenTraceW,
-    PROCESS_TRACE_MODE_EVENT_RECORD, PROCESS_TRACE_MODE_REAL_TIME, PROCESSTRACE_HANDLE,
-    ProcessTrace, StartTraceW, WNODE_FLAG_TRACED_GUID,
+    EVENT_TRACE_FLAG_FILE_IO, EVENT_TRACE_FLAG_FILE_IO_INIT, EVENT_TRACE_FLAG_THREAD,
+    EVENT_TRACE_LOGFILEW, EVENT_TRACE_PROPERTIES, EVENT_TRACE_REAL_TIME_MODE,
+    EVENT_TRACE_SYSTEM_LOGGER_MODE, OpenTraceW, PROCESS_TRACE_MODE_EVENT_RECORD,
+    PROCESS_TRACE_MODE_REAL_TIME, PROCESSTRACE_HANDLE, ProcessTrace, StartTraceW,
+    WNODE_FLAG_TRACED_GUID,
 };
 use windows_sys::core::GUID;
 
@@ -301,11 +302,14 @@ impl EtwSession {
         let shared = Arc::new(Shared {
             collector: Mutex::new(Collector::new(devices(), &watch)),
         });
-        start_session(
-            SESSION,
-            SESSION_GUID,
-            EVENT_TRACE_FLAG_FILE_IO_INIT | EVENT_TRACE_FLAG_DISK_FILE_IO | EVENT_TRACE_FLAG_THREAD,
-        )?;
+        let mut flags =
+            EVENT_TRACE_FLAG_FILE_IO_INIT | EVENT_TRACE_FLAG_DISK_FILE_IO | EVENT_TRACE_FLAG_THREAD;
+        if !watch.is_empty() {
+            // completions tell a new file from an existing one opened with OPEN_IF;
+            // only while a folder is watched (they double the event volume)
+            flags |= EVENT_TRACE_FLAG_FILE_IO;
+        }
+        start_session(SESSION, SESSION_GUID, flags)?;
         let consumer = match consume(SESSION, &shared) {
             Ok(c) => c,
             Err(e) => {

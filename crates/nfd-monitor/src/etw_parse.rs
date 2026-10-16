@@ -73,10 +73,18 @@ pub enum Event {
         path: String,
     },
     Create {
+        irp: u64,
         tid: u32,
         object: u64,
         options: u32,
         path: String,
+    },
+    /// Completion of a request (only with `FILE_IO`): `extra` is the I/O status
+    /// block's Information (for a Create: `FILE_CREATED`, `FILE_OPENED`…).
+    OpEnd {
+        irp: u64,
+        extra: u64,
+        status: u32,
     },
     Rw {
         write: bool,
@@ -203,7 +211,7 @@ pub fn decode(h: &Header, data: &[u8]) -> Result<Option<Event>, Undecoded> {
                     Ok(Some(Event::Name { op, key, path }))
                 }
                 64 => {
-                    r.ptr()?; // Irp
+                    let irp = r.ptr()?;
                     let (tid, object) = if v3 {
                         let o = r.ptr()?;
                         (r.u32()?, o)
@@ -216,11 +224,18 @@ pub fn decode(h: &Header, data: &[u8]) -> Result<Option<Event>, Undecoded> {
                     r.u32()?; // share access
                     let path = r.wstr()?;
                     Ok(Some(Event::Create {
+                        irp,
                         tid,
                         object,
                         options,
                         path,
                     }))
+                }
+                76 => {
+                    let irp = r.ptr()?;
+                    let extra = r.ptr()?;
+                    let status = r.u32()?;
+                    Ok(Some(Event::OpEnd { irp, extra, status }))
                 }
                 67 | 68 => {
                     r.u64()?; // offset
@@ -315,10 +330,15 @@ pub fn decode(h: &Header, data: &[u8]) -> Result<Option<Event>, Undecoded> {
     }
 }
 
-/// `CreateOptions` high byte = disposition; these may create or replace a file.
-fn creates(options: u32) -> bool {
-    matches!(options >> 24, 0 | 2 | 4 | 5) // SUPERSEDE, CREATE, OVERWRITE, OVERWRITE_IF
+/// `CreateOptions` high byte = disposition; these may create a file (whether they
+/// did is only known at completion: `FILE_OPEN_IF` is what `File::create` and
+/// many loggers use).
+fn may_create(options: u32) -> bool {
+    matches!(options >> 24, 0 | 2 | 3 | 5) // SUPERSEDE, CREATE, OPEN_IF, OVERWRITE_IF
 }
+
+/// `IO_STATUS_BLOCK.Information` of a Create that made a new file.
+const FILE_CREATED: u64 = 2;
 
 /// NT device paths of the volumes with a drive letter: `(\Device\HarddiskVolume3, C:)`.
 #[derive(Debug, Clone, Default)]
@@ -417,6 +437,9 @@ pub struct Collector {
     undecoded: u64,
     /// The last few Create events as decoded (diagnostics).
     recent_creates: std::collections::VecDeque<String>,
+    /// Creates under the watched folder waiting for their completion: IRP → (PID,
+    /// path).
+    pending_creates: HashMap<u64, (u32, String)>,
 }
 
 /// `IRP_PAGING_IO`: the cache or memory manager moving pages (a flush, a mapped
@@ -521,6 +544,7 @@ impl Collector {
                 }
             },
             Event::Create {
+                irp,
                 tid,
                 object,
                 options,
@@ -534,12 +558,22 @@ impl Collector {
                     "v{} pid {} opt {options:#x} {path}",
                     h.version, h.pid
                 ));
-                if creates(options) {
+                if may_create(options) && self.under_watch(&path) {
                     if let Some(pid) = self.pid(h, tid) {
-                        self.touch(now_ms, pid, TouchOp::Create, &path, None);
+                        if self.pending_creates.len() > 4096 {
+                            self.pending_creates.clear();
+                        }
+                        self.pending_creates.insert(irp, (pid, path.clone()));
                     }
                 }
                 self.by_object.insert(object, Arc::from(path));
+            }
+            Event::OpEnd { irp, extra, status } => {
+                if let Some((pid, path)) = self.pending_creates.remove(&irp) {
+                    if status == 0 && extra == FILE_CREATED {
+                        self.touch(now_ms, pid, TouchOp::Create, &path, None);
+                    }
+                }
             }
             Event::Close { object } => {
                 self.by_object.remove(&object);
@@ -814,6 +848,7 @@ mod tests {
         assert_eq!(
             decode(&hdr(Provider::FileIo, 64, 3, 1), &v3),
             Ok(Some(Event::Create {
+                irp: 1,
                 tid: 9,
                 object: 0x55,
                 options: 2 << 24,
@@ -972,7 +1007,7 @@ mod tests {
         assert!(c.watching());
         let create = |path: &str, disposition: u32| {
             B::default()
-                .p(1)
+                .p(u64::from(disposition) + 1) // irp
                 .p(0x10)
                 .d(77)
                 .d(disposition << 24)
@@ -982,9 +1017,14 @@ mod tests {
                 .0
         };
         let h = hdr(Provider::FileIo, 64, 3, 1234);
-        c.event(&h, &create(r"\Device\HarddiskVolume3\work\new.txt", 2), 1);
+        c.event(&h, &create(r"\Device\HarddiskVolume3\work\new.txt", 3), 1); // OPEN_IF
         c.event(&h, &create(r"\Device\HarddiskVolume3\work\open.txt", 1), 2); // plain open
         c.event(&h, &create(r"\Device\HarddiskVolume3\workshop\x.txt", 2), 3); // not under
+        // completions: only the first one made a new file
+        let end = |irp: u64, info: u64| B::default().p(irp).p(info).d(0).0;
+        let e = hdr(Provider::FileIo, 76, 2, u32::MAX);
+        c.event(&e, &end(4, FILE_CREATED), 1); // irp = disposition + 1
+        c.event(&e, &end(2, 1), 2); // open.txt: FILE_OPENED
         let (h, d) = name(0x20, r"\Device\HarddiskVolume3\work\new.txt");
         c.event(&h, &d, 4);
         let (h, d) = rw_v3(true, 0x10, 0x20, 10);
@@ -1057,6 +1097,12 @@ mod tests {
             .s(r"\Device\HarddiskVolume3\Users\RUNNER~1\AppData\x.bin")
             .0;
         c.event(&hdr(Provider::FileIo, 64, 3, 9), &create, 1);
+        assert!(
+            c.take(1000, 0, 2).touches.is_empty(),
+            "not until it completes"
+        );
+        let done = B::default().p(1).p(FILE_CREATED).d(0).0;
+        c.event(&hdr(Provider::FileIo, 76, 3, u32::MAX), &done, 2);
         let t = c.take(1000, 0, 2);
         assert_eq!(t.touches.len(), 1);
         assert_eq!(t.touches[0].op, TouchOp::Create);
