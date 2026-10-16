@@ -24,6 +24,8 @@ export interface Settings {
   installerDays: number;
   /** Keep a snapshot of every scan for "What changed?" and the Health Score trend. */
   history: boolean;
+  /** Hardware: notify when the CPU / GPU / a disk gets too hot (samples every 5 s). */
+  tempAlerts: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -37,6 +39,7 @@ export const DEFAULT_SETTINGS: Settings = {
   staleMinMb: 100,
   installerDays: 30,
   history: true,
+  tempAlerts: false,
 };
 
 interface Toast {

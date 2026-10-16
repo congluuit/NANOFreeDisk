@@ -4,9 +4,10 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail, toast } from "../state.svelte";
   import { hwApi } from "../hw/api";
-  import { formatValue, sensorLabel, sensorTempLevel, tree } from "../hw/sensors";
+  import { formatValue, ownHot, sensorLabel, sensorTempLevel, tree } from "../hw/sensors";
   import type { AdvancedStatus, DeviceKind, Sensor, SensorSnapshot } from "../hw/types";
   import Icon from "../components/Icon.svelte";
+  import Thermal24h from "../components/Thermal24h.svelte";
 
   let snap = $state<SensorSnapshot | null>(null);
   let error = $state<string | null>(null);
@@ -151,6 +152,8 @@
   <button class="btn" onclick={reset} disabled={!snap}><Icon name="refresh" />{t("hw-reset-minmax")}</button>
 </div>
 
+<Thermal24h />
+
 <div class="table card" role="treegrid" aria-label={t("hw-tab-sensors")}>
   <div class="row head">
     <span>{t("hw-col-sensor")}</span>
@@ -180,8 +183,9 @@
               <span class="name"><Icon name={KIND_ICON[g.kind]} size={14} />{t(`hw-kind-${g.kind}`)}</span>
             </div>
             {#each g.sensors as s (s.id)}
-              {@const lvl = sensorTempLevel(s, node.device, s.value)}
-              {@const mx = sensorTempLevel(s, node.device, s.max)}
+              {@const own = snap ? ownHot(snap, node.device.id) : undefined}
+              {@const lvl = sensorTempLevel(s, node.device, s.value, own)}
+              {@const mx = sensorTempLevel(s, node.device, s.max, own)}
               <!-- svelte-ignore a11y_no_static_element_interactions -->
               <div
                 class="row sensor"

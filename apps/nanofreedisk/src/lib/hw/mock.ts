@@ -180,6 +180,16 @@ const PROCS: Proto[] = [
 ];
 const ended = new Set<number>();
 
+let thermalOn = false;
+function thermalMock() {
+  const now = Math.floor(Date.now() / 60000);
+  const minutes = Array.from({ length: 240 }, (_, i) => {
+    const t = now - 239 + i;
+    return { t, cpu: 62 + 25 * Math.max(0, Math.sin(i / 17)), gpu: 50 + 8 * Math.sin(i / 23), disk: 48 + 6 * Math.sin(i / 41), hottest: { cpu: inventory.cpu.name, gpu: "NVIDIA GeForce RTX 4050 Laptop GPU", disk: "SAMSUNG MZVLB512HAJQ-000L7" } };
+  });
+  return { enabled: thermalOn, minutes };
+}
+
 function tasks(): TaskSnapshot {
   const t = Date.now() / 1000;
   const list: Task[] = PROCS.filter((p) => !ended.has(p[0])).map(([pid, ppid, name, group, path, title, publisher], i) => ({
@@ -243,6 +253,8 @@ export const hwHandlers: Record<string, (a: Record<string, any>) => unknown> = {
   pawnio_status: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null }),
   advanced_sensors_start: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null }),
   pawnio_open_site: () => undefined,
+  thermal_set: ({ enabled }) => ((thermalOn = enabled), thermalMock()),
+  thermal_status: () => thermalMock(),
   tasks_snapshot: () => tasks(),
   task_verdict: ({ pid }) => mockVerdict(pid),
   task_details: ({ pid }) => {

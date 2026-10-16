@@ -309,3 +309,29 @@ hw-s-cpu-tdie = Nhân (Tdie)
 hw-s-cpu-ccd = CCD #{ $n }
 hw-s-cpu-ccd-max = CCD nóng nhất
 hw-s-cpu-power-core = Nhân #{ $n }
+
+## Cảnh báo nhiệt, nhật ký 24 giờ, Health Score (slice 6)
+
+hw-alerts = Cảnh báo nhiệt độ
+hw-alerts-hint = Báo khi CPU, GPU hoặc ổ đĩa quá nóng (CPU 95 °C, GPU 90 °C, ổ đĩa 70 °C). Khi bật, cảm biến được đọc mỗi 5 giây kể cả khi đã đóng màn hình này.
+hw-alert-title = { $device } đang rất nóng
+hw-alert-body = { $value } °C (ngưỡng { $limit } °C). Hãy kiểm tra quạt và khe tản nhiệt, đóng các ứng dụng nặng nếu không cần.
+hw-alert-toast = { $part } { $device } đang ở { $value } °C (ngưỡng { $limit } °C).
+hw-part-cpu = CPU
+hw-part-gpu = GPU
+hw-part-disk = Ổ đĩa
+hw-24h-title = 24 giờ qua
+hw-24h-peak = cao nhất { $value } °C
+hw-24h-empty = Chưa ghi nhận gì. Nhiệt độ được ghi lại khi màn hình này đang mở hoặc khi bật cảnh báo nhiệt độ.
+hw-24h-ago = 24 giờ trước
+hw-24h-now = bây giờ
+
+health-hot-cpu = Bộ xử lý ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
+health-hot-gpu = Card đồ họa ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
+health-hot-disk = { $folder } đã lên tới { $value } °C trong 24 giờ qua; nóng như vậy lâu dài sẽ làm giảm tuổi thọ ổ.
+health-warm-cpu = Bộ xử lý ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-warm-gpu = Card đồ họa ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-warm-disk = { $folder } chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
+health-fix-hardware = Xem nhiệt độ
+hw-s-disk-temp-warning = Ngưỡng cảnh báo (của ổ)
+hw-s-disk-temp-critical = Ngưỡng nguy hiểm (của ổ)

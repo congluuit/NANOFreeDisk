@@ -103,9 +103,26 @@ const TEMP_KIND: Record<DeviceKind, TempKind> = {
   network: "other",
 };
 
-export function sensorTempLevel(s: Sensor, dev: SensorDevice | undefined, v: number | null): "ok" | "warm" | "hot" | null {
-  if (s.kind !== "temperature" || v == null) return null;
-  return tempLevel(v, TEMP_KIND[dev?.kind ?? "board"]);
+/** A drive's own warning temperature, when it reports one. */
+export function ownHot(snap: SensorSnapshot, device: string): number | undefined {
+  return snap.sensors.find((s) => s.device === device && s.label === "disk-temp-warning")?.value ?? undefined;
+}
+
+/** Level against the part's limits, or a device's own hot limit (warm 10 below). */
+export function levelFor(v: number, kind: TempKind, hot?: number): "ok" | "warm" | "hot" {
+  if (hot == null) return tempLevel(v, kind);
+  return v >= hot ? "hot" : v >= hot - 10 ? "warm" : "ok";
+}
+
+export function sensorTempLevel(
+  s: Sensor,
+  dev: SensorDevice | undefined,
+  v: number | null,
+  hot?: number,
+): "ok" | "warm" | "hot" | null {
+  // the limits themselves are not readings
+  if (s.kind !== "temperature" || v == null || /-(warning|critical)$/.test(s.label)) return null;
+  return levelFor(v, TEMP_KIND[dev?.kind ?? "board"], hot);
 }
 
 export interface HomeTemp {
@@ -118,6 +135,8 @@ export interface HomeTemp {
   /** Explains a missing value (`needs-pawnio`, `gpu-asleep`). */
   reason?: string;
   load?: number | null;
+  /** The device's own hot limit (drives). */
+  hot?: number;
 }
 
 function hottest(snap: SensorSnapshot, pred: (s: Sensor, d: SensorDevice | undefined) => boolean) {
@@ -148,7 +167,16 @@ export function homeTemps(snap: SensorSnapshot): HomeTemp[] {
   const gpuTemp: HomeTemp = gpu
     ? { kind: "gpu", value: gpu.s.value, name: gpu.d?.name }
     : { kind: "gpu", value: null, reason: asleep ? "gpu-asleep" : gpus.length ? "not-reported" : "none", name: asleep ? dev(asleep.device)?.name : undefined };
-  const disk = hottest(snap, (_, d) => d?.kind === "storage");
-  const diskTemp: HomeTemp = disk ? { kind: "disk", value: disk.s.value, name: disk.d?.name } : { kind: "disk", value: null, reason: "not-reported" };
+  // the drive closest to its own limit (default 70)
+  let disk: { s: Sensor; d?: SensorDevice; hot?: number } | null = null;
+  for (const s of snap.sensors) {
+    if (s.label !== "disk-temp" || s.value == null) continue;
+    const hot = ownHot(snap, s.device);
+    const margin = (hot ?? 70) - s.value;
+    if (!disk || margin < (disk.hot ?? 70) - (disk.s.value ?? 0)) disk = { s, d: dev(s.device), hot };
+  }
+  const diskTemp: HomeTemp = disk
+    ? { kind: "disk", value: disk.s.value, name: disk.d?.name, hot: disk.hot }
+    : { kind: "disk", value: null, reason: "not-reported" };
   return [cpuTemp, gpuTemp, diskTemp];
 }

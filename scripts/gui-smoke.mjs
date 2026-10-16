@@ -305,11 +305,16 @@ try {
   check("sensors: memory load", sens.sensors?.some((x) => x.id === "memory/mem-load" && x.value > 0));
   check("sensors: CPU temperature explains PawnIO", sens.notes?.some((n) => n.device === "cpu" && n.reason === "needs-pawnio") || sens.sensors?.some((x) => x.device === "cpu" && x.kind === "temperature"));
   check("sensors: reset min/max", (await invoke("sensors_reset_minmax"))?.__error === undefined);
+  const th = await invoke("thermal_set", { enabled: false, texts: { title: "t", body: "b" } });
+  check("temperature log and alert switch", th.enabled === false && Array.isArray(th.minutes), `${th.minutes?.length} logged minutes`);
+  const healthNow = await invoke("health");
+  check("health score includes heat findings when any", Number.isInteger(healthNow.score) && healthNow.findings.every((f) => !f.kind.startsWith("hot-") || f.fix === "hardware"));
   const adv = await invoke("pawnio_status");
   check("Advanced sensors status needs no admin", typeof adv.active === "boolean" && !adv.__error, JSON.stringify(adv.pawnio ?? adv));
   await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
   check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));
+  check("Sensors tab shows the 24-hour card", await evaluate("!!document.querySelector('.t24 [data-alerts]')"));
   await shot("10-hw-sensors");
 
   pinger = spawn("ping", ["-n", "120", "127.0.0.1"], { stdio: "ignore" });

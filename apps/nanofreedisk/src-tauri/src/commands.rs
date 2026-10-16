@@ -686,7 +686,9 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
             }
         })
     };
-    Ok(health::score(&facts, scan.as_ref()))
+    let mut score = health::score(&facts, scan.as_ref());
+    hwmon::add_heat_findings(&app, &mut score);
+    Ok(score)
 }
 
 #[tauri::command]

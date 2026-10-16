@@ -160,6 +160,19 @@ pub fn temperature_of(h: &Handle) -> Option<f32> {
     (t > 0 && t < 150).then_some(f32::from(t))
 }
 
+/// The drive's own (warning, critical) temperatures in °C, when it reports them
+/// (NVMe WCTEMP / CCTEMP).
+pub fn temperature_limits_of(h: &Handle) -> (Option<f32>, Option<f32>) {
+    let mut buf = [0u8; 256];
+    if query(h, StorageDeviceTemperatureProperty, &mut buf).is_none_or(|n| n < 12) {
+        return (None, None);
+    }
+    let plausible = |t: i16| (t > 30 && t < 150).then_some(f32::from(t));
+    let critical = plausible(i16::from_le_bytes([buf[8], buf[9]]));
+    let warning = plausible(i16::from_le_bytes([buf[10], buf[11]]));
+    (warning, critical)
+}
+
 /// Current temperature of disk `index`, °C.
 pub fn temperature(index: u32) -> Option<f32> {
     temperature_of(&open(index)?)

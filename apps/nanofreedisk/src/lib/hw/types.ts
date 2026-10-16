@@ -169,6 +169,20 @@ export interface AdvancedStatus {
   unavailable: string | null;
 }
 
+export interface ThermalMinute {
+  /** Unix minutes. */
+  t: number;
+  cpu: number | null;
+  gpu: number | null;
+  disk: number | null;
+  hottest: Partial<Record<"cpu" | "gpu" | "disk", string>>;
+}
+
+export interface ThermalStatus {
+  enabled: boolean;
+  minutes: ThermalMinute[];
+}
+
 export type TaskGroup = "app" | "background" | "windows";
 
 export interface Task {

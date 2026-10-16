@@ -24,6 +24,214 @@ pub struct HwState {
     tasks: Arc<Mutex<Option<nfd_tasks::TaskMonitor>>>,
     /// Why Advanced sensors could not start, for the UI.
     advanced_error: Arc<Mutex<Option<String>>>,
+    /// Temperature alerts and the 24-hour log.
+    thermal: Arc<Mutex<Thermal>>,
+    thermal_thread: std::sync::OnceLock<()>,
+}
+
+/// Alert texts in the UI language (`{device}`, `{value}`, `{limit}` are replaced).
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+pub struct AlertTexts {
+    title: String,
+    body: String,
+}
+
+#[derive(Debug, Default)]
+pub struct Thermal {
+    enabled: bool,
+    texts: AlertTexts,
+    log: nfd_sensors::thermal::ThermalLog,
+    watch: nfd_sensors::thermal::Watch,
+    loaded: bool,
+    changes: u32,
+}
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs())
+}
+
+fn thermal_path(app: &AppHandle) -> Option<std::path::PathBuf> {
+    app.path()
+        .app_data_dir()
+        .ok()
+        .map(|d| d.join("thermal-24h.json"))
+}
+
+fn thermal_load(app: &AppHandle, t: &mut Thermal) {
+    if t.loaded {
+        return;
+    }
+    t.loaded = true;
+    let Some(path) = thermal_path(app) else {
+        return;
+    };
+    if let Ok(text) = std::fs::read_to_string(path) {
+        if let Ok(mut log) = serde_json::from_str::<nfd_sensors::thermal::ThermalLog>(&text) {
+            log.prune(unix_now());
+            t.log = log;
+        }
+    }
+}
+
+fn thermal_save(app: &AppHandle, t: &Thermal) {
+    let Some(path) = thermal_path(app) else {
+        return;
+    };
+    if let Some(dir) = path.parent() {
+        let _ = std::fs::create_dir_all(dir);
+    }
+    if let Ok(json) = serde_json::to_string(&t.log) {
+        let _ = std::fs::write(path, json);
+    }
+}
+
+/// Feed one snapshot to the 24-hour log and, when alerts are on, to the watch.
+fn thermal_observe(app: &AppHandle, thermal: &Mutex<Thermal>, snap: &Snapshot) {
+    use tauri::Emitter;
+    use tauri_plugin_notification::NotificationExt;
+    let Ok(mut t) = thermal.lock() else { return };
+    thermal_load(app, &mut t);
+    let readings = nfd_sensors::thermal::readings(snap);
+    let now = unix_now();
+    t.log.observe(now, &readings);
+    t.changes = t.changes.wrapping_add(1);
+    if t.changes % 120 == 0 {
+        thermal_save(app, &t);
+    }
+    if !t.enabled {
+        return;
+    }
+    let alerts = t.watch.check(now, &readings);
+    for a in alerts {
+        let fill = |s: &str| {
+            s.replace("{device}", &a.device)
+                .replace("{value}", &format!("{:.0}", a.value))
+                .replace("{limit}", &format!("{:.0}", a.limit))
+        };
+        let _ = app
+            .notification()
+            .builder()
+            .title(fill(&t.texts.title))
+            .body(fill(&t.texts.body))
+            .show();
+        let _ = app.emit("temp-alert", &a);
+    }
+}
+
+/// Status for the Sensors tab: alerts on/off and the per-minute log.
+#[derive(Debug, Serialize)]
+pub struct ThermalStatus {
+    enabled: bool,
+    minutes: Vec<nfd_sensors::thermal::Minute>,
+}
+
+/// Turn temperature alerts on or off. While on, a background thread samples the
+/// sensors every 5 s (the only sampling that runs without a view asking).
+#[tauri::command]
+pub fn thermal_set(
+    app: AppHandle,
+    state: State<'_, HwState>,
+    enabled: bool,
+    texts: AlertTexts,
+) -> CmdResult<ThermalStatus> {
+    {
+        let mut t = state.thermal.lock().map_err(|e| err("internal", e))?;
+        thermal_load(&app, &mut t);
+        t.enabled = enabled;
+        t.texts = texts;
+    }
+    let (hub, thermal) = (state.hub.clone(), state.thermal.clone());
+    let handle = app.clone();
+    state.thermal_thread.get_or_init(move || {
+        std::thread::spawn(move || {
+            loop {
+                std::thread::sleep(Duration::from_secs(5));
+                if !thermal.lock().map(|t| t.enabled).unwrap_or(false) {
+                    continue;
+                }
+                let snap = {
+                    let Ok(mut guard) = hub.lock() else { continue };
+                    let h = guard.get_or_insert_with(SensorHub::native);
+                    if h.since_last()
+                        .is_none_or(|d| d >= Duration::from_millis(4500))
+                    {
+                        h.sample();
+                    }
+                    h.snapshot()
+                };
+                thermal_observe(&handle, &thermal, &snap);
+            }
+        });
+    });
+    thermal_status(app, state)
+}
+
+#[tauri::command]
+pub fn thermal_status(app: AppHandle, state: State<'_, HwState>) -> CmdResult<ThermalStatus> {
+    let mut t = state.thermal.lock().map_err(|e| err("internal", e))?;
+    thermal_load(&app, &mut t);
+    t.log.prune(unix_now());
+    Ok(ThermalStatus {
+        enabled: t.enabled,
+        minutes: t.log.minutes.iter().cloned().collect(),
+    })
+}
+
+/// Save the 24-hour log (app exit).
+pub fn thermal_flush(app: &AppHandle) {
+    if let Some(state) = app.try_state::<HwState>() {
+        if let Ok(t) = state.thermal.lock() {
+            if t.loaded {
+                thermal_save(app, &t);
+            }
+        }
+    }
+}
+
+/// Health Score contribution: a CPU / GPU / disk that ran hot in the last 24 h.
+pub fn add_heat_findings(app: &AppHandle, score: &mut nfd_core::health::HealthScore) {
+    use nfd_core::health::{Finding, Severity};
+    use nfd_sensors::thermal::Part;
+    let Some(state) = app.try_state::<HwState>() else {
+        return;
+    };
+    let Ok(mut t) = state.thermal.lock() else {
+        return;
+    };
+    thermal_load(app, &mut t);
+    t.log.prune(unix_now());
+    for f in nfd_sensors::thermal::findings(&t.log) {
+        let kind = match (f.part, f.hot) {
+            (Part::Cpu, true) => "hot-cpu",
+            (Part::Gpu, true) => "hot-gpu",
+            (Part::Disk, true) => "hot-disk",
+            (Part::Cpu, false) => "warm-cpu",
+            (Part::Gpu, false) => "warm-gpu",
+            (Part::Disk, false) => "warm-disk",
+        };
+        score.findings.push(Finding {
+            kind,
+            severity: if f.hot { Severity::Bad } else { Severity::Warn },
+            penalty: f.penalty,
+            subject: f.device,
+            value: f.max,
+            bytes: 0,
+            fix: "hardware",
+        });
+    }
+    score
+        .findings
+        .sort_by(|a, b| b.penalty.cmp(&a.penalty).then(b.severity.cmp(&a.severity)));
+    let lost: u32 = score.findings.iter().map(|f| f.penalty).sum();
+    score.score = 100u32.saturating_sub(lost);
+    // same grade bands as nfd_core::health::score
+    score.grade = match score.score {
+        85.. => "good",
+        60..85 => "fair",
+        _ => "poor",
+    };
 }
 
 /// Static hardware inventory (`nanofreedisk.hwinfo.v1`).
@@ -81,8 +289,8 @@ async fn with_hub<T: Send + 'static>(
 
 /// Current values with min / max; samples first when the last sample is stale.
 #[tauri::command]
-pub async fn sensors_snapshot(state: State<'_, HwState>) -> CmdResult<Snapshot> {
-    with_hub(&state, |hub| {
+pub async fn sensors_snapshot(app: AppHandle, state: State<'_, HwState>) -> CmdResult<Snapshot> {
+    let snap = with_hub(&state, |hub| {
         if hub
             .since_last()
             .is_none_or(|d| d >= Duration::from_millis(900))
@@ -91,7 +299,12 @@ pub async fn sensors_snapshot(state: State<'_, HwState>) -> CmdResult<Snapshot> 
         }
         hub.snapshot()
     })
-    .await
+    .await?;
+    // what the views sample also feeds the 24-hour log (and alerts, when on)
+    let thermal = state.thermal.clone();
+    let s = snap.clone();
+    tauri::async_runtime::spawn_blocking(move || thermal_observe(&app, &thermal, &s));
+    Ok(snap)
 }
 
 #[tauri::command]

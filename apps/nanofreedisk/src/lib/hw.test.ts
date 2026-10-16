@@ -170,3 +170,24 @@ for (const lang of ["en", "vi"]) {
     for (const g of ["app", "background", "windows"]) assert.ok(msgs.has(`task-group-${g}`));
   });
 }
+
+import { TEMP_LIMITS } from "./hw/overview.ts";
+
+test("alert limits in Rust match the UI's temperature colors", () => {
+  const src = readFileSync(new URL("../../../../crates/nfd-sensors/src/thermal.rs", import.meta.url), "utf8");
+  for (const [part, kind] of [["Cpu", "cpu"], ["Gpu", "gpu"], ["Disk", "disk"]] as const) {
+    const m = new RegExp(`Part::${part} => \\(([\\d.]+), ([\\d.]+)\\)`).exec(src);
+    assert.ok(m, part);
+    assert.deepEqual([Number(m![1]), Number(m![2])], TEMP_LIMITS[kind], part);
+  }
+});
+
+for (const lang of ["en", "vi"]) {
+  test(`every heat finding of the Health Score has a ${lang} message`, () => {
+    const msgs = messages(lang);
+    for (const level of ["hot", "warm"])
+      for (const part of ["cpu", "gpu", "disk"]) assert.ok(msgs.has(`health-${level}-${part}`), `${level}-${part}`);
+    assert.ok(msgs.has("health-fix-hardware"));
+    for (const part of ["cpu", "gpu", "disk"]) assert.ok(msgs.has(`hw-part-${part}`));
+  });
+}

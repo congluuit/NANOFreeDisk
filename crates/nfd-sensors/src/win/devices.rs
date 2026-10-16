@@ -18,6 +18,8 @@ struct Disk {
     index: u32,
     handle: Option<Handle>,
     temp: Option<usize>,
+    /// The drive's own warning / critical temperatures (constant sensors).
+    limits: Vec<(usize, f64)>,
     read: Option<usize>,
     write: Option<usize>,
     active: Option<usize>,
@@ -74,6 +76,7 @@ impl SensorProvider for StorageProvider {
                 index: disk.index,
                 handle: nfd_hwinfo::win::storage::open(disk.index),
                 temp: None,
+                limits: Vec::new(),
                 read: None,
                 write: None,
                 active: None,
@@ -90,6 +93,25 @@ impl SensorProvider for StorageProvider {
                     "IOCTL_STORAGE_QUERY_PROPERTY",
                 )
                 .primary());
+                if let Some(h) = &entry.handle {
+                    let (warning, critical) = nfd_hwinfo::win::storage::temperature_limits_of(h);
+                    for (label, v) in [
+                        ("disk-temp-warning", warning),
+                        ("disk-temp-critical", critical),
+                    ] {
+                        if let Some(v) = v {
+                            let i = add(SensorInfo::new(
+                                &id,
+                                Kind::Temperature,
+                                label,
+                                "IOCTL_STORAGE_QUERY_PROPERTY",
+                            ));
+                            if let Some(i) = i {
+                                entry.limits.push((i, f64::from(v)));
+                            }
+                        }
+                    }
+                }
             }
             if self.pdh.is_some() {
                 entry.active = add(SensorInfo::new(
@@ -118,6 +140,7 @@ impl SensorProvider for StorageProvider {
 
     fn sample(&mut self, out: &mut Vec<(usize, f64)>) {
         for disk in &self.disks {
+            out.extend(disk.limits.iter().copied());
             if let (Some(i), Some(h)) = (disk.temp, &disk.handle) {
                 if let Some(t) = nfd_hwinfo::win::storage::temperature_of(h) {
                     out.push((i, f64::from(t)));

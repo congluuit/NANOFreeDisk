@@ -60,6 +60,7 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .manage(state)
         .manage(commands::hwmon::HwState::default())
         .invoke_handler(tauri::generate_handler![
@@ -116,9 +117,16 @@ pub fn run() {
             commands::hwmon::pawnio_status,
             commands::hwmon::advanced_sensors_start,
             commands::hwmon::pawnio_open_site,
+            commands::hwmon::thermal_set,
+            commands::hwmon::thermal_status,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running NANOFreeDisk");
+        .build(tauri::generate_context!())
+        .expect("error while running NANOFreeDisk")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                commands::hwmon::thermal_flush(app);
+            }
+        });
 }
 
 #[cfg(test)]

@@ -309,3 +309,29 @@ hw-s-cpu-tdie = Core (Tdie)
 hw-s-cpu-ccd = CCD #{ $n }
 hw-s-cpu-ccd-max = CCDs Max
 hw-s-cpu-power-core = Core #{ $n }
+
+## Temperature alerts, 24-hour log, Health Score (slice 6)
+
+hw-alerts = Temperature alerts
+hw-alerts-hint = Notify me when the CPU, a GPU or a disk gets too hot (CPU 95 °C, GPU 90 °C, disk 70 °C). While on, sensors are read every 5 seconds even when this view is closed.
+hw-alert-title = { $device } is very hot
+hw-alert-body = { $value } °C (limit { $limit } °C). Check the fans and air vents, and close heavy apps if you do not need them.
+hw-alert-toast = { $part } { $device } is at { $value } °C (limit { $limit } °C).
+hw-part-cpu = CPU
+hw-part-gpu = GPU
+hw-part-disk = Disk
+hw-24h-title = Last 24 hours
+hw-24h-peak = max { $value } °C
+hw-24h-empty = Nothing recorded yet. Temperatures are logged while this view is open or temperature alerts are on.
+hw-24h-ago = 24 h ago
+hw-24h-now = now
+
+health-hot-cpu = The processor ({ $folder }) reached { $value } °C in the last 24 hours — check its cooling.
+health-hot-gpu = The graphics card ({ $folder }) reached { $value } °C in the last 24 hours — check its cooling.
+health-hot-disk = { $folder } reached { $value } °C in the last 24 hours; long periods that hot shorten a drive's life.
+health-warm-cpu = The processor ({ $folder }) ran warm, up to { $value } °C, in the last 24 hours.
+health-warm-gpu = The graphics card ({ $folder }) ran warm, up to { $value } °C, in the last 24 hours.
+health-warm-disk = { $folder } ran warm, up to { $value } °C, in the last 24 hours.
+health-fix-hardware = See temperatures
+hw-s-disk-temp-warning = Warning temperature (drive)
+hw-s-disk-temp-critical = Critical temperature (drive)

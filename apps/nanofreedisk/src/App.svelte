@@ -12,6 +12,7 @@
     type View,
   } from "./lib/state.svelte";
   import { applyPalette, resolvePalette } from "./lib/theme";
+  import { startThermalSync } from "./lib/hw/thermal.svelte";
   import Icon from "./lib/components/Icon.svelte";
   import ScanProgress from "./lib/components/ScanProgress.svelte";
   import CommandPalette from "./lib/components/CommandPalette.svelte";
@@ -48,6 +49,7 @@
       applyLocale();
       api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
+      startThermalSync();
       await refreshVolumes();
     })();
     const onKey = (e: KeyboardEvent) => {

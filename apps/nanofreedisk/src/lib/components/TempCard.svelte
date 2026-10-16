@@ -5,8 +5,7 @@
   import { t } from "../i18n.svelte";
   import { app } from "../state.svelte";
   import { hwApi } from "../hw/api";
-  import { tempLevel } from "../hw/overview";
-  import { homeTemps, type HomeTemp } from "../hw/sensors";
+  import { homeTemps, levelFor, type HomeTemp } from "../hw/sensors";
   import { hw } from "../hw/state.svelte";
   import Icon from "./Icon.svelte";
 
@@ -38,7 +37,7 @@
 <button class="temps card" onclick={open} title={t("home-temps-open")}>
   <span class="head"><Icon name="thermo" size={18} /><strong>{t("home-temps-title")}</strong></span>
   {#each temps ?? [] as h (h.kind)}
-    {@const lvl = h.value != null ? tempLevel(h.value, h.kind) : null}
+    {@const lvl = h.value != null ? levelFor(h.value, h.kind, h.hot) : null}
     <span class="cell" data-temp={h.kind}>
       <span class="label muted"><Icon name={ICON[h.kind]} size={15} />{t(`home-temp-${h.kind}`)}</span>
       <b class="v {lvl ?? 'none'}">{h.value != null ? `${Math.round(h.value)} °C` : "—"}</b>

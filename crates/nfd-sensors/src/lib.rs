@@ -12,6 +12,7 @@
 //! value. Hardware is only ever read — nothing here writes a register, a fan curve,
 //! a voltage or a limit.
 
+pub mod thermal;
 #[cfg(windows)]
 pub mod win;
 
