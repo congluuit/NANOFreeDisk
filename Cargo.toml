@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/*", "apps/nfd-cli", "apps/nanofreedisk/src-tauri"]
+members = ["crates/*", "apps/nfd-cli", "apps/nanofreedisk/src-tauri", "apps/nanofreedisk-setup"]
 
 [workspace.package]
 version = "0.1.0"

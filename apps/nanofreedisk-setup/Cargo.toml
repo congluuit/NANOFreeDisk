@@ -1,0 +1,56 @@
+[package]
+name = "nanofreedisk-setup"
+description = "NANOFreeDisk branded installer (Rust + egui, no WebView2 needed)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+
+[[bin]]
+name = "nanofreedisk-setup"
+path = "src/main.rs"
+
+# Packs the payload onto the stub: `nanofreedisk-setup-pack <stub> <dir> <out>`.
+[[bin]]
+name = "nanofreedisk-setup-pack"
+path = "src/bin/pack.rs"
+
+[dependencies]
+zstd = { version = "0.13", default-features = false }
+
+[target.'cfg(windows)'.dependencies]
+eframe = { version = "0.32", default-features = false, features = ["accesskit", "wgpu"] }
+nfd-platform = { workspace = true }
+png = "0.17"
+# DirectX 12 (WARP on machines without a GPU) with OpenGL as a fallback
+wgpu = { version = "25", default-features = false, features = ["dx12", "gles", "wgsl"] }
+winreg = "0.56"
+windows = { version = "0.61", features = [
+  "Win32_Foundation",
+  "Win32_Globalization",
+  "Win32_Security",
+  "Win32_Security_Cryptography",
+  "Win32_Security_Cryptography_Catalog",
+  "Win32_Security_Cryptography_Sip",
+  "Win32_Security_WinTrust",
+  "Win32_System_Com",
+  "Win32_System_Com_Urlmon",
+  "Win32_System_Diagnostics_ToolHelp",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_WindowsAndMessaging",
+] }
+
+[build-dependencies]
+embed-resource = "3"
+
+[dev-dependencies]
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

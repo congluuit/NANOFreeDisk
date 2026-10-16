@@ -38,6 +38,10 @@ ignore = [
   { id = "RUSTSEC-2025-0081", reason = "unmaintained; unic-char-property via urlpattern (tauri-utils), no upgrade available" },
   { id = "RUSTSEC-2025-0098", reason = "unmaintained; unic-ucd-version via urlpattern (tauri-utils), no upgrade available" },
   { id = "RUSTSEC-2025-0100", reason = "unmaintained; unic-ucd-ident via urlpattern (tauri-utils), no upgrade available" },
+  # Unmaintained (no vulnerability): ttf-parser via ab_glyph/epaint in the branded
+  # setup (egui 0.32, the last release for Rust 1.85). It only parses Segoe UI and
+  # other fonts from C:\Windows\Fonts, never untrusted files.
+  { id = "RUSTSEC-2026-0192", reason = "unmaintained; ttf-parser via egui 0.32 (setup), newer egui needs Rust 1.88 > MSRV 1.85" },
 ]
 
 [licenses]
@@ -71,8 +75,9 @@ highlight = "all"
 deny = [
   # never pull in the old, unmaintained bindings
   # Our code uses `windows-sys`. Tauri's runtime still reaches winapi through
-  # dlopen2 (tao, Windows) and gio-sys (GTK, Linux); only those may pull it in.
-  { crate = "winapi", wrappers = ["dlopen2", "gio-sys"], reason = "use the `windows` / `windows-sys` crates" },
+  # dlopen2 (tao, Windows) and gio-sys (GTK, Linux), and eframe (the branded
+  # setup's egui shell) uses it on Windows; only those may pull it in.
+  { crate = "winapi", wrappers = ["dlopen2", "gio-sys", "eframe"], reason = "use the `windows` / `windows-sys` crates" },
 ]
 
 [sources]
