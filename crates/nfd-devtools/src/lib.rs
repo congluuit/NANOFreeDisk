@@ -5,6 +5,7 @@
 //! * [`unknown`] — cache-like folders no rule knows yet, marked 🟡 "unverified" (C1).
 //! * [`toolchains`] — installed SDKs / runtimes / editors and how to remove them (C2).
 //! * [`repos`] + [`artifacts`] — Repo Finder and the build artifact policy (C3, C9).
+//! * [`stores`] — package-store cleanup with the tools' own commands (C4).
 //!
 //! Nothing here deletes anything: modules either produce
 //! [`PlanItem`](nfd_core::plan::PlanItem)s for the Phase 3 Planner → SafetyGate →
@@ -15,6 +16,7 @@ pub mod devcache;
 pub mod fsutil;
 pub mod process;
 pub mod repos;
+pub mod stores;
 pub mod toolchains;
 pub mod unknown;
 
