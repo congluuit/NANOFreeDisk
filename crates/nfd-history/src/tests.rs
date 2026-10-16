@@ -6,6 +6,8 @@ use nfd_core::scanner::{ScanMode, ScanStats, ScanTree};
 
 use super::*;
 
+mod journal_tests;
+
 const MB: u64 = 1 << 20;
 const GB: u64 = 1 << 30;
 const DAY: i64 = 86_400;

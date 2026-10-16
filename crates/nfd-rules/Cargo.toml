@@ -11,9 +11,14 @@ homepage.workspace = true
 
 [dependencies]
 nfd-core = { workspace = true }
+nfd-platform = { workspace = true }
+globset = { workspace = true }
 serde = { workspace = true }
 toml = { workspace = true }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
 
 [lints]
 workspace = true

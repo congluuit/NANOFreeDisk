@@ -11,6 +11,7 @@ pub mod appearance;
 pub mod fsinfo;
 pub mod locks;
 pub mod owner;
+pub mod private_dir;
 pub mod shell_menu;
 pub mod trash;
 pub mod volumes;

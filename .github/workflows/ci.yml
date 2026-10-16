@@ -73,6 +73,16 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo run -p nfd-cli -- rules validate ./rules
+      # PHASE3_CLEAN DoD: a whole-system dry run never proposes anything protected
+      - name: clean dry run proposes nothing protected
+        shell: pwsh
+        run: |
+          cargo run -q -p nfd-cli -- clean --level advanced --dry-run --json | Out-File -Encoding utf8 clean.json
+          $d = Get-Content clean.json -Raw | ConvertFrom-Json
+          if ($d.schema -ne 'nanofreedisk.clean.v1') { throw "unexpected schema $($d.schema)" }
+          $bad = @($d.items | Where-Object { $_.level -eq 'protected' })
+          if ($bad.Count -gt 0) { $bad | Format-List; throw "protected items proposed" }
+          "$($d.items.Count) item(s), none protected"
 
   deny:
     name: cargo-deny

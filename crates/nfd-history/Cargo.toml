@@ -11,6 +11,7 @@ homepage.workspace = true
 
 [dependencies]
 nfd-core = { workspace = true }
+nfd-platform = { workspace = true }
 rusqlite = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }

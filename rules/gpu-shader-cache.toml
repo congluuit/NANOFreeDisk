@@ -1,0 +1,75 @@
+# NANOFreeDisk rule pack: GPU shader caches
+# Compiled shaders and driver downloads kept by graphics drivers. Everything here is
+# rebuilt automatically; the only cost is a short stutter the first time a game or app
+# compiles its shaders again.
+
+[pack]
+id          = "gpu-shader-cache"
+name        = "GPU shader caches"
+version     = "0.1.0"
+description = "NVIDIA, AMD and Intel shader caches, the Direct3D shader cache and NVIDIA driver downloads on Windows 10/11."
+
+[[rule]]
+id              = "gpu.nvidia.shader-cache"
+vendor          = "NVIDIA"
+app             = "GPU driver"
+category        = "gpu"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/NVIDIA/DXCache/**", "${LOCALAPPDATA}/NVIDIA/GLCache/**", "${LOCALAPPDATA}/NVIDIA Corporation/NV_Cache/**", "${LOCALAPPDATA}/NVIDIA/OptixCache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Compiled shader caches. Games and apps recompile shaders on first launch (short stutter once)."
+impact_vi       = "Bộ đệm shader đã biên dịch. Game và ứng dụng biên dịch lại shader ở lần mở đầu (giật nhẹ một lần)."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "gpu.amd.shader-cache"
+vendor          = "AMD"
+app             = "GPU driver"
+category        = "gpu"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/AMD/DxCache/**", "${LOCALAPPDATA}/AMD/DxcCache/**", "${LOCALAPPDATA}/AMD/GLCache/**", "${LOCALAPPDATA}/AMD/VkCache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Compiled shader caches; rebuilt on first launch."
+impact_vi       = "Bộ đệm shader đã biên dịch; được tạo lại ở lần mở đầu."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "gpu.intel.shader-cache"
+vendor          = "Intel"
+app             = "GPU driver"
+category        = "gpu"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Intel/ShaderCache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Compiled shader caches; rebuilt on first launch."
+impact_vi       = "Bộ đệm shader đã biên dịch; được tạo lại ở lần mở đầu."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "gpu.d3d.shader-cache"
+vendor          = "Microsoft"
+app             = "Direct3D"
+category        = "gpu"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/D3DSCache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Direct3D shader cache; rebuilt automatically."
+impact_vi       = "Bộ đệm shader của Direct3D; được tạo lại tự động."
+verified_on     = 2026-10-16
+
+[[rule]]
+id              = "nvidia.driver-downloads"
+vendor          = "NVIDIA"
+app             = "NVIDIA App / GeForce Experience"
+category        = "gpu"
+platform        = ["windows"]
+paths           = ["${PROGRAMDATA}/NVIDIA Corporation/Downloader/**", "${PROGRAMDATA}/NVIDIA Corporation/NV_Cache/**"]
+level           = "safe"
+regenerates     = true
+impact          = "Downloaded driver packages that were already installed."
+impact_vi       = "Gói driver đã tải về và đã được cài đặt."
+verified_on     = 2026-10-16

@@ -18,6 +18,9 @@
 //! [`RecordOptions::keep`] snapshots per folder and can be wiped with
 //! [`History::clear`]. A damaged file is set aside and replaced instead of breaking
 //! the app.
+//!
+//! The same file holds the [`journal`] of clean/delete operations (Activity log,
+//! restore, quarantine purge), and [`audit`] writes a plain-text copy of it.
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -30,6 +33,11 @@ use nfd_core::scanner::ScanTree;
 use rusqlite::{Connection, params};
 use serde::Serialize;
 use thiserror::Error;
+
+pub mod audit;
+pub mod journal;
+
+pub use journal::{ItemRow, OperationRow, RestoreResult};
 
 /// Application identifier: the desktop app keeps its data in a folder of this name.
 pub const APP_ID: &str = "vn.io.nanodev.nanofreedisk";
@@ -54,7 +62,7 @@ pub fn default_path() -> Option<std::path::PathBuf> {
 }
 
 /// `PRAGMA user_version` written by this version.
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = "
 CREATE TABLE scans (
@@ -107,6 +115,8 @@ pub enum HistoryError {
     Newer(i64),
     #[error("unknown snapshot {0}")]
     NotFound(i64),
+    #[error("unknown operation {0}")]
+    UnknownOperation(String),
 }
 
 pub type Result<T> = std::result::Result<T, HistoryError>;
@@ -356,7 +366,14 @@ impl History {
         conn.execute_batch("PRAGMA foreign_keys = ON; PRAGMA synchronous = NORMAL;")?;
         if version == 0 {
             conn.execute_batch(&format!(
-                "BEGIN; {SCHEMA} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;"
+                "BEGIN; {SCHEMA} {} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;",
+                journal::SCHEMA
+            ))?;
+        } else if version == 1 {
+            // 1 → 2: the undo journal
+            conn.execute_batch(&format!(
+                "BEGIN; {} PRAGMA user_version = {SCHEMA_VERSION}; COMMIT;",
+                journal::SCHEMA
             ))?;
         }
         Ok(Self { conn })

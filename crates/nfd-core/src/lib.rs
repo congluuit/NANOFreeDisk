@@ -7,6 +7,7 @@
 //! Phase 3 adds the [`plan`]ner and the SafetyGate ([`safety::gate`]); the executor
 //! lives with the undo journal in `nfd-history`. See `docs/PHASE3_CLEAN.md`.
 
+pub mod exec;
 pub mod health;
 pub mod insights;
 pub mod model;

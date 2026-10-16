@@ -45,7 +45,7 @@ pub enum Origin {
 }
 
 /// Why an allowed item still deserves the user's attention.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "code", content = "names", rename_all = "kebab-case")]
 pub enum Warning {
     /// 🟡 rule: deleting loses history or forces a re-download.
