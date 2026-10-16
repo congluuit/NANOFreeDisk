@@ -228,8 +228,15 @@ impl SafetyGate {
             return Err(Blocked::Device);
         }
         let parts: Vec<&str> = cand.split('/').filter(|p| !p.is_empty()).collect();
-        // `c:` is one component, `//server/share` two.
-        let volume_depth = if cand.starts_with("//") { 2 } else { 1 };
+        // `c:` is one component, `//server/share` two; a Unix `/x` has none (the
+        // tests map `C:\x` to `/x`, so the same rules apply one level up).
+        let volume_depth = if cand.starts_with("//") {
+            2
+        } else if cand.starts_with('/') {
+            0
+        } else {
+            1
+        };
         if parts.len() <= volume_depth {
             return Err(Blocked::VolumeRoot);
         }

@@ -62,7 +62,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - run: cargo nextest run --workspace --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
+      - run: cargo nextest run --no-fail-fast --workspace --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
       - run: cargo test --workspace --doc ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
 
   rules:
