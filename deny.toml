@@ -12,7 +12,33 @@ targets = [
 db-path = "~/.cargo/advisory-db"
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
-ignore = []
+# Every ignore below is reachable ONLY through Tauri's own dependency tree and
+# has no fix we can take while the MSRV is 1.85 (Tauri is pinned to 2.11.x for
+# the same reason). None of these crates is used directly by our code. Re-check
+# each one whenever Tauri or the MSRV is bumped: delete the entry once
+# `cargo deny check advisories` passes without it.
+ignore = [
+  # time < 0.3.47: stack exhaustion when parsing deeply nested format
+  # descriptions. Pulled in by cookie/plist/tauri-codegen; we never parse
+  # untrusted format descriptions. Fixed in time 0.3.47, which needs Rust 1.88.
+  { id = "RUSTSEC-2026-0009", reason = "time via tauri/plist/cookie; fix needs Rust 1.88 > MSRV 1.85" },
+  # quick-xml 0.38 DoS (quadratic attribute check, unbounded NsReader
+  # namespaces). Only reached through plist 1.8 (tauri-utils/tauri-codegen),
+  # which reads our own bundled Info.plist / config at build time, never
+  # untrusted XML. plist 1.9 drops quick-xml but needs Rust 1.88.
+  { id = "RUSTSEC-2026-0194", reason = "quick-xml via plist 1.8 (tauri); plist 1.9 needs Rust 1.88 > MSRV 1.85" },
+  { id = "RUSTSEC-2026-0195", reason = "quick-xml via plist 1.8 (tauri); plist 1.9 needs Rust 1.88 > MSRV 1.85" },
+  # Unmaintained (no vulnerability): proc-macro-error via glib-macros/gtk3-macros
+  # (gtk-rs 0.18, Linux webview stack used by tao/wry/muda). No safe upgrade.
+  { id = "RUSTSEC-2024-0370", reason = "unmaintained; proc-macro-error via gtk-rs 0.18 (tauri Linux runtime), no upgrade available" },
+  # Unmaintained (no vulnerability): rust-unic crates via urlpattern 0.3 in
+  # tauri-utils. No safe upgrade.
+  { id = "RUSTSEC-2025-0075", reason = "unmaintained; unic-char-range via urlpattern (tauri-utils), no upgrade available" },
+  { id = "RUSTSEC-2025-0080", reason = "unmaintained; unic-common via urlpattern (tauri-utils), no upgrade available" },
+  { id = "RUSTSEC-2025-0081", reason = "unmaintained; unic-char-property via urlpattern (tauri-utils), no upgrade available" },
+  { id = "RUSTSEC-2025-0098", reason = "unmaintained; unic-ucd-version via urlpattern (tauri-utils), no upgrade available" },
+  { id = "RUSTSEC-2025-0100", reason = "unmaintained; unic-ucd-ident via urlpattern (tauri-utils), no upgrade available" },
+]
 
 [licenses]
 allow = [

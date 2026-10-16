@@ -77,19 +77,22 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@v2
         with:
-          tool: cargo-audit,nextest
+          tool: cargo-deny,nextest
 
       - name: fmt / clippy / tests
         run: |
           cargo fmt --all --check
-          cargo clippy --workspace --all-targets --all-features -- -D warnings
-          cargo nextest run --workspace --all-features
+          # The desktop app links WebKitGTK on Linux; it is built and checked on Windows.
+          cargo clippy --workspace --all-targets --all-features --exclude nanofreedisk -- -D warnings
+          cargo nextest run --workspace --all-features --exclude nanofreedisk
 
       - name: Rule packs validate
         run: cargo run -p nfd-cli -- rules validate ./rules
 
-      - name: cargo audit (no critical advisories)
-        run: cargo audit --deny warnings || { echo "::error::cargo audit reported advisories"; exit 1; }
+      # Blocking. Same policy as CI: deny.toml lists the few Tauri-only
+      # advisories we cannot fix under MSRV 1.85, each with its reason.
+      - name: cargo deny (advisories, licenses, bans, sources)
+        run: cargo deny --all-features check || { echo "::error::cargo deny reported problems"; exit 1; }
 
   # ─────────────────────────────────────────────────────────────
   # 2. build-windows — CLI, app bundles (MSI/NSIS) and branded setup
