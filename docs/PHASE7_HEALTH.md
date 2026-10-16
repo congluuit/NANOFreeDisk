@@ -1,6 +1,6 @@
 # Phase 7 — Health: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** — lát 1 ⏳ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`), lát 2 ⏳ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ⏳ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
+> Trạng thái: **đang làm** — lát 1 ✅ (crate `nfd-health`, NVMe / ATA không cần admin, volume, `nfd health`, `docs/health-validation.md`), lát 2 ⏳ (đọc đầy đủ bằng quyền admin qua helper: SMART + ngưỡng, SAT qua cầu USB, dirty bit), lát 3 ⏳ (Health Score, view Health, xuất JSON/HTML), lát 4 ⏳ (cảnh báo + tray). Bản chi tiết của hàng "7 – Health" trong `docs/PLAN.md` §8, theo thiết kế §4.6, lệnh `nfd health` ở §4.7, mục F1 (Health Score: SMART/NVMe + nhiệt độ), phần chỉ-đọc của F4 và G5 (tray) ở §13.2. Health **chỉ đọc**: không ghi cấu hình SMART, không bật/tắt tính năng ổ, không chạy self-test.
 
 ## 1. Mục tiêu & DoD
 
@@ -9,7 +9,7 @@
 - Health Score (F1) có thêm điểm trừ cho ổ Cần chú ý / Xấu, ổ quá nhiệt (theo ngưỡng của chính ổ), volume bị đánh dấu dirty.
 - Cảnh báo (G5): thông báo hệ thống khi trạng thái SMART đổi xấu đi, nhiệt độ ổ vượt ngưỡng của ổ, ổ còn < 10 % trống; icon tray với dung lượng trống từng ổ và tình trạng chung.
 - **DoD:**
-  - Kết quả khớp CrystalDiskInfo trên ≥ 5 ổ mẫu (SATA SSD, NVMe, HDD, USB). Máy tham chiếu (laptop i9-13900HX) chỉ có **2 ổ NVMe** và không cài CrystalDiskInfo; không mua / gắn thêm phần cứng. Vì vậy: (a) so trên 2 ổ NVMe thật với một bộ đọc độc lập (PowerShell + `DeviceIoControl` viết riêng, `Get-PhysicalDisk`) và ghi vào `docs/health-validation.md`; (b) SATA / HDD / USB được phủ bằng test trên **byte thật** của bảng SMART (dump mẫu) với kết quả CrystalDiskInfo ghi kèm; (c) tài liệu ghi rõ cách so với CrystalDiskInfo trên máy khác (bảng giá trị cần so, cách đọc) để hoàn tất DoD khi có ổ.
+  - Kết quả khớp CrystalDiskInfo trên ≥ 5 ổ mẫu (SATA SSD, NVMe, HDD, USB). Máy tham chiếu (laptop i9-13900HX) chỉ có **2 ổ NVMe** và không cài CrystalDiskInfo; không mua / gắn thêm phần cứng. Vì vậy: (a) so trên 2 ổ NVMe thật với một bộ đọc độc lập (PowerShell + `DeviceIoControl` viết riêng, `Get-PhysicalDisk`) và ghi vào `docs/health-validation.md`; (b) SATA / HDD / USB được phủ bằng test trên sector SMART đúng định dạng thật (bảng dựng từ giá trị điển hình — không phải dump của ổ thật) cho 3 kết quả điển hình của CrystalDiskInfo; (c) tài liệu ghi rõ cách so với CrystalDiskInfo trên máy khác (bảng giá trị cần so, cách đọc) để hoàn tất DoD khi có ổ.
   - Không cần quyền admin cho NVMe (đã kiểm tra: log 02h đọc được qua `IOCTL_STORAGE_QUERY_PROPERTY` với handle không quyền) và cho thông tin ổ / volume cơ bản; phần cần admin hiện rõ "cần quyền quản trị" và có nút đọc một lần qua helper (UAC).
   - Không bao giờ gửi lệnh ghi tới ổ: helper chỉ có các lệnh đọc cố định (IDENTIFY, SMART READ DATA, SMART READ THRESHOLDS), yêu cầu qua pipe chỉ mang số thứ tự ổ, không mang byte lệnh.
   - EN + VI (`locales/{en,vi}/health.ftl`), mọi màu là token theme, CLI `nfd health [--json]`, schema `nanofreedisk.health.v1`, `gui-smoke.mjs` phủ view Health.
@@ -25,7 +25,7 @@ Phụ thuộc `nfd-hwinfo` (mở `\\.\PhysicalDriveN` không quyền, tên bus, 
 - Ổ ↔ volume: `IOCTL_VOLUME_GET_VOLUME_DISK_EXTENTS` trên `\\.\C:` (số ổ + offset phân vùng → kiểm tra căn lề 4K).
 - WMI `MSFT_PhysicalDisk` / `MSFT_StorageReliabilityCounter`: **không dùng** trong v1 — cần COM/WMI (dependency lớn), `Get-StorageReliabilityCounter` cần admin, và mọi trường của nó (nhiệt độ, wear, lỗi đọc/ghi, giờ chạy) đã có từ log NVMe / bảng SMART đọc trực tiếp. Ghi lại ở §5.
 
-**NVMe** — `StorageDeviceProtocolSpecificProperty` (`ProtocolTypeNvme`, `NVMeDataTypeLogPage`, log `02h`, NSID 0 = cả controller): Critical Warning, Composite Temperature, Available Spare / Threshold, Percentage Used, Data Units Read/Written (× 512 000 byte), Host Read/Write Commands, Controller Busy Time, Power Cycles, Power-On Hours, Unsafe Shutdowns, Media and Data Integrity Errors, Number of Error Log Entries, Warning / Critical Composite Temperature Time. Log toàn số 0 (một số driver trả về như vậy với NSID `FFFFFFFF`) → coi là không đọc được và thử NSID khác.
+**NVMe** — serial thật, model, firmware, WCTEMP/CCTEMP từ Identify Controller (`StorageAdapterProtocolSpecificProperty`, CNS 01h — descriptor của Windows chỉ cho EUI-64); health log qua `StorageDeviceProtocolSpecificProperty` (`ProtocolTypeNvme`, `NVMeDataTypeLogPage`, log `02h`, NSID 0 = cả controller): Critical Warning, Composite Temperature, Available Spare / Threshold, Percentage Used, Data Units Read/Written (× 512 000 byte), Host Read/Write Commands, Controller Busy Time, Power Cycles, Power-On Hours, Unsafe Shutdowns, Media and Data Integrity Errors, Number of Error Log Entries, Warning / Critical Composite Temperature Time. Log toàn số 0 (một số driver trả về như vậy với NSID `FFFFFFFF`) → coi là không đọc được và thử NSID khác.
 
 **ATA / SATA**:
 - Không admin: `IOCTL_STORAGE_PREDICT_FAILURE` → cờ "dự báo hỏng" + 512 byte dữ liệu SMART (bảng thuộc tính; không có ngưỡng).
@@ -47,7 +47,7 @@ Phụ thuộc `nfd-hwinfo` (mở `\\.\PhysicalDriveN` không quyền, tên bus, 
 
 | Loại | Xấu | Cần chú ý |
 |---|---|---|
-| ATA (có ngưỡng) | thuộc tính bất kỳ có ngưỡng ≠ 0 và giá trị hiện tại ≤ ngưỡng; cờ dự báo hỏng | raw của 05 / C5 / C6 > 0 |
+| ATA (có ngưỡng) | thuộc tính bất kỳ có ngưỡng ≠ 0 và giá trị hiện tại < ngưỡng (như CrystalDiskInfo; smartctl dùng ≤); cờ dự báo hỏng | raw của 05 / C5 / C6 > 0 |
 | ATA (không ngưỡng, không admin) | cờ dự báo hỏng | raw của 05 / C5 / C6 > 0; hiện "chưa có ngưỡng — đọc đầy đủ cần admin" |
 | SSD (ATA) | — | thuộc tính tuổi thọ ≤ 10 % |
 | NVMe | Critical Warning bit 0 (spare dưới ngưỡng), 2 (độ tin cậy giảm), 3 (chỉ đọc), 4 (volatile backup hỏng); Available Spare < Threshold | bit 1 (nhiệt độ); Percentage Used ≥ 90 (tuổi thọ còn ≤ 10 %); Media Errors > 0 |

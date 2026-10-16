@@ -10,6 +10,7 @@ mod clean;
 mod devcache;
 mod diff;
 mod dupes;
+mod health;
 mod hw;
 mod ps;
 mod quarantine;
@@ -90,6 +91,9 @@ enum Command {
     Sensors(sensors::SensorsArgs),
     /// Running processes with CPU, memory, I/O and GPU use (read-only).
     Ps(ps::PsArgs),
+    /// Drive health: SMART / NVMe verdict per drive and volume checks (read-only).
+    /// Exit code 1 = a drive needs attention, 2 = a drive is bad.
+    Health(health::HealthArgs),
 }
 
 #[derive(Subcommand, Debug)]
@@ -147,6 +151,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Hw(args) => hw::hw(args),
         Command::Sensors(args) => sensors::run(args),
         Command::Ps(args) => ps::run(args),
+        Command::Health(args) => health::run(args),
     }
 }
 
