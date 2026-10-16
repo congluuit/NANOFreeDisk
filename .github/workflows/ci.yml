@@ -104,6 +104,14 @@ jobs:
           if ($last.source -ne 'etw') { throw "source is $($last.source)" }
           "$($lines.Count) sample(s); last: $($last.processes.Count) process(es), $($last.files.Count) file(s), lost $($last.lost), undecoded $($last.undecoded)"
           if (logman query -ets | Select-String 'NANOFreeDisk') { throw 'trace session left running' }
+      # PHASE6 DoD: < 2 % CPU, measured with a light write workload (release build)
+      - run: cargo build --release -p nfd-cli
+      - name: monitor overhead (ETW)
+        shell: pwsh
+        run: ./scripts/monitor-overhead.ps1 -Source etw -Seconds 30
+      - name: monitor overhead (I/O counters)
+        shell: pwsh
+        run: ./scripts/monitor-overhead.ps1 -Source counters -Seconds 30
 
   deny:
     name: cargo-deny
