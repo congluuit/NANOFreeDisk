@@ -28,6 +28,7 @@ nfd-devtools = { path = "crates/nfd-devtools", version = "0.1.0" }
 nfd-dupes = { path = "crates/nfd-dupes", version = "0.1.0" }
 nfd-monitor = { path = "crates/nfd-monitor", version = "0.1.0" }
 nfd-health = { path = "crates/nfd-health", version = "0.1.0" }
+nfd-browsers = { path = "crates/nfd-browsers", version = "0.1.0" }
 
 # external
 serde = { version = "1", features = ["derive"] }

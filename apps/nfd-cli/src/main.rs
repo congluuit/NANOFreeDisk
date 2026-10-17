@@ -1,12 +1,14 @@
 //! `nfd` — NANOFreeDisk CLI.
 //!
 //! Ships `scan` (Phase 1), `diff` (scan history, Phase 2), `clean`, `quarantine` and
-//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores` (Phase 4),
+//! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores`, `ai-leftovers` (Phase 4), `browsers`
+//! (per-website browser caches),
 //! `dupes` (Phase 5), `rules list` / `rules validate`, and the Hardware Monitor's
 //! `hw` / `sensors` / `ps`, and `monitor` (Phase 6). Watch and health commands arrive with their phases (see
 //! `docs/PLAN.md` §4.7).
 
 mod ai_leftovers;
+mod browsers;
 mod clean;
 mod devcache;
 mod diff;
@@ -68,6 +70,9 @@ enum Command {
     /// snapshots, test output…); `clean` removes the leftovers of finished sessions.
     /// Conversation history is never touched.
     AiLeftovers(ai_leftovers::AiArgs),
+    /// Browser caches per website (`sites`), and removing one website's cache
+    /// (`clean-site <host>`); never cookies, logins, history or site storage.
+    Browsers(browsers::BrowsersArgs),
     /// Package managers' own cache cleanup commands (`npm cache clean`, `pnpm store
     /// prune`, …): list, or run one after confirming the exact command.
     Stores(stores::StoresArgs),
@@ -151,6 +156,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Repos(args) => repos::repos(args),
         Command::Stores(args) => stores::run(args),
         Command::AiLeftovers(args) => ai_leftovers::run(args),
+        Command::Browsers(args) => browsers::run(args),
         Command::Dupes(args) => dupes::run(args),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {

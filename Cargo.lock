@@ -3079,6 +3079,7 @@ dependencies = [
 name = "nanofreedisk"
 version = "0.1.0"
 dependencies = [
+ "nfd-browsers",
  "nfd-core",
  "nfd-devtools",
  "nfd-dupes",
@@ -3165,12 +3166,25 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
+name = "nfd-browsers"
+version = "0.1.0"
+dependencies = [
+ "nfd-core",
+ "nfd-platform",
+ "nfd-rules",
+ "rayon",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
 name = "nfd-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
  "clap",
  "indicatif",
+ "nfd-browsers",
  "nfd-core",
  "nfd-devtools",
  "nfd-dupes",

@@ -8,6 +8,7 @@ use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
 pub mod ai_leftovers;
+pub mod browsers;
 pub mod clean;
 pub mod devcache;
 pub mod diskhealth;
