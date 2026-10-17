@@ -124,7 +124,7 @@
                   </p>
                 {/if}
                 {#if i.worktree}
-                  <p class="dc-small muted">{wtState(i)}{#if i.worktree.ignored.length} · {t("ail-wt-ignored", { size: formatSize(ignoredBytes(i), loc) })}{/if}</p>
+                  <p class="dc-small muted">{wtState(i)}{#if i.worktree.ignored.length}{` · ${t("ail-wt-ignored", { size: formatSize(ignoredBytes(i), loc) })}`}{/if}</p>
                 {/if}
                 <p class="dc-small muted">{impact(i)}</p>
                 {#if i.blocked}

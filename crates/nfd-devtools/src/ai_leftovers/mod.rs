@@ -416,7 +416,7 @@ fn walk_project(project: &Path, depth: usize, hits: &mut Vec<Hit>, kept: &mut Ve
         let mut taken: Vec<String> = Vec::new();
         for e in &entries {
             if e.pattern.contains('/') {
-                let p = dir.join(e.pattern);
+                let p = e.pattern.split('/').fold(dir.clone(), |a, c| a.join(c));
                 if is_dir(&p) {
                     taken.push(e.pattern.split('/').next().unwrap_or("").to_lowercase());
                     hits.push(Hit {

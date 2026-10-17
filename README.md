@@ -55,6 +55,7 @@
 | 🔀 | **"What changed?"** — diff two scans (today vs. last week): which folders grew, which files are new, how many GB | Answers "why did C: fill up by itself?" |
 | 📖 | **Folder Encyclopedia** — click any system/app folder (WinSxS, `AppData\Local\Packages`, `Package Cache`, `.ollama`…) and get *What is this? Can I delete it? What happens if I do?* Community-editable | Nobody has to Google again |
 | 🗂 | **Repo Finder** — every git repo on the drive with `.git` vs build-artifact size (`target/`, `node_modules/`, `Library/`, `DerivedDataCache/`, `bin/obj`, `.venv`…), last commit, uncommitted changes; clean artifacts to quarantine, `git gc`, archive | npkill + cargo-sweep + Unity cleaner for every language, one screen |
+| 🧠 | **AI leftovers** — what AI coding agents leave behind *per session*: Claude Code worktrees (often 10+ GB of build output each), `%TEMP%\claude` scratchpads, `.playwright-mcp` snapshots, agent screenshots, test output, old Playwright browsers — each tied to the session that made it ("from session *X*, active 12 days ago"). Sessions still open or active this week are never pre-selected; worktrees are removed by `git worktree remove` only when clean and merged or pushed, branches stay; conversations are always kept ([`docs/AI_LEFTOVERS.md`](docs/AI_LEFTOVERS.md)) | In the AI era the clutter is per session and inside your projects — and nobody knows which part is safe |
 | 🧰 | **Toolchain Inventory** — rustup toolchains, Node versions, Python/conda envs, JDKs, .NET SDKs, Android SDK images, Visual Studio workloads, Unity editors, Unreal versions — size, last used and the **proper uninstall command** | Dev machines carry 3–5 unused versions of everything |
 | 📦 | **Package-store cleanup via vendor CLIs** — `pnpm store prune`, `npm cache verify`, `cargo-cache`, `uv/pip cache`, `nuget locals`, `go clean -modcache`, `conda clean`, `hf cache`, `ollama rm` | The store never breaks because the right command did the work |
 | 👤 | **Profiles** — Developer / Gamer / Office / Minimal pick rule sets and thresholds during a 60-second onboarding | Usable before reading any docs |
@@ -166,6 +167,7 @@ nfd devcache [list|clean --vendor anthropic --level safe|unknown]
 nfd toolchains [--json]
 nfd repos <root> [--keep-recent 7] [--json]   ·   nfd repos clean <root> [--apply]
 nfd stores [--json]   ·   nfd stores run npm-cache-clean
+nfd ai-leftovers [list|clean] [--root <dir>] [--keep-recent 7] [--apply] [--json]
 nfd dupes <path...> [--min-size 1MB] [--folders] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
 nfd monitor [--seconds 10] [--top 10] [--json] [--source auto|etw|counters] [--watch <dir>]   ·   nfd monitor --history
 nfd health [--json] [--raw] [--disk N]          # exit code 1 = caution, 2 = bad

@@ -1,6 +1,6 @@
 # AI Leftovers — dọn "rác theo phiên" của AI coding agent: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** (2026-10-17) — lát 1 (catalog + bảo vệ lịch sử hội thoại mở rộng), lát 2 (nhận diện phiên), lát 3 (worktree qua `git worktree`), lát 4 (tab "AI leftovers", Health Score, gợi ý Home, CLI `nfd ai-leftovers`). Mục **C10** ở `docs/PLAN.md` §13.2 (nhóm C, ①). Mọi thao tác xóa đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`); lệnh git ghi vào Activity log (kind `worktree`) như lệnh C4. **Lịch sử hội thoại của AI agent không bao giờ là ứng viên** (PLAN §5.1).
+> Trạng thái: **xong** (2026-10-17) — lát 1 ✅ (catalog + bảo vệ lịch sử hội thoại mở rộng), lát 2 ✅ (nhận diện phiên), lát 3 ✅ (worktree qua `git worktree`), lát 4 ✅ (tab "AI leftovers", Health Score, gợi ý Home, CLI `nfd ai-leftovers`, `gui-smoke`). Mục **C10** ở `docs/PLAN.md` §13.2 (nhóm C, ①). Mọi thao tác xóa đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`); lệnh git ghi vào Activity log (kind `worktree`) như lệnh C4. **Lịch sử hội thoại của AI agent không bao giờ là ứng viên** (PLAN §5.1).
 
 ## 1. Mục tiêu & DoD
 
