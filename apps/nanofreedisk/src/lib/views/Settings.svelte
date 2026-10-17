@@ -140,6 +140,15 @@
       fail(e);
     }
   }
+
+  async function copyAccount() {
+    try {
+      await navigator.clipboard.writeText("6503695458");
+      toast(t("copied"), "ok");
+    } catch (e) {
+      fail(e);
+    }
+  }
 </script>
 
 <section class="page">
@@ -394,6 +403,26 @@
       <p class="muted small">{t("settings-author")} · nanodev.io.vn · github.com/congluuit/NANOFreeDisk</p>
     </div>
   </div>
+
+  <div class="block card donate" data-settings="donate">
+    <img src="/donate-qr.jpg" alt={t("donate-qr-alt")} width="200" />
+    <div>
+      <h2>☕ {t("donate-title")}</h2>
+      <p>{t("donate-text")}</p>
+      <dl class="bank">
+        <dt>{t("donate-bank")}</dt>
+        <dd>BIDV — {t("donate-bank-name")}</dd>
+        <dt>{t("donate-holder")}</dt>
+        <dd>LUU DUC THANH CONG</dd>
+        <dt>{t("donate-account")}</dt>
+        <dd>
+          <span class="mono">6503695458</span>
+          <button class="btn ghost small" onclick={copyAccount} title={t("donate-copy")}><Icon name="copy" size={14} />{t("donate-copy")}</button>
+        </dd>
+      </dl>
+      <p class="muted small">{t("donate-note")}</p>
+    </div>
+  </div>
 </section>
 
 <style>
@@ -554,6 +583,35 @@
   }
   .vendor {
     width: 220px;
+  }
+  .donate {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .donate img {
+    border-radius: 12px;
+    background: #fff;
+    flex: none;
+  }
+  .donate h2 {
+    margin-top: 0;
+  }
+  .bank {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 4px 12px;
+    margin: 8px 0;
+  }
+  .bank dt {
+    color: var(--text-muted);
+  }
+  .bank dd {
+    margin: 0;
+    display: flex;
+    gap: 8px;
+    align-items: center;
   }
   .about {
     display: flex;

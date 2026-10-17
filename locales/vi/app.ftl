@@ -210,6 +210,15 @@ settings-font-scale = Cỡ chữ
 settings-about = Giới thiệu
 settings-about-text = NANOFreeDisk { $version } · mã nguồn mở (MIT) · không thu thập dữ liệu.
 settings-author = Phát triển bởi Lưu Đức Thành Công (NANO)
+donate-title = Ủng hộ tác giả
+donate-text = NANOFreeDisk miễn phí và mã nguồn mở, do một lập trình viên Việt Nam làm. Nếu ứng dụng giúp bạn tiết kiệm thời gian hoặc dung lượng, một ly cà phê sẽ giúp dự án tiếp tục. Cảm ơn bạn!
+donate-bank = Ngân hàng
+donate-bank-name = Ngân hàng TMCP Đầu tư và Phát triển Việt Nam
+donate-holder = Chủ tài khoản
+donate-account = Số tài khoản
+donate-copy = Sao chép số tài khoản
+donate-note = Quét mã VietQR bằng bất kỳ ứng dụng ngân hàng nào. Ủng hộ là tùy ý và không thay đổi gì trong ứng dụng.
+donate-qr-alt = VietQR BIDV — LUU DUC THANH CONG — 6503695458
 
 token-bg = Nền
 token-surface = Bề mặt

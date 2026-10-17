@@ -210,6 +210,15 @@ settings-font-scale = Text size
 settings-about = About
 settings-about-text = NANOFreeDisk { $version } · open source (MIT) · no telemetry.
 settings-author = Made by Lưu Đức Thành Công (NANO)
+donate-title = Support the author
+donate-text = NANOFreeDisk is free and open source, made by one developer in Vietnam. If it saved you time or disk space, a coffee keeps it going. Thank you!
+donate-bank = Bank
+donate-bank-name = Bank for Investment and Development of Vietnam
+donate-holder = Account holder
+donate-account = Account number
+donate-copy = Copy account number
+donate-note = Scan the VietQR code with any Vietnamese banking app. Donations are optional and change nothing in the app.
+donate-qr-alt = VietQR BIDV — LUU DUC THANH CONG — 6503695458
 
 token-bg = Background
 token-surface = Surface
