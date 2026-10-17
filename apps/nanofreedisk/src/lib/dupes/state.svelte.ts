@@ -218,6 +218,37 @@ export async function applyStrategy(strategy: KeepStrategy): Promise<void> {
   }
 }
 
+/** Selection id of a copy (file or folder) in its group. */
+export const copyId = (group: number, path: string): string => `${group}|${path}`;
+
+function pickIds(picks: Record<number, Pick>): string[] {
+  return Object.entries(picks).flatMap(([id, p]) => p.remove.map((path) => copyId(Number(id), path)));
+}
+
+/** Rebuild per-group picks from selection ids; the copy each group keeps never goes. */
+function fromIds(picks: Record<number, Pick>, ids: string[]): Record<number, Pick> {
+  const out: Record<number, Pick> = {};
+  for (const [id, p] of Object.entries(picks)) out[Number(id)] = { keep: p.keep, remove: [] };
+  for (const sel of ids) {
+    const i = sel.indexOf("|");
+    const g = out[Number(sel.slice(0, i))];
+    const path = sel.slice(i + 1);
+    if (g && path !== g.keep && !g.remove.includes(path)) g.remove.push(path);
+  }
+  return out;
+}
+
+/** Selection ids of the file copies to remove. */
+export const filePickIds = (): string[] => pickIds(dupes.picks);
+export function setFilePicks(ids: string[]): void {
+  dupes.picks = fromIds(dupes.picks, ids);
+}
+/** Selection ids of the folder copies to remove. */
+export const folderPickIds = (): string[] => pickIds(dupes.folderPicks);
+export function setFolderPicks(ids: string[]): void {
+  dupes.folderPicks = fromIds(dupes.folderPicks, ids);
+}
+
 /** Remove nothing: keep every copy. */
 export function clearPicks(): void {
   for (const id of Object.keys(dupes.picks)) dupes.picks[Number(id)].remove = [];

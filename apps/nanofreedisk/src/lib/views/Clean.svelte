@@ -10,14 +10,21 @@
   import { cleanApi } from "../clean/api";
   import { bytesOf, clean, cleanable, impactText, levelOf, reasonText, runClean, scanJunk } from "../clean/state.svelte";
   import type { Candidate, RuleSummary } from "../clean/types";
+  import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../selection";
+  import BrowserSites from "../components/BrowserSites.svelte";
   import CliHint from "../components/CliHint.svelte";
+  import ConfirmTotals from "../components/ConfirmTotals.svelte";
+  import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
+  import SelectionBar from "../components/SelectionBar.svelte";
 
   const loc = $derived(intlLocale());
   let preview = $state<{ ruleId: string; items: Candidate[] | null } | null>(null);
   let permanent = $state(false);
   let typed = $state("");
   let showGuide = $state(false);
+  let ack = $state(false);
+  let page = $state<HTMLElement | null>(null);
 
   $effect(() => {
     if (!clean.scan && !clean.scanning && !clean.running) void scanJunk();
@@ -31,16 +38,21 @@
       .map((p) => ({ ...p, rules: visible.filter((r) => r.packId === p.id) }))
       .filter((p) => p.rules.length),
   );
-  const picked = $derived(clean.picked.filter((id) => visible.some((r) => r.ruleId === id)));
-  const pickedBytes = $derived(bytesOf(picked));
+  // what the selection bar counts: a rule whose app is running is likely skipped
+  const selItems = $derived<SelItem[]>(
+    visible.map((r) => ({ id: r.ruleId, bytes: r.bytes, files: r.files, level: levelOf(r), group: r.packId, skip: r.running.length ? r.running.join(", ") : null })),
+  );
+  const picked = $derived(sanitize(selItems, clean.picked, expert()));
+  const confirmSummary = $derived(summarize(selItems, clean.confirm ?? [], expert()));
   const safeIds = $derived(visible.filter((r) => r.level === "safe").map((r) => r.ruleId));
   const confirmRules = $derived(rules.filter((r) => clean.confirm?.includes(r.ruleId)));
   const confirmAllSafe = $derived(confirmRules.every((r) => r.level === "safe"));
   const canPermanent = $derived(expert() && confirmAllSafe);
 
   function toggle(id: string) {
-    clean.picked = clean.picked.includes(id) ? clean.picked.filter((x) => x !== id) : [...clean.picked, id];
+    clean.picked = toggleId(selItems, picked, id, expert());
   }
+  const setPicked = (ids: string[]) => (clean.picked = ids);
 
   async function showItems(r: RuleSummary) {
     if (preview?.ruleId === r.ruleId) {
@@ -61,6 +73,7 @@
     if (!ids.length) return;
     permanent = false;
     typed = "";
+    ack = false;
     clean.confirm = ids;
   }
 
@@ -69,6 +82,7 @@
     if (!ids) return;
     const perm = permanent && canPermanent;
     if (perm && typed !== "DELETE") return;
+    if (needsAck(confirmSummary) && !ack) return;
     clean.confirm = null;
     await runClean(ids, expert(), perm);
   }
@@ -79,7 +93,7 @@
   );
 </script>
 
-<section class="page">
+<section class="page" bind:this={page}>
   <header>
     <div>
       <h1>{t("clean-title")}</h1>
@@ -154,12 +168,15 @@
 
     {#each packs as p (p.id)}
       <div class="card pack">
-        <h2>{p.name}<span class="muted num">{formatSize(p.bytes, loc)}</span></h2>
+        <h2>
+          <GroupCheck items={selItems} group={p.id} picked={picked} onchange={setPicked} expert={expert()} name={p.name} busy={!!clean.running} />
+          <span class="grow">{p.name}</span><span class="muted num">{formatSize(p.bytes, loc)}</span>
+        </h2>
         <ul class="rules">
           {#each p.rules as r (r.ruleId)}
             <li class="rule {levelOf(r)}">
               <label class="pick" title={t("clean-pick-hint")}>
-                <input type="checkbox" checked={clean.picked.includes(r.ruleId)} onchange={() => toggle(r.ruleId)} disabled={!!clean.running} />
+                <input type="checkbox" data-rule-check={r.ruleId} checked={picked.includes(r.ruleId)} onchange={() => toggle(r.ruleId)} disabled={!!clean.running} />
               </label>
               <div class="what">
                 <div class="name">
@@ -199,6 +216,9 @@
             </li>
           {/each}
         </ul>
+        {#if p.id === "browsers"}
+          <BrowserSites />
+        {/if}
       </div>
     {:else}
       <div class="card loading"><Icon name="check" size={22} /><span>{t("clean-nothing")}</span></div>
@@ -226,14 +246,17 @@
       </div>
     {/if}
 
-    <div class="footer card">
-      <span>{t("clean-selected", { count: picked.length, size: formatSize(pickedBytes, loc) })}</span>
-      <span class="grow"></span>
-      <button class="btn danger" disabled={!picked.length || !!clean.running} onclick={() => ask(picked)} data-effect title={t("clean-run-hint")}>
-        <Icon name="clean" size={16} />{t("clean-run")}
-      </button>
-    </div>
     <CliHint command={cliCommand} />
+    <SelectionBar
+      items={selItems}
+      {picked}
+      onchange={setPicked}
+      expert={expert()}
+      busy={!!clean.running}
+      scope={page}
+      primary
+      action={{ label: (count, size) => t("sel-clean-n", { count, size }), hint: t("clean-run-hint"), testid: "clean", run: () => ask(picked) }}
+    />
   {/if}
 </section>
 
@@ -247,9 +270,7 @@
           <li><span class="badge {levelOf(r)}">{levelLabel(r)}</span><span class="ellipsis">{r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
         {/each}
       </ul>
-      {#if confirmRules.some((r) => r.running.length)}
-        <p class="warn small"><Icon name="alert" size={14} />{t("clean-confirm-running")}</p>
-      {/if}
+      <ConfirmTotals summary={confirmSummary} bind:ack />
       <p class="muted small">{permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}</p>
       {#if canPermanent}
         <label class="perm">
@@ -265,7 +286,7 @@
       {/if}
       <footer>
         <button class="btn" onclick={() => (clean.confirm = null)}>{t("delete-cancel")}</button>
-        <button class="btn danger" onclick={go} disabled={permanent && canPermanent && typed !== "DELETE"} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
+        <button class="btn danger" data-confirm-go onclick={go} disabled={(permanent && canPermanent && typed !== "DELETE") || (needsAck(confirmSummary) && !ack)} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
           <Icon name="clean" size={16} />{permanent && canPermanent ? t("clean-confirm-permanent") : t("clean-confirm-go")}
         </button>
       </footer>
@@ -314,8 +335,7 @@
   .running,
   .result,
   .loading,
-  .summary,
-  .footer {
+  .summary {
     padding: 14px 16px;
   }
   .running .bar {
@@ -397,7 +417,8 @@
   }
   .pack h2 {
     display: flex;
-    justify-content: space-between;
+    gap: 8px;
+    align-items: center;
     margin: 0 0 8px;
     font-size: 1.05em;
   }
@@ -479,14 +500,6 @@
   }
   .guide .rules {
     margin-top: 8px;
-  }
-  .footer {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    position: sticky;
-    bottom: 0;
-    box-shadow: var(--shadow);
   }
   .backdrop {
     position: fixed;

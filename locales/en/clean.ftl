@@ -26,14 +26,11 @@ clean-preview = Preview
 clean-hide = Hide
 clean-preview-more = Showing the { $shown } largest of { $count } items.
 clean-guide-title = Guidance only ({ $count }) — the app never deletes these
-clean-selected = { $count } rule(s) selected · { $size }
-clean-run = Clean selected
 clean-run-hint = If you click: you see the total first, then the selected items move to the quarantine.
 clean-confirm-title = Clean these items?
 clean-confirm-body = { $size } from { $rules } rule(s) will move to the quarantine.
 clean-confirm-note = Every item is checked again right before it moves. You can restore everything from Activity for 7 days; after that the quarantine is emptied.
 clean-confirm-permanent-note = Permanent delete: nothing can be restored afterwards.
-clean-confirm-running = Some apps are still running; the files they keep open stay where they are.
 clean-permanent = Delete permanently instead (Expert, Safe items only)
 clean-type-delete = Type DELETE to confirm:
 clean-confirm-go = Move to quarantine
@@ -116,8 +113,6 @@ health-fix-clean = Clean
 
 ## Tidy up and the delete dialog
 tidy-quarantine-note = Picked items move to the quarantine and can be restored from Activity for 7 days.
-tidy-selected = { $count } selected
-tidy-quarantine = Move to quarantine ({ $count })
 tidy-quarantine-hint = If you click: you confirm first; the items move to the quarantine (restorable for 7 days).
 delete-title-quarantine = Move to the quarantine?
 delete-intro-quarantine = These items will move to the quarantine:

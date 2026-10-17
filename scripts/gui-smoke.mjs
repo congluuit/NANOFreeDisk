@@ -27,6 +27,11 @@
 // view's tabs — file detail is not turned on: it would ask UAC, and nothing is
 // recorded into the history); Phase 7: the health report (drives, volumes, the JSON
 // export without serial numbers and its *.json guard), the Health view and the score.
+// The shared selection bar (Clean, Dev caches, Duplicates, Old & large, Tidy up:
+// totals, select all / none / by level, per-group boxes, Esc and Ctrl+A, the
+// confirmation per level) and the per-website browser cache panel on a synthetic
+// Chrome / Firefox profile (Simple-format Code Cache, CacheStorage, a blockfile web
+// cache that is only listed, cache2; a running browser refused; quarantine + restore).
 // Nothing outside the fixture is ever deleted and the only process ever ended is a
 // `ping` the script starts itself; the fixture's history snapshots and journal
 // entries are forgotten at the end.
@@ -115,6 +120,121 @@ impact_vi = "Tệp của fixture kiểm thử GUI."
 verified_on = 2026-10-16
 `,
 );
+// Per-website browser caches (nfd-browsers): a synthetic Chrome profile — Code Cache
+// entries in the Simple format, a CacheStorage origin, a blockfile web cache — and a
+// Firefox cache2, read through window.__nfdBrowserFixture (laid out like
+// %LOCALAPPDATA%); the real profiles are never read from here
+const brFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-browsers-"));
+const brProfile = join(brFixture, "Local", "Google", "Chrome", "User Data", "Default");
+const le32 = (n) => {
+  const b = Buffer.alloc(4);
+  b.writeUInt32LE(n >>> 0);
+  return b;
+};
+const be32 = (n) => {
+  const b = Buffer.alloc(4);
+  b.writeUInt32BE(n >>> 0);
+  return b;
+};
+function simpleEntry(dir, name, key, size) {
+  mkdirSync(join(dir, "index-dir"), { recursive: true });
+  const k = Buffer.from(key);
+  const head = Buffer.concat([Buffer.from("305c72a71b6dfbfc", "hex"), le32(5), le32(k.length), le32(0x1234), le32(0)]);
+  writeFileSync(join(dir, `${name}_0`), Buffer.concat([head, k, Buffer.alloc(size, 0x5a), Buffer.alloc(24)]));
+  writeFileSync(join(dir, "index-dir", "the-real-index"), Buffer.alloc(40, 0x11));
+  writeFileSync(join(dir, "index"), Buffer.alloc(24, 0x30));
+}
+function blockHeader(entrySize, file, max) {
+  const h = Buffer.alloc(8192);
+  h.writeUInt32LE(0xc104cac3, 0);
+  h.writeUInt32LE(0x30000, 4);
+  h.writeInt16LE(file, 8);
+  h.writeInt32LE(entrySize, 12);
+  h.writeInt32LE(max, 20);
+  return h;
+}
+function blockfile(dir, entries) {
+  mkdirSync(dir, { recursive: true });
+  const index = Buffer.alloc(368 + 0x10000 * 4);
+  index.writeUInt32LE(0xc103cac3, 0);
+  index.writeUInt32LE(0x30000, 4);
+  index.writeInt32LE(entries.length, 8);
+  const blocks = Buffer.alloc(64 * 256);
+  entries.forEach(([key, size], n) => {
+    const addr = (0x80000000 | (2 << 28) | (1 << 16) | n) >>> 0;
+    index.writeUInt32LE(addr, 368 + (n + 1) * 4);
+    const e = blocks.subarray(n * 256, (n + 1) * 256);
+    e.writeInt32LE(key.length, 32);
+    e.writeInt32LE(size, 44);
+    e.write(key, 96, "latin1");
+  });
+  writeFileSync(join(dir, "index"), index);
+  writeFileSync(join(dir, "data_0"), Buffer.concat([blockHeader(36, 0, 64), Buffer.alloc(64 * 36)]));
+  writeFileSync(join(dir, "data_1"), Buffer.concat([blockHeader(256, 1, 64), blocks]));
+  writeFileSync(join(dir, "data_2"), blockHeader(1024, 2, 0));
+  writeFileSync(join(dir, "data_3"), blockHeader(4096, 3, 0));
+}
+function firefoxEntry(dir, name, key, size) {
+  mkdirSync(dir, { recursive: true });
+  const k = Buffer.from(key);
+  const meta = Buffer.concat([be32(0x12345678), Buffer.alloc(Math.ceil(size / 262144) * 2), ...[3, 1, 1_700_000_000, 1_700_000_000, 10, 0xffffffff, k.length, 0].map(be32), k, Buffer.from([0]), be32(size)]);
+  writeFileSync(join(dir, name), Buffer.concat([Buffer.alloc(size, 0x42), meta]));
+}
+const brJs = join(brProfile, "Code Cache", "js");
+simpleEntry(brJs, "00000000000000a1", "_keyhttps://www.youtube.com/s/player.js \nhttps://youtube.com/", 3000);
+simpleEntry(brJs, "00000000000000b2", "_keyhttps://github.com/app.js \nhttps://github.com/", 2000);
+const brOrigin = join(brProfile, "Service Worker", "CacheStorage", "379f1cbab5b08b6fc9e08681e42d8be311441c88");
+{
+  const o = Buffer.from("https://www.youtube.com/");
+  mkdirSync(brOrigin, { recursive: true });
+  writeFileSync(join(brOrigin, "index.txt"), Buffer.concat([Buffer.from([0x12, o.length]), o, Buffer.from([0x1a, o.length]), o]));
+  simpleEntry(join(brOrigin, "4597f45e-7339-4937-90c7-e4a70ea59a7d"), "00000000000000c3", "https://www.youtube.com/app.js", 6000);
+}
+blockfile(join(brProfile, "Cache", "Cache_Data"), [
+  ["1/0/_dk_https://youtube.com https://youtube.com https://i.ytimg.com/a.jpg", 5000],
+  ["1/0/_dk_https://example.com https://example.com https://example.com/a.css", 700],
+]);
+mkdirSync(join(brProfile, "GPUCache"), { recursive: true });
+writeFileSync(join(brProfile, "GPUCache", "data_0"), Buffer.alloc(2048, 1));
+for (const f of ["Cookies", "Login Data", "History", "Preferences"]) writeFileSync(join(brProfile, f), "keep");
+for (const d of ["Local Storage/leveldb", "IndexedDB/https_www.youtube.com_0.indexeddb.leveldb", "Extensions/abc"]) {
+  mkdirSync(join(brProfile, d), { recursive: true });
+  writeFileSync(join(brProfile, d, "000003.log"), "keep");
+}
+const brFirefox = join(brFixture, "Local", "Mozilla", "Firefox", "Profiles", "smoke.default", "cache2");
+firefoxEntry(join(brFirefox, "entries"), "A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1A1", "a,:https://www.youtube.com/", 1500);
+firefoxEntry(join(brFirefox, "entries"), "B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2B2", "a,:https://www.mozilla.org/", 800);
+writeFileSync(join(brFirefox, "index"), Buffer.alloc(64, 7));
+/** Every file under `dir` with its bytes (to prove what changed and what came back). */
+function snapshotTree(dir) {
+  const out = {};
+  const walk = (d) => {
+    for (const e of execFileSync("cmd", ["/C", "dir", "/B", "/S", "/A-D", d], { encoding: "utf8" }).split(/\r?\n/).filter(Boolean)) out[e] = readFileSync(e).toString("hex");
+  };
+  walk(dir);
+  return out;
+}
+writeFileSync(
+  join(rulesDir, "browsers.toml"),
+  `[pack]
+id = "browsers"
+name = "Smoke browser caches"
+version = "0.0.1"
+
+[[rule]]
+id = "smoke.browser.gpu"
+vendor = "NANO"
+app = "Smoke browser"
+category = "browser"
+paths = ["\${TEMP}/${basename(brFixture)}/Local/Google/Chrome/User Data/*/GPUCache/**"]
+level = "caution"
+regenerates = true
+impact = "GPU cache of the GUI smoke test's browser fixture."
+impact_vi = "Bộ đệm GPU của fixture trình duyệt trong kiểm thử GUI."
+verified_on = 2026-10-17
+`,
+);
+
 // Phase 4: a DevCache pack and a project with build output, in their own fixture
 const devFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-dev-"));
 mkdirSync(join(devFixture, "caches", "blobs"), { recursive: true });
@@ -416,6 +536,46 @@ try {
   }
   check("Clean view shows the rule", await evaluate("document.querySelector('main').innerText.includes('Smoke fixture')"));
   await shot("9-clean");
+  // the shared selection bar: totals, select all / none / by level, Esc, Ctrl+A,
+  // per-pack boxes, and the confirmation repeating the totals per level
+  const mainBar = "[...document.querySelectorAll('main [data-selection-bar]')].pop()";
+  const barText = () => evaluate(`${mainBar}?.querySelector('[data-sel-summary]')?.innerText ?? ''`);
+  const barClick = (sel) => evaluate(`${mainBar}?.querySelector('[data-sel="${sel}"]')?.click()`);
+  const actionOff = () => evaluate(`${mainBar}?.querySelector('[data-sel-action]')?.disabled`);
+  const ticked = () => evaluate("[...document.querySelectorAll('main [data-rule-check]:checked')].map((c) => c.dataset.ruleCheck).sort().join()");
+  const key = (k, ctrl = false) => evaluate(`document.body.dispatchEvent(new KeyboardEvent('keydown', { key: '${k}', ctrlKey: ${ctrl}, bubbles: true }))`);
+  check("Clean view shows the selection bar", await evaluate(`!!${mainBar}?.querySelector('[data-sel-summary]')`));
+  await barClick("none");
+  await sleep(200);
+  check("clear selection: nothing ticked, the action is disabled", (await ticked()) === "" && (await actionOff()) === true && !/\d/.test(await barText()), await barText());
+  await barClick("all");
+  await sleep(200);
+  check("select all ticks the Safe and the Caution rule", (await ticked()) === "smoke.browser.gpu,smoke.junk" && (await actionOff()) === false && /2/.test(await barText()), await barText());
+  await key("Escape");
+  await sleep(200);
+  check("Esc clears the selection", (await ticked()) === "");
+  await key("a", true);
+  await sleep(200);
+  check("Ctrl+A selects everything in the list", (await ticked()) === "smoke.browser.gpu,smoke.junk");
+  await barClick("safe");
+  await sleep(200);
+  check("only Safe leaves the Caution rule unticked", (await ticked()) === "smoke.junk");
+  await evaluate("document.querySelector('[data-group-check=\"browsers\"]')?.click()");
+  await sleep(200);
+  check("the per-pack box ticks that pack's rules", (await ticked()) === "smoke.browser.gpu,smoke.junk");
+  await evaluate(`${mainBar}.querySelector('[data-sel-action]').click()`);
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('[data-confirm-totals]')")); i++) await sleep(100);
+  check(
+    "the confirmation repeats the totals per level and waits for the Caution tick",
+    (await evaluate("[...document.querySelectorAll('[data-confirm-level]')].map((l) => l.dataset.confirmLevel).join()")) === "safe,caution" &&
+      (await evaluate("document.querySelector('[data-confirm-go]')?.disabled")) === true,
+  );
+  await evaluate("document.querySelector('[data-confirm-ack]').click()");
+  await sleep(150);
+  check("the Caution tick enables the confirmation", (await evaluate("document.querySelector('[data-confirm-go]')?.disabled")) === false);
+  await shot("9b-clean-confirm");
+  await evaluate("document.querySelector('.dialog footer .btn').click()");
+  await sleep(200);
   const cs = await invoke("clean_scan", { rulesDir });
   const rule = cs.rules?.find((r) => r.ruleId === "smoke.junk");
   check("clean scan finds the fixture junk", rule?.candidates === 2 && rule.files === JUNK_FILES && cs.safe === rule.bytes, JSON.stringify(rule ?? cs));
@@ -441,6 +601,67 @@ try {
       JSON.stringify(back),
     );
   }
+  // per-website browser caches on their own fixture (never the real profiles)
+  await evaluate(`window.__nfdBrowserFixture = ${JSON.stringify(brFixture)}`);
+  await evaluate("document.querySelector('[data-br-toggle]')?.click()");
+  const siteBox = (b, s) => `document.querySelector('[data-br-browser="${b}"] [data-br-site="${s}"] input')`;
+  for (let i = 0; i < 60 && !(await evaluate(`!!${siteBox("chrome", "youtube.com")}`)); i++) await sleep(150);
+  check(
+    "per-site panel lists the fixture's websites per browser",
+    (await evaluate(`!!${siteBox("chrome", "youtube.com")} && !!${siteBox("chrome", "github.com")} && !!${siteBox("firefox", "mozilla.org")}`)) === true,
+  );
+  check("a site only in the blockfile web cache cannot be ticked", (await evaluate(`${siteBox("chrome", "example.com")}?.disabled`)) === true);
+  const panelBar = "document.querySelector('[data-browser-sites] [data-selection-bar]')";
+  const rulesBefore = await ticked();
+  await evaluate(`${siteBox("chrome", "youtube.com")}.click()`);
+  await sleep(200);
+  check("ticking a site updates the panel's own bar", /1/.test(await evaluate(`${panelBar}.querySelector('[data-sel-summary]').innerText`)) && (await evaluate(`${panelBar}.querySelector('[data-sel-action]').disabled`)) === false);
+  await evaluate(`${siteBox("chrome", "youtube.com")}.dispatchEvent(new KeyboardEvent('keydown', { key: 'a', ctrlKey: true, bubbles: true }))`);
+  await sleep(200);
+  check(
+    "Ctrl+A in the panel selects its sites only",
+    (await evaluate("document.querySelectorAll('[data-browser-sites] [data-br-site] input:checked').length")) === 4 && (await ticked()) === rulesBefore,
+  );
+  await shot("9c-browser-sites");
+  await evaluate(`${panelBar}.querySelector('[data-sel-action]').click()`);
+  for (let i = 0; i < 30 && !(await evaluate("!!document.querySelector('[data-br-confirm]')")); i++) await sleep(100);
+  check("cleaning sites asks first, with what goes", (await evaluate("document.querySelector('[data-br-go]')?.disabled")) === false);
+  await evaluate("document.querySelector('[data-br-confirm] footer .btn').click()");
+  await sleep(200);
+  const brReport = await invoke("browsers_sites", { fixture: brFixture });
+  const brChrome = brReport.browsers?.find((b) => b.id === "chrome")?.profiles?.[0];
+  const brYt = brChrome?.sites?.find((s) => s.site === "youtube.com");
+  check(
+    "browser sites: Code Cache + CacheStorage cleanable, the blockfile part listed only",
+    brYt?.cleanableEntries === 2 && brYt.listedBytes === 5000 && brChrome.sites.find((s) => s.site === "example.com")?.cleanableBytes === 0 && brChrome.stores.find((s) => s.kind === "http-cache")?.format === "blockfile",
+    JSON.stringify(brYt),
+  );
+  const brTargets = [{ browser: "chrome", profile: brProfile, site: "youtube.com", subdomains: false }];
+  writeFileSync(join(brFixture, "running.txt"), "chrome.exe\n");
+  const brBlocked = await invoke("browsers_plan", { targets: brTargets, fixture: brFixture });
+  const brRefused = await invoke("browsers_clean", { targets: brTargets, fixture: brFixture });
+  check("a running browser: nothing planned, the clean refused", brBlocked.items === 0 && brBlocked.running?.[0] === "chrome.exe" && brRefused.__error?.code === "app-running", JSON.stringify(brRefused));
+  rmSync(join(brFixture, "running.txt"));
+  const brPlan = await invoke("browsers_plan", { targets: brTargets, fixture: brFixture });
+  check("browser plan: whole entries, the index rebuilt, the web cache kept", brPlan.entries === 2 && brPlan.indexFiles === 1 && brPlan.listedOnly === 5000 && brPlan.refused === 0, JSON.stringify(brPlan));
+  const brBefore = snapshotTree(brFixture);
+  const brCleaned = await invoke("browsers_clean", { targets: brTargets, fixture: brFixture });
+  if (brCleaned.id) operations.push(brCleaned.id);
+  const brAfter = snapshotTree(brFixture);
+  const brGone = Object.keys(brBefore).filter((p) => !(p in brAfter));
+  check(
+    "per-site clean moves only that site's cache to the quarantine",
+    brCleaned.failed === 0 && brCleaned.done === brPlan.items && !existsSync(join(brJs, "00000000000000a1_0")) && !existsSync(brOrigin) && existsSync(join(brJs, "00000000000000b2_0")) &&
+      brGone.every((p) => p.includes("Code Cache") || p.includes("CacheStorage")) &&
+      Object.entries(brAfter).every(([p, hex]) => brBefore[p] === hex),
+    JSON.stringify({ brCleaned, brGone }),
+  );
+  check("cookies, logins, site storage and the web cache are untouched", ["Cookies", "Login Data", "History", "Local Storage/leveldb/000003.log", "IndexedDB/https_www.youtube.com_0.indexeddb.leveldb/000003.log", "Cache/Cache_Data/index"].every((f) => existsSync(join(brProfile, f))));
+  if (brCleaned.id) {
+    const back = await invoke("activity_restore", { id: brCleaned.id });
+    check("restore puts the site's cache back byte for byte", back.every((r) => r.status === "restored") && JSON.stringify(snapshotTree(brFixture)) === JSON.stringify(brBefore), JSON.stringify(back));
+  }
+  await evaluate("delete window.__nfdBrowserFixture");
   const refusedRules = await invoke("clean_scan", { rulesDir: fixture });
   check("clean scan of a folder without packs finds nothing", !!refusedRules.__error || refusedRules.rules?.length === 0, JSON.stringify(refusedRules).slice(0, 120));
   await evaluate("delete window.__nfdRulesDir");
@@ -538,10 +759,18 @@ try {
   await evaluate("document.querySelectorAll('.tabs .tab')[2].click()");
   await sleep(500);
   check("Old & large view lists the installer", await evaluate("document.querySelector('main').innerText.includes('old-setup.msi')"));
+  await evaluate("document.querySelector('main [data-selection-bar] [data-sel=\"all\"]')?.click()");
+  await sleep(200);
+  check("Old & large: select all fills the bar and its action", (await evaluate("document.querySelector('main [data-sel-action=\"old-large\"]')?.disabled")) === false);
+  await evaluate("document.querySelector('main [data-selection-bar] [data-sel=\"none\"]')?.click()");
   await shot("4-old-large");
   await nav("tidy");
   for (let i = 0; i < 30 && !(await evaluate("document.querySelector('main').innerText.includes('broken.lnk')")); i++) await sleep(150);
   check("Tidy view lists the broken shortcut", await evaluate("document.querySelector('main').innerText.includes('broken.lnk')"));
+  await evaluate("document.querySelector('[data-group-check=\"links\"]')?.click()");
+  await sleep(200);
+  check("Tidy: the per-list box selects the broken shortcuts", (await evaluate("document.querySelector('main [data-sel-action=\"tidy\"]')?.disabled")) === false);
+  await evaluate("document.querySelector('main [data-selection-bar] [data-sel=\"none\"]')?.click()");
   await shot("5-tidy");
   await evaluate("window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))");
   await sleep(300);
@@ -582,6 +811,7 @@ try {
   for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('NANO Dev')")); i++) await sleep(150);
   check("DevCache view groups the fixture vendor", await evaluate("!!document.querySelector('[data-vendor=\"NANO Dev\"]')"));
   check("DevCache view lists what is kept", await evaluate("document.querySelector('[data-vendor=\"NANO Dev\"]')?.innerText.includes('Settings of the GUI smoke test fixture') ?? false"));
+  check("DevCache: the vendor box and the selection bar", await evaluate("!!document.querySelector('[data-group-check=\"NANO Dev\"]') && !!document.querySelector('main [data-sel-action=\"devcache\"]')"));
   await shot("13-devcache");
   const dc = await invoke("devcache_scan", { rulesDir: devRulesDir, thresholds: { "NANO Dev": 0.00001 } });
   const dv = dc.vendors?.find((v) => v.vendor === "NANO Dev");
@@ -802,6 +1032,16 @@ try {
   await evaluate("document.querySelector('[data-find]')?.click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-dupes-summary]')")); i++) await sleep(250);
   check("Duplicates view lists the groups", await evaluate("document.querySelectorAll('.group').length >= 1 && document.querySelector('[data-dupes-summary]').innerText.length > 10"));
+  await evaluate("document.querySelector('main [data-selection-bar] [data-sel=\"all\"]')?.click()");
+  await sleep(200);
+  await evaluate("document.querySelector('[data-group] .head')?.click()");
+  await sleep(300);
+  check(
+    "Duplicates: select all keeps one copy of every group",
+    await evaluate(
+      "(() => { const g = document.querySelector('[data-group]'); const rows = [...g.querySelectorAll('.copies li')]; return rows.length >= 2 && rows.filter((li) => li.querySelector('.rmbox input').checked).length === rows.length - 1 && rows.some((li) => li.querySelector('.keepbox input').checked && li.querySelector('.rmbox input').disabled); })()",
+    ),
+  );
   await shot("14-duplicates");
   await evaluate("document.querySelector('[data-recycle]')?.click()");
   await sleep(300);
@@ -1029,6 +1269,7 @@ try {
   rmSync(devRulesDir, { recursive: true, force: true });
   rmSync(dupeFixture, { recursive: true, force: true });
   rmSync(aiFixture, { recursive: true, force: true });
+  rmSync(brFixture, { recursive: true, force: true });
 }
 
 if (failures.length) {

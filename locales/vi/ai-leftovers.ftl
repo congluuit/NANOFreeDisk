@@ -35,7 +35,6 @@ ail-keep-session-recent = Giữ lại: phiên của nó hoạt động trong { $
 ail-keep-recent-write = Giữ lại: được ghi trong { $days } ngày gần đây.
 ail-kept = { $what } ({ $tool }): lịch sử hội thoại, luôn được giữ.
 ail-none = Không tìm thấy rác của AI.
-ail-clean = Dọn mục đã chọn
 ail-clean-hint = Chuyển các thư mục đã tích vào quarantine và gỡ các worktree đã tích bằng git — sau hộp xác nhận cho thấy chính xác lệnh sẽ chạy.
 ail-confirm-title = Dọn rác của AI?
 ail-confirm-body = { $count } thư mục vào quarantine; giải phóng tổng cộng { $size }.

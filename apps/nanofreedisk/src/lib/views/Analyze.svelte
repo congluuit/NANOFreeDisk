@@ -14,10 +14,12 @@
   import FilterBar from "../components/FilterBar.svelte";
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
+  import SelectionBar from "../components/SelectionBar.svelte";
+  import type { SelItem } from "../selection";
   import Sunburst from "../components/Sunburst.svelte";
   import Treemap from "../components/Treemap.svelte";
   import TreeList from "../components/TreeList.svelte";
-  import type { Detail, ExtRow, Located, ScanIssue } from "../types";
+  import type { Detail, ExtRow, Located, Node, ScanIssue } from "../types";
 
   type Tab = "top" | "ext" | "age" | "changes" | "search" | "issues";
   let tab = $state<Tab>("top");
@@ -29,6 +31,10 @@
   const loc = $derived(intlLocale());
   const s = $derived(app.summary);
   const total = $derived(current?.onDisk ?? 0);
+  let section = $state<HTMLElement | null>(null);
+  let children = $state<Node[]>([]);
+  /** Sizes of selected entries not in a list shown here (picked in the treemap). */
+  let known = $state<Record<number, { onDisk: number; files: number }>>({});
 
   $effect(() => {
     const id = app.current;
@@ -37,7 +43,36 @@
     api.detail(id).then((d) => (current = d)).catch(() => navigate(app.summary?.rootId ?? 0));
     api.topFiles(id, 200).then((r) => (top = r)).catch(fail);
     api.extensions(id, 60).then((r) => (exts = r)).catch(fail);
+    api.children(id).then((r) => (children = r)).catch(() => (children = []));
   });
+
+  // what the selection bar counts: the selected entries, whatever list they came from
+  const listed = $derived.by(() => {
+    const m = new Map<number, { onDisk: number; files: number; kind: string }>();
+    for (const n of [...children, ...top, ...(app.search?.result.rows ?? [])]) m.set(n.id, n);
+    return m;
+  });
+  $effect(() => {
+    for (const id of app.selected) {
+      if (listed.has(id) || id in known) continue;
+      api.detail(id).then((d) => (known = { ...known, [id]: { onDisk: d.onDisk, files: d.files } })).catch(() => {});
+    }
+  });
+  const rootId = $derived(app.summary?.rootId ?? 0);
+  const sizeItem = (id: number): SelItem => {
+    const n = listed.get(id);
+    const k = n ?? known[id];
+    return { id: String(id), bytes: k?.onDisk ?? 0, files: n && n.kind !== "dir" ? 1 : (k?.files ?? 0), locked: id === rootId };
+  };
+  /** Select all = the entries of the folder shown. */
+  const childItems = $derived(children.map((n) => sizeItem(n.id)));
+  const selItems = $derived.by(() => {
+    const seen = new Map(childItems.map((i) => [i.id, i]));
+    for (const id of app.selected) if (!seen.has(String(id))) seen.set(String(id), sizeItem(id));
+    return [...seen.values()];
+  });
+  const picked = $derived(app.selected.map(String));
+  const setPicked = (ids: string[]) => (app.selected = ids.map(Number));
 
   $effect(() => {
     if (tab === "issues" && app.summary) api.issues(1000).then((r) => (issues = r)).catch(fail);
@@ -96,7 +131,7 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="analyze">
+  <section class="analyze" bind:this={section}>
     <div class="toolbar">
       <button class="btn ghost icon" onclick={up} disabled={(current?.ancestors.length ?? 0) < 2} title={`${t("analyze-up")} (Backspace)`}>
         <Icon name="up" />
@@ -235,6 +270,18 @@
         </div>
       </div>
     </div>
+    <SelectionBar
+      items={childItems}
+      all={selItems}
+      {picked}
+      onchange={setPicked}
+      expert={expert()}
+      scope={section}
+      primary
+      noLevels
+      sticky={false}
+      action={{ label: (count, size) => t("sel-recycle-n", { count, size }), icon: "trash", hint: t("action-recycle-hint"), testid: "analyze", run: () => askDelete(app.selected) }}
+    />
   </section>
 {/if}
 

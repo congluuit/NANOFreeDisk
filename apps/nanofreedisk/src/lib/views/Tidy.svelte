@@ -9,8 +9,12 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, askDelete, fail } from "../state.svelte";
   import ContextMenu, { type MenuItem } from "../components/ContextMenu.svelte";
+  import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
+  import SelectionBar from "../components/SelectionBar.svelte";
+  import type { SelItem } from "../selection";
+  import { expert } from "../state.svelte";
   import type { EmptyRow, EmptyRows, Located, ShortcutRow, ShortcutRows } from "../types";
 
   let empty = $state<EmptyRows | null>(null);
@@ -21,6 +25,15 @@
   let menu: { x: number; y: number; items: MenuItem[] } | null = $state(null);
   const loc = $derived(intlLocale());
   const rootId = $derived(app.summary?.rootId ?? 0);
+  let page = $state<HTMLElement | null>(null);
+  // empty folders and broken shortcuts; broken junctions are listed only (removed in
+  // Explorer), so Select all never picks them
+  const selItems = $derived<SelItem[]>([
+    ...(empty?.rows ?? []).map((r) => ({ id: String(r.id), bytes: r.onDisk, files: r.files, group: "empty" })),
+    ...(links?.rows ?? []).map((r) => ({ id: String(r.id), bytes: r.onDisk, files: 1, group: "links" })),
+  ]);
+  const picked = $derived(selected.map(String));
+  const setPicked = (ids: string[]) => (selected = ids.map(Number));
 
   $effect(() => {
     void app.version;
@@ -68,26 +81,18 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="page">
+  <section class="page" bind:this={page}>
     <header>
       <h1>{t("tidy-title")}</h1>
       <p class="muted">{t("tidy-intro")}</p>
       <p class="note"><Icon name="shield" size={16} />{t("tidy-quarantine-note")}</p>
     </header>
 
-    <div class="actbar card">
-      <span class="muted">{selected.length ? t("tidy-selected", { count: selected.length }) : t("action-select-hint")}</span>
-      <span class="grow"></span>
-      {#if selected.length}
-        <button class="btn ghost" onclick={() => (selected = [])}>{t("filter-clear")}</button>
-      {/if}
-      <button class="btn danger-outline" disabled={!selected.length} data-effect title={t("tidy-quarantine-hint")} onclick={() => askDelete(selected, "quarantine", "tidy")}>
-        <Icon name="clean" size={16} />{t("tidy-quarantine", { count: selected.length })}
-      </button>
-    </div>
+    <p class="muted small hint">{t("action-select-hint")}</p>
 
     <div class="card block">
       <h2>
+        <GroupCheck items={selItems} group="empty" {picked} onchange={setPicked} expert={expert()} name={t("tidy-empty-title")} />
         <Icon name="folder" size={18} />{t("tidy-empty-title")}
         {#if empty}<span class="count">{formatCount(empty.matched, loc)}</span>{/if}
       </h2>
@@ -105,6 +110,7 @@
 
     <div class="card block">
       <h2>
+        <GroupCheck items={selItems} group="links" {picked} onchange={setPicked} expert={expert()} name={t("tidy-links-title")} />
         <Icon name="link" size={18} />{t("tidy-links-title")}
         {#if links}<span class="count">{formatCount(links.rows.length, loc)}</span>{/if}
       </h2>
@@ -140,6 +146,17 @@
         {/if}
       </div>
     </div>
+    <SelectionBar
+      items={selItems}
+      {picked}
+      onchange={setPicked}
+      expert={expert()}
+      scope={page}
+      primary
+      noLevels
+      sticky={false}
+      action={{ label: (count, size) => t("sel-quarantine-n", { count, size }), hint: t("tidy-quarantine-hint"), testid: "tidy", run: () => askDelete(selected, "quarantine", "tidy") }}
+    />
   </section>
 {/if}
 
@@ -179,22 +196,9 @@
     color: var(--risk-safe);
     font-size: 0.9em;
   }
-  .actbar {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 8px 12px;
-  }
-  .grow {
-    flex: 1;
-  }
-  .btn.danger-outline {
-    color: var(--danger);
-    border-color: var(--danger);
-    background: transparent;
-  }
-  .btn.danger-outline:hover:not(:disabled) {
-    background: var(--danger-soft);
+  .hint {
+    margin: 0;
+    font-size: 0.86em;
   }
   .block {
     flex: 1;

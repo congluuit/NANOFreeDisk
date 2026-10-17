@@ -3,6 +3,7 @@
 // to exercise the treemap at the Phase 2 target (50k rectangles). Never bundled into
 // the Tauri build's hot path — `api.ts` imports it lazily only outside Tauri.
 
+import { browsersHandlers } from "./browsers/mock";
 import { cleanHandlers, mockDeleted } from "./clean/mock";
 import { devHandlers } from "./devcache/mock";
 import { dupeHandlers } from "./dupes/mock";
@@ -363,6 +364,7 @@ const MOCK_ARTICLES = [
 
 const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   ...cleanHandlers,
+  ...browsersHandlers,
   ...devHandlers,
   ...dupeHandlers,
   ...healthHandlers,

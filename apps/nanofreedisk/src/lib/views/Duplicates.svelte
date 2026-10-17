@@ -12,23 +12,32 @@
   import { dupesApi } from "../dupes/api";
   import {
     applyStrategy,
-    clearPicks,
     cliCommand,
+    copyId,
     dupes,
+    filePickIds,
     findDupes,
+    folderPickIds,
     folderTotals,
     linkPlan,
     loadThumb,
+    risky,
     runDupes,
     selectedTotals,
+    setFilePicks,
     setFolderKeep,
+    setFolderPicks,
     setKeep,
     toggleFolderRemove,
     toggleRemove,
   } from "../dupes/state.svelte";
   import type { DupeAction, DupeGroup, FileCopy, FileKind, FolderCopy, KeepStrategy } from "../dupes/types";
+  import { summarize, type SelItem } from "../selection";
   import CliHint from "../components/CliHint.svelte";
+  import ConfirmTotals from "../components/ConfirmTotals.svelte";
+  import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
+  import SelectionBar from "../components/SelectionBar.svelte";
 
   const loc = $derived(intlLocale());
   const KINDS: FileKind[] = ["all", "images", "videos", "music", "documents", "archives"];
@@ -54,6 +63,28 @@
     return folderTotals();
   });
   const folderTab = $derived(dupes.tab === "folders");
+  let page = $state<HTMLElement | null>(null);
+  // one selection item per copy; the copy a group keeps (and protected folders) never
+  // tick, so "select all" always leaves one copy of everything
+  const fileItems = $derived<SelItem[]>(
+    (report?.groups ?? []).flatMap((g) =>
+      g.copies.map((c) => ({ id: copyId(g.id, c.path), bytes: g.size, files: 1, level: risky(c) ? "caution" : "safe", group: String(g.id), locked: dupes.picks[g.id]?.keep === c.path })),
+    ),
+  );
+  const folderItems = $derived<SelItem[]>(
+    (report?.folderGroups ?? []).flatMap((g) =>
+      g.folders.map((f) => ({ id: copyId(g.id, f.path), bytes: g.size, files: g.files, level: risky(f) ? "caution" : "safe", group: `f${g.id}`, locked: f.blocked || dupes.folderPicks[g.id]?.keep === f.path })),
+    ),
+  );
+  const filePicked = $derived.by(() => {
+    void dupes.picks;
+    return filePickIds();
+  });
+  const folderPicked = $derived.by(() => {
+    void dupes.folderPicks;
+    return folderPickIds();
+  });
+  const confirmSummary = $derived(folderTab ? summarize(folderItems, folderPicked, true) : summarize(fileItems, filePicked, true));
   let acknowledged = $state(false);
   /** "Replace with links": also hard-link types that may be edited in place. */
   let otherTypes = $state(false);
@@ -128,7 +159,7 @@
   }
 </script>
 
-<section class="page dupes">
+<section class="page dupes" bind:this={page}>
   <header>
     <div>
       <h1>{t("dupes-title")}</h1>
@@ -254,7 +285,6 @@
           {#each STRATEGIES as s (s)}<option value={s}>{t(`dupes-keep-${s}`)}</option>{/each}
         </select>
       </label>
-      <button class="btn ghost" onclick={clearPicks} data-effect title={t("dupes-clear-hint")}>{t("dupes-clear")}</button>
       {#if expert()}
         <button class="btn ghost" onclick={() => exportAs("csv")} disabled={!inTauri} data-effect title={t("hint-export")}><Icon name="export" size={16} />CSV</button>
         <button class="btn ghost" onclick={() => exportAs("json")} disabled={!inTauri} data-effect title={t("hint-export")}><Icon name="export" size={16} />JSON</button>
@@ -277,6 +307,7 @@
         {@const pick = dupes.folderPicks[g.id]}
         <div class="card group" data-folder-group={g.id}>
           <div class="head static">
+            <GroupCheck items={folderItems} group={`f${g.id}`} picked={folderPicked} onchange={setFolderPicks} expert name={nameOf(g.folders[0]?.path ?? "")} busy={!!dupes.running} />
             <Icon name="folder" size={16} />
             <span class="name ellipsis" title={g.folders[0]?.path}>{nameOf(g.folders[0]?.path ?? "")}</span>
             <span class="muted small">{t("dupes-folder-copies", { count: g.folders.length, files: formatCount(g.files, loc), size: formatSize(g.size, loc) })}</span>
@@ -312,20 +343,22 @@
       {:else}
         <div class="card empty"><Icon name="folder" size={22} /><span>{dupes.findFolders ? t("dupes-folders-none") : t("dupes-folders-off")}</span></div>
       {/each}
-      <div class="card footer">
-        <span>{t("dupes-folders-selected", { folders: ftotals.folders, files: formatCount(ftotals.files, loc), size: formatSize(ftotals.bytes, loc) })}</span>
-        <span class="grow"></span>
+      <CliHint command={cliCommand()} />
+      <SelectionBar items={folderItems} picked={folderPicked} onchange={setFolderPicks} expert busy={!!dupes.running} scope={page} primary>
         {#if expert()}
           <button class="btn" disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
         {/if}
-        <button class="btn danger" data-recycle-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}><Icon name="trash" size={16} />{t("dupes-recycle")}</button>
-      </div>
-      <CliHint command={cliCommand()} />
+        <button class="btn danger" data-recycle-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
+          <Icon name="trash" size={16} />{t("sel-recycle-n", { count: ftotals.folders, size: formatSize(ftotals.bytes, loc) })}
+        </button>
+      </SelectionBar>
     {:else}
     {#each groups as g (g.id)}
       {@const pick = dupes.picks[g.id]}
       {@const open = dupes.expanded.includes(g.id)}
       <div class="card group" data-group={g.id}>
+        <div class="headrow">
+        <GroupCheck items={fileItems} group={String(g.id)} picked={filePicked} onchange={setFilePicks} expert name={nameOf(g.copies[0]?.path ?? "")} busy={!!dupes.running} />
         <button class="head" onclick={() => toggle(g)} aria-expanded={open}>
           <Icon name="chevron" size={14} />
           <span class="name ellipsis" title={g.copies[0]?.path}>{nameOf(g.copies[0]?.path ?? "")}</span>
@@ -334,6 +367,7 @@
           {#if pick?.remove.length}<span class="tag sel">{t("dupes-group-selected", { count: pick.remove.length })}</span>{/if}
           <b class="num">{formatSize(g.wasted, loc)}</b>
         </button>
+        </div>
         {#if open}
           {#if dupes.thumbs[g.copies[0].path]}
             <img class="thumb" src={dupes.thumbs[g.copies[0].path]} alt="" />
@@ -370,16 +404,16 @@
       <button class="btn ghost more" onclick={() => (dupes.shown += 100)}>{t("dupes-more", { count: formatCount(report.groups.length - dupes.shown, loc) })}</button>
     {/if}
 
-    <div class="card footer">
-      <span>{t("dupes-selected", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</span>
-      <span class="grow"></span>
+    <CliHint command={cliCommand()} />
+    <SelectionBar items={fileItems} picked={filePicked} onchange={setFilePicks} expert busy={!!dupes.running} scope={page} primary>
       <button class="btn" data-link disabled={!totals.files || !!dupes.running} onclick={() => ask("link")} data-effect title={t("dupes-link-hint")}><Icon name="link" size={16} />{t("dupes-link")}</button>
       {#if expert()}
         <button class="btn" disabled={!totals.files || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
       {/if}
-      <button class="btn danger" data-recycle disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}><Icon name="trash" size={16} />{t("dupes-recycle")}</button>
-    </div>
-    <CliHint command={cliCommand()} />
+      <button class="btn danger" data-recycle disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
+        <Icon name="trash" size={16} />{t("sel-recycle-n", { count: totals.files, size: formatSize(totals.bytes, loc) })}
+      </button>
+    </SelectionBar>
     {/if}
   {:else if !dupes.searching}
     <div class="card empty"><Icon name="duplicates" size={22} /><span>{t("dupes-start")}</span></div>
@@ -428,6 +462,7 @@
           <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
         </div>
       {/if}
+      {#if action !== "link"}<ConfirmTotals summary={confirmSummary} />{/if}
       <CliHint command={cliCommand(action)} />
       <footer>
         <button class="btn" onclick={() => (dupes.confirm = null)}>{t("delete-cancel")}</button>
@@ -473,8 +508,7 @@
   .summary,
   .running,
   .result,
-  .empty,
-  .footer {
+  .empty {
     padding: 14px 16px;
   }
   .scope {
@@ -610,6 +644,17 @@
   .head.static {
     cursor: default;
   }
+  .headrow {
+    display: flex;
+    align-items: center;
+    padding-left: 14px;
+  }
+  .headrow .head {
+    padding-left: 8px;
+  }
+  .head.static :global(.gcheck) {
+    margin-right: 2px;
+  }
   .tabs {
     display: flex;
     gap: 4px;
@@ -686,14 +731,6 @@
   }
   .more {
     align-self: center;
-  }
-  .footer {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    position: sticky;
-    bottom: 0;
-    box-shadow: var(--shadow);
   }
   .backdrop {
     position: fixed;

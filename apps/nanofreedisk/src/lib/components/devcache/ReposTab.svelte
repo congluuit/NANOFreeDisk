@@ -12,8 +12,13 @@
   import { devApi } from "../../devcache/api";
   import { cleanRepos, copyText, dev, loadRepos } from "../../devcache/state.svelte";
   import type { Artifact } from "../../devcache/types";
+  import { expert } from "../../state.svelte";
+  import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../../selection";
   import CliHint from "../CliHint.svelte";
+  import ConfirmTotals from "../ConfirmTotals.svelte";
+  import GroupCheck from "../GroupCheck.svelte";
   import Icon from "../Icon.svelte";
+  import SelectionBar from "../SelectionBar.svelte";
 
   const loc = $derived(intlLocale());
   let root = $state(app.settings.repoRoot);
@@ -34,17 +39,31 @@
     if (!dev.repos && !dev.reposLoading && app.settings.repoRoot && root === app.settings.repoRoot) void loadRepos(root);
   });
 
+  let ack = $state(false);
+  let scope = $state<HTMLElement | null>(null);
   const all = $derived((dev.repos?.repos ?? []).flatMap((r) => r.artifacts));
-  const picked = $derived(all.filter((a) => dev.repoPicked.includes(a.path)));
-  const pickedBytes = $derived(picked.reduce((s, a) => s + a.bytes, 0));
+  const selItems = $derived<SelItem[]>(
+    (dev.repos?.repos ?? []).flatMap((r) =>
+      r.artifacts.map((a) => ({ id: a.path, bytes: a.bytes, files: a.files, level: a.level, group: r.path, locked: !!a.blocked })),
+    ),
+  );
+  const pickedIds = $derived(sanitize(selItems, dev.repoPicked, expert()));
+  const picked = $derived(all.filter((a) => pickedIds.includes(a.path)));
+  const confirmSummary = $derived(summarize(selItems, pickedIds, expert()));
+  const setPicked = (ids: string[]) => (dev.repoPicked = ids);
 
   function toggle(a: Artifact) {
-    dev.repoPicked = dev.repoPicked.includes(a.path) ? dev.repoPicked.filter((p) => p !== a.path) : [...dev.repoPicked, a.path];
+    dev.repoPicked = toggleId(selItems, pickedIds, a.path, expert());
+  }
+  function ask() {
+    ack = false;
+    dev.repoConfirm = true;
   }
   function blockedText(code: string): string {
     return code === "tracked" ? t("dev-art-tracked") : code === "not-ignored" ? t("dev-art-not-ignored") : reasonText(code);
   }
   async function go() {
+    if (needsAck(confirmSummary) && !ack) return;
     dev.repoConfirm = false;
     await cleanRepos(picked.map((a) => a.path));
   }
@@ -65,6 +84,7 @@
   <div class="card dc-loading"><Icon name="search" size={22} /><span>{t("dev-repos-loading")}</span></div>
 {:else if dev.repos}
   {@const rs = dev.repos}
+  <div class="dc-scope" bind:this={scope}>
   <div class="card dc-note">
     <Icon name="folder" size={18} />
     <span class="dc-small">{t("dev-repos-summary", { count: rs.repos.length, folders: formatCount(rs.folders, loc) })}</span>
@@ -74,6 +94,7 @@
   {#each rs.repos as r (r.path)}
     <div class="card dc-card repo" data-repo={r.name}>
       <div class="dc-row">
+        <GroupCheck items={selItems} group={r.path} picked={pickedIds} onchange={setPicked} expert={expert()} name={r.name} busy={!!dev.running} />
         <h2>{r.name}</h2>
         <span class="dc-badge muted">{r.git ? "git" : t("dev-repo-no-git")}</span>
         {#each r.kinds as k (k)}<span class="dc-badge muted">{k}</span>{/each}
@@ -99,7 +120,7 @@
         {#each r.artifacts as a (a.path)}
           <li class="dc-item" class:blocked={!!a.blocked}>
             <label title={a.blocked ? blockedText(a.blocked) : t("clean-pick-hint")}>
-              <input type="checkbox" checked={dev.repoPicked.includes(a.path)} disabled={!!a.blocked || !!dev.running} onchange={() => toggle(a)} />
+              <input type="checkbox" checked={pickedIds.includes(a.path)} disabled={!!a.blocked || !!dev.running} onchange={() => toggle(a)} />
             </label>
             <div>
               <div class="dc-row">
@@ -122,36 +143,44 @@
     <div class="card dc-loading"><Icon name="check" size={22} /><span>{t("dev-repos-none")}</span></div>
   {/each}
 
-  <div class="card dc-footer">
-    <span>{t("dev-repos-selected", { count: picked.length, size: formatSize(pickedBytes, loc) })}</span>
-    <span class="dc-grow"></span>
-    <button class="btn danger" disabled={!picked.length || !!dev.running} onclick={() => (dev.repoConfirm = true)} data-effect title={t("dev-repos-clean-hint")}>
-      <Icon name="clean" size={16} />{t("dev-repos-clean")}
-    </button>
-  </div>
   <CliHint command={`nfd repos clean "${rs.root}" --keep-recent ${app.settings.keepRecentDays} --apply`} />
+  <SelectionBar
+    items={selItems}
+    picked={pickedIds}
+    onchange={setPicked}
+    expert={expert()}
+    busy={!!dev.running}
+    {scope}
+    primary
+    action={{ label: (count, size) => t("sel-clean-n", { count, size }), hint: t("dev-repos-clean-hint"), testid: "repos", run: ask }}
+  />
+  </div>
 {/if}
 
 {#if dev.repoConfirm}
   <div class="dc-backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (dev.repoConfirm = false)} onkeydown={(e) => e.key === "Escape" && (dev.repoConfirm = false)}>
     <div class="dc-dialog card" role="alertdialog" aria-modal="true" aria-labelledby="repo-confirm-title">
       <h2 id="repo-confirm-title"><Icon name="clean" size={20} />{t("dev-repos-confirm-title")}</h2>
-      <p>{t("dev-repos-confirm-body", { count: picked.length, size: formatSize(pickedBytes, loc) })}</p>
+      <p>{t("dev-repos-confirm-body", { count: picked.length, size: formatSize(confirmSummary.bytes, loc) })}</p>
       <ul class="dc-confirm-list">
         {#each picked as a (a.path)}
           <li><span class="dc-badge {a.level}">{t(`clean-level-${a.level}`)}</span><span class="mono ellipsis" title={a.path}>{a.path}</span><span class="num">{formatSize(a.bytes, loc)}</span></li>
         {/each}
       </ul>
+      <ConfirmTotals summary={confirmSummary} bind:ack />
       <p class="muted dc-small">{t("clean-confirm-note")}</p>
       <footer>
         <button class="btn" onclick={() => (dev.repoConfirm = false)}>{t("delete-cancel")}</button>
-        <button class="btn danger" onclick={go} data-effect title={t("clean-confirm-note")}><Icon name="clean" size={16} />{t("clean-confirm-go")}</button>
+        <button class="btn danger" onclick={go} disabled={needsAck(confirmSummary) && !ack} data-effect title={t("clean-confirm-note")}><Icon name="clean" size={16} />{t("clean-confirm-go")}</button>
       </footer>
     </div>
   </div>
 {/if}
 
 <style>
+  .dc-scope {
+    display: contents;
+  }
   .root {
     flex: 1;
     min-width: 240px;

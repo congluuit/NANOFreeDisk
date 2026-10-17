@@ -296,8 +296,6 @@ ol-files = { $count ->
     [one] 1 file
    *[other] { $count } files
 }
-ol-selected = { $count } selected · { $size }
-ol-select-all = Select all
 ol-stale-note = Windows does not reliably record when a file was last opened, so "old" means not modified.
 ol-more = Showing the { $shown } largest of { $count }.
 ol-none = Nothing here — nice and tidy.

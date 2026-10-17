@@ -13,8 +13,13 @@
   import { aiBytes, aiPreselected } from "../../devcache/ai";
   import { cleanAi, confirmAi, dev, loadAi } from "../../devcache/state.svelte";
   import type { AiItem, Artifact } from "../../devcache/types";
+  import { expert } from "../../state.svelte";
+  import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../../selection";
   import CliHint from "../CliHint.svelte";
+  import ConfirmTotals from "../ConfirmTotals.svelte";
+  import GroupCheck from "../GroupCheck.svelte";
   import Icon from "../Icon.svelte";
+  import SelectionBar from "../SelectionBar.svelte";
 
   const loc = $derived(intlLocale());
   const now = () => Math.floor(Date.now() / 1000);
@@ -37,12 +42,27 @@
     return [...out.entries()].sort(([a], [b]) => (a === "" ? 1 : b === "" ? -1 : a.localeCompare(b)));
   });
   const keptOf = (project: string) => (r?.kept ?? []).filter((k) => (k.project ?? "") === project);
-  const pickedBytes = $derived(aiBytes(r, dev.aiPicked));
   const finished = $derived(aiPreselected(r));
   const finishedBytes = $derived(aiBytes(r, finished));
+  let ack = $state(false);
+  let scope = $state<HTMLElement | null>(null);
+  /** Items and worktree build output; blocked ones (live sessions, history…) never tick. */
+  const selItems = $derived<SelItem[]>(
+    (r?.items ?? []).flatMap((i) => [
+      { id: i.path, bytes: i.bytes, files: i.files, level: i.level, group: i.project ?? "", locked: !!i.blocked },
+      ...(i.worktree?.artifacts ?? []).map((a) => ({ id: a.path, bytes: a.bytes, files: a.files, level: a.level, group: i.project ?? "", locked: !!a.blocked })),
+    ]),
+  );
+  const picked = $derived(sanitize(selItems, dev.aiPicked, expert()));
+  const confirmSummary = $derived(summarize(selItems, picked, expert()));
+  const setPicked = (ids: string[]) => (dev.aiPicked = ids);
 
   function toggle(path: string) {
-    dev.aiPicked = dev.aiPicked.includes(path) ? dev.aiPicked.filter((p) => p !== path) : [...dev.aiPicked, path];
+    dev.aiPicked = toggleId(selItems, picked, path, expert());
+  }
+  async function ask(paths: string[]) {
+    ack = false;
+    await confirmAi(paths);
   }
   const impact = (i: AiItem) => (i18n.locale === "vi" ? i.impactVi : i.impact);
   const blockedText = (code: string) => reasonText(code);
@@ -61,7 +81,8 @@
   }
   const ignoredBytes = (i: AiItem) => (i.worktree?.ignored ?? []).reduce((s, x) => s + x.bytes, 0);
   async function go() {
-    await cleanAi(dev.aiPicked);
+    if (needsAck(confirmSummary) && !ack) return;
+    await cleanAi(picked);
   }
   function artBlocked(a: Artifact): string {
     return a.blocked === "tracked" ? t("dev-art-tracked") : a.blocked === "not-ignored" ? t("dev-art-not-ignored") : reasonText(a.blocked);
@@ -79,7 +100,7 @@
       <Icon name="refresh" size={16} />{t("ail-rescan")}
     </button>
     {#if dev.aiLoading}<button class="btn ghost" onclick={() => devApi.cancel().catch(fail)}>{t("clean-cancel")}</button>{/if}
-    <button class="btn primary" data-ai-finished disabled={!finished.length || dev.aiLoading || !!dev.running} onclick={() => confirmAi(finished)} data-effect title={t("ail-finished-hint")}>
+    <button class="btn primary" data-ai-finished disabled={!finished.length || dev.aiLoading || !!dev.running} onclick={() => ask(finished)} data-effect title={t("ail-finished-hint")}>
       <Icon name="clean" size={16} />{t("ail-finished", { size: formatSize(finishedBytes, loc) })}
     </button>
   </div>
@@ -88,6 +109,7 @@
 {#if dev.aiLoading}
   <div class="card dc-loading"><Icon name="search" size={22} /><span>{t("ail-loading")}</span></div>
 {:else if r}
+  <div class="dc-scope" bind:this={scope}>
   <div class="card dc-note">
     <Icon name="shield" size={18} />
     <span class="dc-small">{t("ail-summary", { sessions: formatCount(r.sessions, loc), projects: r.projects.length, size: formatSize(r.totalBytes, loc) })}</span>
@@ -97,6 +119,7 @@
   {#each groups as [project, tools] (project)}
     <div class="card dc-card proj" data-ai-project={project || "temp"}>
       <div class="dc-row">
+        <GroupCheck items={selItems} group={project} picked={picked} onchange={setPicked} expert={expert()} name={project ? (project.split(/[\\/]/).pop() ?? project) : t("ail-no-project")} busy={!!dev.running} />
         <h2 class="ellipsis" title={project}>{project ? project.split(/[\\/]/).pop() : t("ail-no-project")}</h2>
         <span class="dc-grow"></span>
         <b class="num">{formatSize([...tools.values()].flat().reduce((s, i) => s + (i.blocked ? 0 : i.bytes), 0), loc)}</b>
@@ -108,7 +131,7 @@
           {#each items as i (i.path)}
             <li class="dc-item" class:blocked={!!i.blocked} data-ai-item={i.rel} data-ai-kind={i.kind}>
               <label title={i.blocked ? blockedText(i.blocked) : t("clean-pick-hint")}>
-                <input type="checkbox" checked={dev.aiPicked.includes(i.path)} disabled={!!i.blocked || !!dev.running} onchange={() => toggle(i.path)} />
+                <input type="checkbox" checked={picked.includes(i.path)} disabled={!!i.blocked || !!dev.running} onchange={() => toggle(i.path)} />
               </label>
               <div class="body">
                 <div class="dc-row">
@@ -141,7 +164,7 @@
                     {#each i.worktree.artifacts as a (a.path)}
                       <li class="dc-item" class:blocked={!!a.blocked}>
                         <label title={a.blocked ? artBlocked(a) : t("clean-pick-hint")}>
-                          <input type="checkbox" checked={dev.aiPicked.includes(a.path)} disabled={!!a.blocked || !!dev.running} onchange={() => toggle(a.path)} />
+                          <input type="checkbox" checked={picked.includes(a.path)} disabled={!!a.blocked || !!dev.running} onchange={() => toggle(a.path)} />
                         </label>
                         <div>
                           <span class="dc-badge {a.level}">{t(`clean-level-${a.level}`)}</span>
@@ -172,14 +195,18 @@
     <div class="card dc-loading"><Icon name="check" size={22} /><span>{t("ail-none")}</span></div>
   {/each}
 
-  <div class="card dc-footer">
-    <span>{t("dev-repos-selected", { count: dev.aiPicked.length, size: formatSize(pickedBytes, loc) })}</span>
-    <span class="dc-grow"></span>
-    <button class="btn danger" data-ai-clean disabled={!dev.aiPicked.length || !!dev.running} onclick={() => confirmAi(dev.aiPicked)} data-effect title={t("ail-clean-hint")}>
-      <Icon name="clean" size={16} />{t("ail-clean")}
-    </button>
-  </div>
   <CliHint command={`nfd ai-leftovers clean --keep-recent ${app.settings.keepRecentDays}${app.settings.repoRoot ? ` --root "${app.settings.repoRoot}"` : ""} --apply`} />
+  <SelectionBar
+    items={selItems}
+    {picked}
+    onchange={setPicked}
+    expert={expert()}
+    busy={!!dev.running}
+    {scope}
+    primary
+    action={{ label: (count, size) => t("sel-clean-n", { count, size }), hint: t("ail-clean-hint"), testid: "ai", run: () => ask(picked) }}
+  />
+  </div>
 {/if}
 
 {#if dev.aiConfirm}
@@ -194,16 +221,20 @@
           {#each plan.commands as c (c)}<li><code class="mono cmd">{c}</code></li>{/each}
         </ul>
       {/if}
+      <ConfirmTotals summary={confirmSummary} bind:ack />
       <p class="muted dc-small">{t("ail-confirm-note")}</p>
       <footer>
         <button class="btn" onclick={() => (dev.aiConfirm = null)}>{t("delete-cancel")}</button>
-        <button class="btn danger" onclick={go} data-effect title={t("ail-confirm-note")}><Icon name="clean" size={16} />{t("clean-confirm-go")}</button>
+        <button class="btn danger" data-ai-go onclick={go} disabled={needsAck(confirmSummary) && !ack} data-effect title={t("ail-confirm-note")}><Icon name="clean" size={16} />{t("clean-confirm-go")}</button>
       </footer>
     </div>
   </div>
 {/if}
 
 <style>
+  .dc-scope {
+    display: contents;
+  }
   .top {
     align-items: flex-start;
     flex-wrap: nowrap;

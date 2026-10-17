@@ -9,14 +9,20 @@
   import { devApi } from "../../devcache/api";
   import { bytesOf, dev, runDev, safeIds, scanDev } from "../../devcache/state.svelte";
   import type { DevRule, VendorGroup } from "../../devcache/types";
+  import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../../selection";
   import CliHint from "../CliHint.svelte";
+  import ConfirmTotals from "../ConfirmTotals.svelte";
+  import GroupCheck from "../GroupCheck.svelte";
   import Icon from "../Icon.svelte";
+  import SelectionBar from "../SelectionBar.svelte";
 
   const loc = $derived(intlLocale());
   let open = $state<string[]>([]);
   let preview = $state<{ ruleId: string; items: Candidate[] | null } | null>(null);
   let permanent = $state(false);
   let typed = $state("");
+  let ack = $state(false);
+  let scope = $state<HTMLElement | null>(null);
 
   $effect(() => {
     if (!dev.report && !dev.scanning && !dev.running) void scanDev(true);
@@ -28,7 +34,16 @@
     (report?.vendors ?? []).filter((v) => v.apps.some((a) => visible(a.rules).length || a.kept.length)),
   );
   const all = $derived(vendors.flatMap((v) => v.apps.flatMap((a) => visible(a.rules))));
-  const picked = $derived(dev.picked.filter((id) => all.some((r) => r.ruleId === id)));
+  const selItems = $derived<SelItem[]>(
+    vendors.flatMap((v) =>
+      v.apps.flatMap((a) =>
+        visible(a.rules).map((r) => ({ id: r.ruleId, bytes: r.bytes, files: r.files, level: levelOf(r), group: v.vendor, skip: r.running.length ? r.running.join(", ") : null })),
+      ),
+    ),
+  );
+  const picked = $derived(sanitize(selItems, dev.picked, expert()));
+  const confirmSummary = $derived(summarize(selItems, dev.confirm ?? [], expert()));
+  const setPicked = (ids: string[]) => (dev.picked = ids);
   const allSafe = $derived(safeIds(report));
   const confirmRules = $derived(all.filter((r) => dev.confirm?.includes(r.ruleId)));
   const canPermanent = $derived(expert() && confirmRules.every((r) => r.level === "safe"));
@@ -37,12 +52,13 @@
     open = open.includes(v) ? open.filter((x) => x !== v) : [...open, v];
   }
   function toggle(id: string) {
-    dev.picked = dev.picked.includes(id) ? dev.picked.filter((x) => x !== id) : [...dev.picked, id];
+    dev.picked = toggleId(selItems, picked, id, expert());
   }
   function ask(ids: string[]) {
     if (!ids.length) return;
     permanent = false;
     typed = "";
+    ack = false;
     dev.confirm = ids;
   }
   async function go() {
@@ -50,6 +66,7 @@
     if (!ids) return;
     const perm = permanent && canPermanent;
     if (perm && typed !== "DELETE") return;
+    if (needsAck(confirmSummary) && !ack) return;
     dev.confirm = null;
     await runDev(ids, expert(), perm);
   }
@@ -76,6 +93,7 @@
 {#if !report}
   <div class="card dc-loading"><Icon name="search" size={22} /><span>{dev.scanning ? t("dev-scanning") : t("clean-not-scanned")}</span></div>
 {:else}
+  <div class="dc-scope" bind:this={scope}>
   <div class="card dc-card summary">
     <div class="totals">
       <div><span class="dot safe"></span>{t("clean-level-safe")}<b class="num">{formatSize(report.safe, loc)}</b></div>
@@ -98,6 +116,7 @@
     {@const vSafe = vendorSafe(v)}
     <div class="card dc-card vendor" class:over={v.overThreshold} data-vendor={v.vendor}>
       <div class="dc-row head">
+        <GroupCheck items={selItems} group={v.vendor} picked={picked} onchange={setPicked} expert={expert()} name={v.vendor} busy={!!dev.running} />
         <button class="btn ghost icon" onclick={() => toggleOpen(v.vendor)} aria-expanded={isOpen} aria-label={v.vendor}>
           <span class="chev" class:open={isOpen}><Icon name="chevron" size={16} /></span>
         </button>
@@ -123,7 +142,7 @@
                 {#each rules as r (r.ruleId)}
                   <li class="dc-item" data-rule={r.ruleId}>
                     <label title={t("clean-pick-hint")}>
-                      <input type="checkbox" checked={dev.picked.includes(r.ruleId)} onchange={() => toggle(r.ruleId)} disabled={!!dev.running} />
+                      <input type="checkbox" checked={picked.includes(r.ruleId)} onchange={() => toggle(r.ruleId)} disabled={!!dev.running} />
                     </label>
                     <div>
                       <div class="dc-row">
@@ -183,14 +202,18 @@
     <div class="card dc-loading"><Icon name="check" size={22} /><span>{t("dev-nothing")}</span></div>
   {/each}
 
-  <div class="card dc-footer">
-    <span>{t("clean-selected", { count: picked.length, size: formatSize(bytesOf(picked), loc) })}</span>
-    <span class="dc-grow"></span>
-    <button class="btn danger" disabled={!picked.length || !!dev.running} onclick={() => ask(picked)} data-effect title={t("clean-run-hint")}>
-      <Icon name="clean" size={16} />{t("clean-run")}
-    </button>
-  </div>
   <CliHint command={cliCommand} />
+  <SelectionBar
+    items={selItems}
+    {picked}
+    onchange={setPicked}
+    expert={expert()}
+    busy={!!dev.running}
+    {scope}
+    primary
+    action={{ label: (count, size) => t("sel-clean-n", { count, size }), hint: t("clean-run-hint"), testid: "devcache", run: () => ask(picked) }}
+  />
+  </div>
 {/if}
 
 {#if dev.confirm}
@@ -203,9 +226,7 @@
           <li><span class="dc-badge {levelOf(r)}">{t(`clean-level-${levelOf(r)}`)}</span><span class="ellipsis">{r.vendor} · {r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
         {/each}
       </ul>
-      {#if confirmRules.some((r) => r.running.length)}
-        <p class="dc-warn dc-small"><Icon name="alert" size={14} />{t("clean-confirm-running")}</p>
-      {/if}
+      <ConfirmTotals summary={confirmSummary} bind:ack />
       <p class="muted dc-small">{permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}</p>
       {#if canPermanent}
         <label class="perm"><input type="checkbox" bind:checked={permanent} /><span>{t("clean-permanent")}</span></label>
@@ -215,7 +236,7 @@
       {/if}
       <footer>
         <button class="btn" onclick={() => (dev.confirm = null)}>{t("delete-cancel")}</button>
-        <button class="btn danger" onclick={go} disabled={permanent && canPermanent && typed !== "DELETE"} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
+        <button class="btn danger" onclick={go} disabled={(permanent && canPermanent && typed !== "DELETE") || (needsAck(confirmSummary) && !ack)} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
           <Icon name="clean" size={16} />{permanent && canPermanent ? t("clean-confirm-permanent") : t("clean-confirm-go")}
         </button>
       </footer>
@@ -224,6 +245,9 @@
 {/if}
 
 <style>
+  .dc-scope {
+    display: contents;
+  }
   .summary {
     display: flex;
     gap: 16px;

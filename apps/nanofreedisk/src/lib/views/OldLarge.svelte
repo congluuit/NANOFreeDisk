@@ -12,7 +12,9 @@
   import ContextMenu, { type MenuItem } from "../components/ContextMenu.svelte";
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
-  import type { OldLargeRows, SearchRows } from "../types";
+  import SelectionBar from "../components/SelectionBar.svelte";
+  import type { SelItem } from "../selection";
+  import type { Located, OldLargeRows, SearchRows } from "../types";
 
   type List = "large" | "stale" | "installers";
   const LISTS: { id: List; icon: string }[] = [
@@ -35,9 +37,17 @@
   const rootId = $derived(app.summary?.rootId ?? 0);
   const scope = $derived(onlyFolder ? app.current : rootId);
   const rows = $derived<SearchRows | null>(data ? data[list] : null);
-  const selectedSize = $derived(
-    (rows?.rows ?? []).filter((r) => selected.includes(r.id)).reduce((s, r) => s + r.onDisk, 0),
-  );
+  let page = $state<HTMLElement | null>(null);
+  const asItem = (r: Located): SelItem => ({ id: String(r.id), bytes: r.onDisk, files: r.kind === "dir" ? r.files : 1 });
+  /** The shown list (Select all, Ctrl+A) and every list (totals: a file can be in two). */
+  const listItems = $derived((rows?.rows ?? []).map(asItem));
+  const allItems = $derived.by(() => {
+    const seen = new Map<string, SelItem>();
+    for (const r of data ? [...data.large.rows, ...data.stale.rows, ...data.installers.rows] : []) seen.set(String(r.id), asItem(r));
+    return [...seen.values()];
+  });
+  const picked = $derived(selected.map(String));
+  const setPicked = (ids: string[]) => (selected = ids.map(Number));
 
   $effect(() => {
     void app.version;
@@ -83,7 +93,7 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="page">
+  <section class="page" bind:this={page}>
     <header>
       <div class="ellipsis">
         <h1>{t("ol-title")}</h1>
@@ -151,19 +161,7 @@
 
     <div class="listcard card">
       <div class="listbar">
-        {#if selected.length}
-          <span>{t("ol-selected", { count: selected.length, size: formatSize(selectedSize, loc) })}</span>
-          <button class="btn ghost" onclick={() => (selected = [])}>{t("filter-clear")}</button>
-        {:else}
-          <span class="muted small">{list === "stale" ? t("ol-stale-note") : t("action-select-hint")}</span>
-        {/if}
-        <span class="grow"></span>
-        <button class="btn ghost" disabled={!rows?.rows.length} onclick={() => (selected = rows?.rows.map((r) => r.id) ?? [])}>
-          {t("ol-select-all")}
-        </button>
-        <button class="btn danger-outline" disabled={!selected.length} data-effect title={t("action-recycle-hint")} onclick={() => askDelete(selected)}>
-          <Icon name="trash" size={16} />{selected.length ? t("action-recycle-n", { count: selected.length }) : t("action-recycle")}
-        </button>
+        <span class="muted small">{list === "stale" ? t("ol-stale-note") : t("action-select-hint")}</span>
       </div>
       <div class="body">
         {#if rows && rows.rows.length}
@@ -186,6 +184,18 @@
     {#if list === "large"}
       <CliHint command={nfdScan(app.summary.root, "--min-size", sizeFlag(app.settings.largeGb * 2 ** 30), "--top", "200")} />
     {/if}
+    <SelectionBar
+      items={listItems}
+      all={allItems}
+      {picked}
+      onchange={setPicked}
+      expert={expert()}
+      scope={page}
+      primary
+      noLevels
+      sticky={false}
+      action={{ label: (count, size) => t("sel-recycle-n", { count, size }), icon: "trash", hint: t("action-recycle-hint"), testid: "old-large", run: () => askDelete(selected) }}
+    />
   </section>
 {/if}
 
@@ -323,13 +333,5 @@
     gap: 8px;
     align-items: center;
     margin: 18px;
-  }
-  .btn.danger-outline {
-    color: var(--danger);
-    border-color: var(--danger);
-    background: transparent;
-  }
-  .btn.danger-outline:hover:not(:disabled) {
-    background: var(--danger-soft);
   }
 </style>

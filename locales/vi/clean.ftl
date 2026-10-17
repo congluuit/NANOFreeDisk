@@ -26,14 +26,11 @@ clean-preview = Xem trước
 clean-hide = Ẩn
 clean-preview-more = Đang hiện { $shown } mục lớn nhất trong { $count } mục.
 clean-guide-title = Chỉ hướng dẫn ({ $count }) — ứng dụng không bao giờ xóa các mục này
-clean-selected = Đã chọn { $count } quy tắc · { $size }
-clean-run = Dọn mục đã chọn
 clean-run-hint = Nếu bấm: bạn xem tổng dung lượng trước, rồi các mục đã chọn được chuyển vào khu cách ly.
 clean-confirm-title = Dọn các mục này?
 clean-confirm-body = { $size } từ { $rules } quy tắc sẽ được chuyển vào khu cách ly.
 clean-confirm-note = Mỗi mục được kiểm tra lại ngay trước khi chuyển. Bạn có thể khôi phục tất cả trong Hoạt động suốt 7 ngày; sau đó khu cách ly được dọn trống.
 clean-confirm-permanent-note = Xóa vĩnh viễn: sau đó không khôi phục được gì.
-clean-confirm-running = Một số ứng dụng vẫn đang chạy; các tệp chúng đang mở sẽ được giữ nguyên.
 clean-permanent = Xóa vĩnh viễn thay vào đó (Expert, chỉ mục An toàn)
 clean-type-delete = Gõ DELETE để xác nhận:
 clean-confirm-go = Chuyển vào khu cách ly
@@ -116,8 +113,6 @@ health-fix-clean = Dọn dẹp
 
 ## Dọn gọn và hộp thoại xóa
 tidy-quarantine-note = Các mục đã chọn được chuyển vào khu cách ly và khôi phục được trong Hoạt động suốt 7 ngày.
-tidy-selected = Đã chọn { $count }
-tidy-quarantine = Chuyển vào khu cách ly ({ $count })
 tidy-quarantine-hint = Nếu bấm: bạn xác nhận trước; các mục được chuyển vào khu cách ly (khôi phục được trong 7 ngày).
 delete-title-quarantine = Chuyển vào khu cách ly?
 delete-intro-quarantine = Các mục sau sẽ được chuyển vào khu cách ly:

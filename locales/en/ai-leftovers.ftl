@@ -37,7 +37,6 @@ ail-keep-session-recent = Kept: its session was active in the last { $days } day
 ail-keep-recent-write = Kept: written in the last { $days } days.
 ail-kept = { $what } ({ $tool }): conversation history, always kept.
 ail-none = No AI leftovers found.
-ail-clean = Clean selected
 ail-clean-hint = Moves the ticked folders to the quarantine and removes the ticked worktrees with git — after a confirmation that shows exactly what runs.
 ail-confirm-title = Clean AI leftovers?
 ail-confirm-body = { $count ->
