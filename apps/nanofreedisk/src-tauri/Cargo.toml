@@ -37,7 +37,10 @@ tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-single-instance = "2"
-tauri-plugin-updater = "2"
+# without "zip": updates are the signed .exe / .msi themselves (createUpdaterArtifacts
+# = true, not the v1 .zip bundles), so the zip / tar / flate2 extractors are not
+# needed — and zip 4.x carries RUSTSEC-2026-0367/0368/0369 with no 2.x updater fix
+tauri-plugin-updater = { version = "2", default-features = false, features = ["rustls-tls", "system-proxy"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = ["Win32_Globalization", "Win32_UI_WindowsAndMessaging"] }
