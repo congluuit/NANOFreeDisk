@@ -64,6 +64,11 @@ pub struct Group {
     pub selected: bool,
     /// The application can run its action.
     pub actionable: bool,
+    /// A hard protection (SafetyGate, conversation history): never deleted.
+    pub hard: bool,
+    /// Not actionable, but only by the app's judgment: the user may "Delete anyway"
+    /// (no hard protection at, above or inside any unit of the group).
+    pub overridable: bool,
     /// Common folder of the units (relative to the scanned folder).
     pub location: Option<String>,
     /// Found by the rule packs outside the scanned folder.
@@ -204,6 +209,11 @@ impl Advice {
                 files,
                 count: paths.len(),
                 selected: actionable && members.iter().all(|&u| self.units[u].selected),
+                hard: members.iter().any(|&u| self.units[u].hard),
+                overridable: !actionable
+                    && members
+                        .iter()
+                        .all(|&u| self.override_block(tree, self.units[u].entry).is_none()),
                 actionable,
                 location: common_prefix(&paths),
                 elsewhere: false,
@@ -315,6 +325,8 @@ pub fn elsewhere(report: &MatchReport, root: &Path, k: &Knowledge) -> Vec<Group>
                     && level != RiskLevel::Advanced
                     && action == Action::Clean,
                 actionable: action == Action::Clean,
+                hard: false,
+                overridable: false,
                 location: None,
                 elsewhere: true,
                 items: cands

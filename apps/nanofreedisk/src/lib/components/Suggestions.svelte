@@ -65,6 +65,19 @@
     advice.picks = toggle(items, advice.picks, g.key, expert());
   }
 
+  /** "Delete anyway" on a kept group: its listed folders. */
+  function askOverride(g: AdviceGroup) {
+    const title = titleOf(g, lang);
+    const items = g.items.filter((i) => i.id != null);
+    advice.override = {
+      ids: items.map((i) => i.id as number),
+      rows: items.map((i) => ({ key: String(i.id), verdict: g.verdict, label: t(title.key, title.args), location: i.path, bytes: i.bytes, impact: bi(g.impact, lang) })),
+      why: bi(g.impact, lang),
+      blocked: g.blocked,
+      bytes: items.reduce((s, i) => s + i.bytes, 0),
+    };
+  }
+
   function confirmPicks() {
     const all = [...(sugg?.groups ?? []), ...(sum?.elsewhere ?? [])];
     const picked = all.filter((g) => advice.picks.includes(g.key) && selectableKeys.has(g.key));
@@ -138,7 +151,7 @@
                   <span class="nocheck"></span>
                 {/if}
                 <button class="title" onclick={() => (open = { ...open, [g.key]: !isOpen })} aria-expanded={isOpen}>
-                  <VerdictBadge verdict={g.verdict} />
+                  <VerdictBadge verdict={g.verdict} hard={g.hard} />
                   <strong class="ellipsis">{t(title.key, title.args)}</strong>
                   {#if g.location}<span class="loc mono muted ellipsis" title={g.location}>{g.location}</span>{/if}
                   {#if g.count > 1}<span class="muted small nowrap">{t("advice-in-folders", { count: g.count })}</span>{/if}
@@ -168,11 +181,18 @@
                 </ul>
                 {#if g.count > g.items.length}<p class="muted small">{t("advice-items-more", { count: formatCount(g.count - g.items.length, loc) })}</p>{/if}
               {/if}
-              {#if g.action === "store" || g.action === "duplicates" || g.action === "guide"}
+              {#if g.action === "store" || g.action === "duplicates" || g.action === "guide" || g.overridable}
                 <div class="acts">
+                  {#if g.action === "store" || g.action === "duplicates" || g.action === "guide"}
                   <button class="btn small" onclick={() => follow(g)} title={t(`advice-action-hint-${g.action}`)}>
-                    <Icon name={g.action === "guide" ? "shield" : g.action === "duplicates" ? "duplicates" : "devcache"} size={14} />{t(`advice-action-${g.action}`)}
+                    <Icon name={g.action === "guide" ? "zoom" : g.action === "duplicates" ? "duplicates" : "devcache"} size={14} />{t(`advice-action-${g.action}`)}
                   </button>
+                  {/if}
+                  {#if g.overridable}
+                    <button class="btn small ghost danger-text" data-override={g.key} onclick={() => askOverride(g)} title={t("advice-override-hint")}>
+                      <Icon name="trash" size={14} />{t("advice-override")}
+                    </button>
+                  {/if}
                 </div>
               {/if}
             </article>
@@ -369,6 +389,9 @@
     display: flex;
     gap: 6px;
     margin: 6px 0 0 21px;
+  }
+  .danger-text {
+    color: var(--danger);
   }
   .tag {
     padding: 0 6px;

@@ -406,6 +406,8 @@ export interface NodeAdvice {
   reason: AdviceReason | null;
   /** The entry starts its unit. */
   root: boolean;
+  /** A hard protection (SafetyGate, conversation history), not a judgment. */
+  hard: boolean;
   inside: ByVerdict;
   /** 🟢 + 🟡 bytes an unblocked action can free. */
   reclaim: number;
@@ -427,6 +429,7 @@ export interface AdviceUnit {
   store: string | null;
   requiresClosed: string[];
   cutoff: number | null;
+  hard: boolean;
 }
 
 export interface AdvicePart {
@@ -451,6 +454,9 @@ export interface EntryAdvice {
   unitPath: string | null;
   parts: AdvicePart[];
   enriched: boolean;
+  /** Why "Delete anyway" is not possible (`hard`, `inside-hard`, `contains-hard`, a
+   * SafetyGate code); null = the user may overrule the app. */
+  overrideBlock: string | null;
 }
 
 export interface AdviceGroupItem {
@@ -481,6 +487,9 @@ export interface AdviceGroup {
   count: number;
   selected: boolean;
   actionable: boolean;
+  hard: boolean;
+  /** Kept only by the app's judgment: "Delete anyway" is possible. */
+  overridable: boolean;
   location: string | null;
   elsewhere: boolean;
   items: AdviceGroupItem[];

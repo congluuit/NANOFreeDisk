@@ -5,7 +5,7 @@
 advice-verdict-safe = Safe to delete
 advice-verdict-caution = Needs care
 advice-verdict-guide = Guide only
-advice-verdict-keep = Keep
+advice-verdict-keep = Better keep
 advice-verdict-unknown = Unknown
 advice-badge-safe = Safe
 advice-badge-caution = Care
@@ -16,8 +16,11 @@ advice-badge-partly = { $size } can go
 advice-verdict-hint-safe = Recreated automatically or not needed any more.
 advice-verdict-hint-caution = May go, but something is lost (history, a re-download, a long rebuild).
 advice-verdict-hint-guide = Only Windows' or the tool's own command shrinks it safely.
-advice-verdict-hint-keep = Must stay: Windows, programs, settings, conversation history or something still in use.
+advice-verdict-hint-keep = The app suggests keeping it (in use, not saved elsewhere, settings…). It can be wrong: you can still Delete anyway, restorable from the quarantine.
 advice-verdict-hint-unknown = Nothing known about it: only you can decide.
+advice-verdict-protected = Protected
+advice-badge-protected = Protected
+advice-verdict-hint-protected = Hard protection: Windows, programs, credentials or AI conversation history. Never deleted, not even on request.
 
 ## Panel
 advice-tab = Suggestions
@@ -34,7 +37,7 @@ advice-section-caution-hint = Something is lost (history, a re-download, a long 
 advice-section-guide = Only with the proper tool
 advice-section-guide-hint = Windows' or the tool's own command shrinks these; NANOFreeDisk shows how.
 advice-section-keep = Big but keep
-advice-section-keep-hint = So you can stop worrying about them: why each one stays.
+advice-section-keep-hint = Why each one stays. What only the app judged can still be deleted anyway; hard protections (Windows, programs, credentials, conversation history) never.
 advice-section-elsewhere = Junk elsewhere on this PC
 advice-section-elsewhere-hint = Found by the cleanup rules outside the scanned folder.
 advice-empty-section = Nothing here.
@@ -70,6 +73,26 @@ advice-why-keep = Why it stays
 advice-untouched = What is not touched
 advice-close-first = Close first: { $apps }
 advice-store-better = The package manager's own command does it: { $id }
+
+## Delete anyway (the user overrules the app)
+advice-override = Delete anyway…
+advice-override-hint = The app suggests keeping it, but it can be wrong. You decide: it moves to the quarantine (restorable for 7 days).
+advice-override-title = Delete anyway?
+advice-override-body = { $count ->
+    [one] NANOFreeDisk suggested keeping this item ({ $size }). You may know better.
+   *[other] NANOFreeDisk suggested keeping these { $count } items ({ $size }). You may know better.
+}
+advice-override-why = Why the app kept it
+advice-override-ways = Nothing is deleted for good: a git worktree with nothing uncommitted is removed with `git worktree remove` (its branch and commits stay); everything else moves to the quarantine and can be restored from Cleanup history for 7 days.
+advice-override-ack = I understand and want to delete it anyway
+advice-override-go = Delete anyway
+advice-override-done = Moved { $size } out of the way ({ $count } items). Restore it from Cleanup history if needed.
+advice-override-skipped = { $count } items are hard-protected and were left alone.
+advice-hard-hard = Hard protection: Windows, programs, credentials or AI conversation history are never deleted, not even on request.
+advice-hard-inside-hard = Hard protection: it lies inside Windows, a program folder, credentials or conversation history.
+advice-hard-contains-hard = It holds something protected (conversation history, credentials…), so it cannot go as a whole: delete the other parts inside it instead.
+advice-hard-root = The scanned folder itself is not deleted from here.
+advice-hard-other = The SafetyGate refuses it ({ $code }).
 
 ## Why not now
 advice-blocked-git-check = Waiting for git to check it…
@@ -134,3 +157,4 @@ home-free-advice-sub = From the last scan: what can go, what needs care and what
 health-reclaimable = { $size } in { $folder } can be freed (see the suggestions).
 health-fix-suggestions = See suggestions
 activity-kind-advice = Suggestions (Analyze)
+activity-kind-override = Deleted anyway (your decision)

@@ -291,8 +291,17 @@ impl Walker<'_> {
                 let p = path_of(self.tree);
                 if let Some(a) = self.k.article_at(&p, key, &name_l, volume_parent) {
                     let (title, impact) = Knowledge::article_texts(a);
+                    // a guide / keep article on something the SafetyGate refuses
+                    // (WinSxS, pagefile…) is a hard protection, else a judgment
+                    let hard = self.k.gate.check_path(&p, Origin::Manual).is_err_and(|b| {
+                        matches!(
+                            b,
+                            Blocked::Protected { .. } | Blocked::SystemDir | Blocked::VolumeRoot
+                        )
+                    });
                     if GUIDE_ARTICLES.contains(&a.id.as_str()) {
                         return Some(Unit {
+                            hard,
                             title: Some(title),
                             untouched: Some(text::guide_untouched()),
                             ..unit(id, Verdict::Guide, Reason::Explained, Action::Guide, impact)
@@ -302,6 +311,7 @@ impl Walker<'_> {
                     }
                     if KEEP_ARTICLES.contains(&a.id.as_str()) {
                         return Some(Unit {
+                            hard,
                             title: Some(title),
                             ..unit(id, Verdict::Keep, Reason::Explained, Action::None, impact)
                                 .source(&a.id)
@@ -329,13 +339,16 @@ impl Walker<'_> {
                             return Some(protected_unit(id, &template));
                         }
                         Err(Blocked::SystemDir) => {
-                            return Some(unit(
-                                id,
-                                Verdict::Keep,
-                                Reason::System,
-                                Action::None,
-                                text::system(),
-                            ));
+                            return Some(Unit {
+                                hard: true,
+                                ..unit(
+                                    id,
+                                    Verdict::Keep,
+                                    Reason::System,
+                                    Action::None,
+                                    text::system(),
+                                )
+                            });
                         }
                         _ => {}
                     }
@@ -671,6 +684,7 @@ fn unit(
         store: None,
         requires_closed: Vec::new(),
         cutoff: None,
+        hard: false,
     }
 }
 
@@ -694,6 +708,7 @@ fn history_unit(id: u32, hit: &str, name: &str) -> Unit {
     };
     Unit {
         app: Some(catalog::history_tool(&what).to_owned()),
+        hard: true,
         ..unit(
             id,
             Verdict::Keep,
@@ -710,6 +725,7 @@ fn protected_unit(id: u32, template: &str) -> Unit {
     let t = template.to_lowercase();
     if AGENT_HISTORY_TEMPLATES.contains(&template) || t.starts_with("<any>/") {
         return Unit {
+            hard: true,
             app: Some(
                 catalog::history_tool(template.rsplit('/').nth(1).unwrap_or(template)).to_owned(),
             ),
@@ -735,5 +751,8 @@ fn protected_unit(id: u32, template: &str) -> Unit {
     } else {
         (Reason::Protected, text::protected(template))
     };
-    unit(id, Verdict::Keep, reason, Action::None, impact).source(template)
+    Unit {
+        hard: true,
+        ..unit(id, Verdict::Keep, reason, Action::None, impact).source(template)
+    }
 }

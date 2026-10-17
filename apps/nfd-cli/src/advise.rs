@@ -262,6 +262,25 @@ pub fn print_for(tree: &ScanTree, opts: &Options) -> anyhow::Result<()> {
             } else if let Some(how) = how(g, vi, &tree.root) {
                 writeln!(out, "              → {how}")?;
             }
+            if g.hard {
+                writeln!(
+                    out,
+                    "              🔒 {}",
+                    line(
+                        "hard protection: never deleted",
+                        "bảo vệ cứng: không bao giờ bị xóa"
+                    )
+                )?;
+            } else if g.overridable {
+                writeln!(
+                    out,
+                    "              {}",
+                    line(
+                        "only the app's judgment: \"Delete anyway…\" in Analyze moves it to the quarantine",
+                        "chỉ là đánh giá của ứng dụng: \"Vẫn xóa…\" trong Phân tích sẽ chuyển vào khu cách ly"
+                    )
+                )?;
+            }
         }
     }
     writeln!(

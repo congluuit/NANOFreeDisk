@@ -310,6 +310,10 @@ pub struct Unit {
     pub requires_closed: Vec<String>,
     /// Files written after this time (Unix seconds) stay for now (rule `min_age_days`).
     pub cutoff: Option<i64>,
+    /// A hard protection, not a judgment: the SafetyGate refuses it (Windows,
+    /// programs, credentials, volume roots…) or it is AI conversation history
+    /// (PLAN §5.1). Never deleted, not even with "Delete anyway".
+    pub hard: bool,
 }
 
 impl Unit {
@@ -360,6 +364,8 @@ pub struct NodeAdvice {
     pub reason: Option<Reason>,
     /// The entry starts its unit.
     pub root: bool,
+    /// The unit is a hard protection ([`Unit::hard`]).
+    pub hard: bool,
     pub inside: ByVerdict,
     /// 🟢 + 🟡 bytes that can be freed through an action that is not blocked.
     pub reclaim: u64,
@@ -395,6 +401,10 @@ pub struct EntryAdvice {
     /// The biggest classified parts below the entry.
     pub parts: Vec<Part>,
     pub enriched: bool,
+    /// Why "Delete anyway" is not possible here ([`Advice::override_block`]): `hard`,
+    /// `inside-hard`, `contains-hard`, or a SafetyGate code added by the caller.
+    /// `None` = the user may overrule the app's judgment.
+    pub override_block: Option<String>,
 }
 
 /// Lower-case, `/`-separated comparison key of a path (no trailing `/` except for a
@@ -528,6 +538,7 @@ impl Advice {
             verdict: unit.map(|u| u.verdict),
             reason: unit.map(|u| u.reason),
             root: unit.is_some_and(|u| u.entry == id),
+            hard: unit.is_some_and(|u| u.hard),
             inside: self.totals(tree, id),
             reclaim: self.reclaim(tree, id),
         }
@@ -575,7 +586,58 @@ impl Advice {
             unit: u,
             parts,
             enriched: self.enriched,
+            override_block: self.override_block(tree, id).map(str::to_owned),
         })
+    }
+
+    /// Why the user may not overrule the app on `id` ("Delete anyway"): it is, lies
+    /// inside or holds a hard protection ([`Unit::hard`]). `None` = everything here is
+    /// only the app's judgment (which may be wrong), so the user may decide. The
+    /// SafetyGate still checks the path itself before anything moves.
+    #[must_use]
+    pub fn override_block(&self, tree: &ScanTree, id: u32) -> Option<&'static str> {
+        let e = tree.entries.get(id as usize)?;
+        if e.removed {
+            return Some("gone");
+        }
+        if let Some(u) = self.unit(id) {
+            if u.hard {
+                return Some(if u.entry == id { "hard" } else { "inside-hard" });
+            }
+        }
+        // a hard unit among the ancestors (the unit of `id` may be a carve-out)
+        let mut cur = e.parent;
+        while let Some(p) = cur {
+            if self.unit(p.0).is_some_and(|u| u.hard) {
+                return Some("inside-hard");
+            }
+            cur = tree.entry(p).parent;
+        }
+        if self.contains_hard(tree, id) {
+            return Some("contains-hard");
+        }
+        None
+    }
+
+    /// `true` when a hard unit starts strictly below `id`.
+    fn contains_hard(&self, tree: &ScanTree, id: u32) -> bool {
+        self.units
+            .iter()
+            .filter(|u| u.hard && u.entry > id)
+            .any(|u| {
+                // pre-order: every ancestor has a smaller id
+                let mut cur = tree.entries.get(u.entry as usize).and_then(|e| e.parent);
+                while let Some(p) = cur {
+                    if p.0 == id {
+                        return true;
+                    }
+                    if p.0 < id {
+                        return false;
+                    }
+                    cur = tree.entry(p).parent;
+                }
+                false
+            })
     }
 
     /// Verdict code per id for the treemap (`255` = unclaimed / mixed).

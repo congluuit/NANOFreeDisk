@@ -172,7 +172,7 @@
           </span>
           <span class="num">{formatSize(n.onDisk, loc)}</span>
           <span class="verdict" data-row-verdict={badge.verdict ?? (badge.partly ? "partly" : "")}>
-            {#if badge.verdict}<VerdictBadge verdict={badge.verdict} />{:else if badge.partly}<span class="partly" title={t("advice-badge-partly", { size: formatSize(n.advice?.reclaim ?? 0, loc) })}>±</span>{/if}
+            {#if badge.verdict}<VerdictBadge verdict={badge.verdict} hard={badge.hard} />{:else if badge.partly}<span class="partly" title={t("advice-badge-partly", { size: formatSize(n.advice?.reclaim ?? 0, loc) })}>±</span>{/if}
           </span>
           <span class="num reclaim" class:zero={!n.advice?.reclaim}>{n.advice ? (n.advice.reclaim ? formatSize(n.advice.reclaim, loc) : "—") : ""}</span>
           <span class="share">

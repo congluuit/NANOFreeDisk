@@ -173,6 +173,7 @@ pub fn run() {
             commands::advice::advice_refresh,
             commands::advice::advice_clean,
             commands::advice::advice_cancel,
+            commands::advice::advice_override,
             commands::ai_leftovers::ai_leftovers_scan,
             commands::ai_leftovers::ai_leftovers_plan,
             commands::ai_leftovers::ai_leftovers_clean,

@@ -123,6 +123,7 @@ export const api = {
   adviceClean: (keys: string[], caution: boolean, expert: boolean) =>
     call<AdviceOutcome>("advice_clean", { keys, caution, expert }),
   adviceCancel: () => call<void>("advice_cancel"),
+  adviceOverride: (ids: number[], ack: boolean) => call<AdviceOutcome>("advice_override", { ids, ack }),
 };
 
 export type ProgressEvent = Progress;

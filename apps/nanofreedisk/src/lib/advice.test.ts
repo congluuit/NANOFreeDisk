@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { badgeOf, blockedKey, defaultPicks, KNOWN_BLOCKED, sections, segments, selItems, titleOf, verdictOfCode, VERDICT_TOKEN, VERDICTS } from "./advice.ts";
+import { badgeOf, blockedKey, hardKey, PROTECTED_TOKEN, defaultPicks, KNOWN_BLOCKED, sections, segments, selItems, titleOf, verdictOfCode, VERDICT_TOKEN, VERDICTS } from "./advice.ts";
 import { needsAck, selectAll, summarize } from "./selection.ts";
 import type { AdviceGroup, ByVerdict } from "./types";
 
@@ -32,6 +32,8 @@ function group(over: Partial<AdviceGroup>): AdviceGroup {
     count: 1,
     selected: true,
     actionable: true,
+    hard: false,
+    overridable: false,
     location: null,
     elsewhere: false,
     items: [],
@@ -88,15 +90,20 @@ test("titles, blocked messages, badges and segments", () => {
   assert.equal(ex.args.title, "Kho thành phần");
   assert.equal(blockedKey("session-live"), "advice-blocked-session-live");
   assert.equal(blockedKey("system-dir"), "advice-blocked-other");
-  assert.deepEqual(badgeOf(undefined), { verdict: null, partly: false });
-  assert.deepEqual(badgeOf({ verdict: "keep", reason: "system", root: true, inside: { ...none, keep: 5 }, reclaim: 0 }), { verdict: "keep", partly: false });
-  assert.deepEqual(badgeOf({ verdict: null, reason: null, root: false, inside: { ...none, safe: 5, keep: 5 }, reclaim: 5 }), { verdict: null, partly: true });
-  assert.deepEqual(badgeOf({ verdict: null, reason: null, root: false, inside: { ...none, unknown: 9 }, reclaim: 0 }), { verdict: "unknown", partly: false });
+  assert.deepEqual(badgeOf(undefined), { verdict: null, partly: false, hard: false });
+  assert.deepEqual(badgeOf({ verdict: "keep", reason: "system", root: true, hard: true, inside: { ...none, keep: 5 }, reclaim: 0 }), { verdict: "keep", partly: false, hard: true });
+  assert.deepEqual(badgeOf({ verdict: null, reason: null, root: false, hard: false, inside: { ...none, safe: 5, keep: 5 }, reclaim: 5 }), { verdict: null, partly: true, hard: false });
+  assert.deepEqual(badgeOf({ verdict: null, reason: null, root: false, hard: false, inside: { ...none, unknown: 9 }, reclaim: 0 }), { verdict: "unknown", partly: false, hard: false });
   const seg = segments({ ...none, safe: 1, keep: 3 });
   assert.deepEqual(seg.map((s) => [s.verdict, s.share]), [["safe", 0.25], ["keep", 0.75]]);
   assert.deepEqual(segments(none), []);
   assert.equal(verdictOfCode(3), "keep");
   assert.equal(verdictOfCode(255), null);
+  // "Delete anyway" refusals
+  assert.equal(hardKey("contains-hard"), "advice-hard-contains-hard");
+  assert.equal(hardKey("system-dir"), "advice-hard-other");
+  // kept by judgment and hard protections look different
+  assert.notEqual(VERDICT_TOKEN.keep, PROTECTED_TOKEN);
 });
 
 test("every verdict, reason, action and blocked code has its EN and VI text", () => {
@@ -108,6 +115,11 @@ test("every verdict, reason, action and blocked code has its EN and VI text", ()
     ...["clean", "quarantine", "ai-leftovers", "recycle-bin", "store", "duplicates", "guide"].flatMap((a) => [`advice-action-${a}`, `advice-action-hint-${a}`]),
     ...KNOWN_BLOCKED.map((b) => `advice-blocked-${b}`),
     "advice-blocked-other",
+    "advice-verdict-protected",
+    "advice-badge-protected",
+    "advice-verdict-hint-protected",
+    ...["override", "override-hint", "override-title", "override-body", "override-why", "override-ways", "override-ack", "override-go", "override-done", "override-skipped"].map((k) => `advice-${k}`),
+    ...["hard", "inside-hard", "contains-hard", "root", "other"].map((k) => `advice-hard-${k}`),
     ...["safe", "caution", "guide", "keep", "elsewhere"].flatMap((s) => [`advice-section-${s}`, `advice-section-${s}-hint`]),
   ];
   for (const k of keys) {

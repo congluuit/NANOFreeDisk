@@ -5,19 +5,22 @@
 advice-verdict-safe = Có thể xóa an toàn
 advice-verdict-caution = Thận trọng
 advice-verdict-guide = Chỉ hướng dẫn
-advice-verdict-keep = Không được xóa
+advice-verdict-keep = Nên giữ
 advice-verdict-unknown = Chưa rõ
 advice-badge-safe = An toàn
 advice-badge-caution = Thận trọng
 advice-badge-guide = Hướng dẫn
-advice-badge-keep = Giữ
+advice-badge-keep = Nên giữ
 advice-badge-unknown = —
 advice-badge-partly = Gỡ được { $size }
 advice-verdict-hint-safe = Được tạo lại tự động hoặc không còn cần nữa.
 advice-verdict-hint-caution = Có thể xóa, nhưng sẽ mất một thứ gì đó (lịch sử, phải tải lại, phải build lại lâu).
 advice-verdict-hint-guide = Chỉ lệnh của chính Windows hoặc của công cụ mới thu nhỏ được an toàn.
-advice-verdict-hint-keep = Phải giữ: Windows, chương trình, thiết lập, lịch sử hội thoại hoặc thứ đang được dùng.
+advice-verdict-hint-keep = Ứng dụng khuyên giữ lại (đang dùng, chưa lưu ở nơi khác, thiết lập…). Ứng dụng có thể sai: bạn vẫn có thể Vẫn xóa, khôi phục được từ khu cách ly.
 advice-verdict-hint-unknown = Không có thông tin gì: chỉ bạn quyết định được.
+advice-verdict-protected = Được bảo vệ
+advice-badge-protected = Bảo vệ
+advice-verdict-hint-protected = Bảo vệ cứng: Windows, chương trình, thông tin đăng nhập hoặc lịch sử hội thoại AI. Không bao giờ bị xóa, kể cả khi bạn yêu cầu.
 
 ## Bảng gợi ý
 advice-tab = Gợi ý
@@ -34,7 +37,7 @@ advice-section-caution-hint = Sẽ mất một thứ gì đó (lịch sử, ph�
 advice-section-guide = Chỉ hướng dẫn
 advice-section-guide-hint = Lệnh của chính Windows hoặc công cụ mới thu nhỏ được các mục này; NANOFreeDisk chỉ cách làm.
 advice-section-keep = Lớn nhưng nên giữ
-advice-section-keep-hint = Để bạn khỏi lo về chúng: lý do từng mục được giữ.
+advice-section-keep-hint = Lý do từng mục được giữ. Những gì chỉ do ứng dụng đánh giá vẫn có thể Vẫn xóa; các mục bảo vệ cứng (Windows, chương trình, thông tin đăng nhập, lịch sử hội thoại) thì không bao giờ.
 advice-section-elsewhere = Rác ở nơi khác trên máy
 advice-section-elsewhere-hint = Do các quy tắc dọn dẹp tìm thấy bên ngoài thư mục đã quét.
 advice-empty-section = Không có gì.
@@ -69,6 +72,25 @@ advice-why-keep = Vì sao giữ lại
 advice-untouched = Những gì không bị đụng tới
 advice-close-first = Đóng trước: { $apps }
 advice-store-better = Lệnh của chính trình quản lý gói làm việc này: { $id }
+
+## Vẫn xóa (người dùng quyết định thay ứng dụng)
+advice-override = Vẫn xóa…
+advice-override-hint = Ứng dụng khuyên giữ lại nhưng có thể sai. Bạn quyết định: mục sẽ vào khu cách ly (khôi phục được trong 7 ngày).
+advice-override-title = Vẫn xóa?
+advice-override-body = { $count ->
+   *[other] NANOFreeDisk khuyên giữ lại { $count } mục này ({ $size }). Có thể bạn biết rõ hơn.
+}
+advice-override-why = Vì sao ứng dụng giữ lại
+advice-override-ways = Không có gì bị xóa vĩnh viễn: worktree git không còn thay đổi chưa commit được gỡ bằng `git worktree remove` (nhánh và commit vẫn còn); mọi thứ khác vào khu cách ly và khôi phục được trong Lịch sử dọn dẹp suốt 7 ngày.
+advice-override-ack = Tôi hiểu và vẫn muốn xóa
+advice-override-go = Vẫn xóa
+advice-override-done = Đã dời { $size } đi ({ $count } mục). Có thể khôi phục trong Lịch sử dọn dẹp nếu cần.
+advice-override-skipped = { $count } mục được bảo vệ cứng nên không bị đụng tới.
+advice-hard-hard = Bảo vệ cứng: Windows, chương trình, thông tin đăng nhập hoặc lịch sử hội thoại AI không bao giờ bị xóa, kể cả khi bạn yêu cầu.
+advice-hard-inside-hard = Bảo vệ cứng: mục này nằm trong Windows, thư mục chương trình, thông tin đăng nhập hoặc lịch sử hội thoại.
+advice-hard-contains-hard = Bên trong có thứ được bảo vệ (lịch sử hội thoại, thông tin đăng nhập…) nên không thể xóa nguyên khối: hãy xóa các phần khác bên trong.
+advice-hard-root = Không xóa chính thư mục đã quét từ đây.
+advice-hard-other = SafetyGate từ chối ({ $code }).
 
 ## Vì sao chưa thể
 advice-blocked-git-check = Đang chờ git kiểm tra…
@@ -132,3 +154,4 @@ home-free-advice-sub = Từ lần quét gần nhất: cái gì xóa được, c�
 health-reclaimable = Có thể giải phóng { $size } trong { $folder } (xem gợi ý).
 health-fix-suggestions = Xem gợi ý
 activity-kind-advice = Gợi ý (Phân tích)
+activity-kind-override = Vẫn xóa (bạn quyết định)

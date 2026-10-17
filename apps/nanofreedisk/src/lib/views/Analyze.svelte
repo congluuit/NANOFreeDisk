@@ -6,6 +6,7 @@
   import { VERDICTS, VERDICT_TOKEN } from "../advice";
   import { advice, listenAdvice, loadAdvice } from "../advice/state.svelte";
   import AdviceDialog from "../components/AdviceDialog.svelte";
+  import OverrideDialog from "../components/OverrideDialog.svelte";
   import Suggestions from "../components/Suggestions.svelte";
   import { formatCount, formatDuration, formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
@@ -332,10 +333,14 @@
   <AdviceDialog req={advice.confirm} />
 {/if}
 
+{#if advice.override}
+  <OverrideDialog req={advice.override} />
+{/if}
+
 <svelte:window
   onkeydown={(e) => {
     const typing = (e.target as HTMLElement)?.closest("input, select, textarea");
-    if (typing || app.deleting || advice.confirm || !app.summary) return;
+    if (typing || app.deleting || advice.confirm || advice.override || !app.summary) return;
     if (e.key === "Backspace" || (e.altKey && e.key === "ArrowUp")) {
       e.preventDefault();
       up();

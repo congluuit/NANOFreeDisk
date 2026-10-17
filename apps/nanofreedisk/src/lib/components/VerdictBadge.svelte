@@ -1,7 +1,7 @@
 <script lang="ts">
   // A verdict as a small pill (tree rows, suggestions, details): color from the theme
   // token of the verdict, icon + short label, the full meaning as tooltip.
-  import { VERDICT_ICON, VERDICT_TOKEN } from "../advice";
+  import { PROTECTED_TOKEN, VERDICT_ICON, VERDICT_TOKEN } from "../advice";
   import { t } from "../i18n.svelte";
   import type { Verdict } from "../types";
   import Icon from "./Icon.svelte";
@@ -12,19 +12,23 @@
     long?: boolean;
     /** Icon only (narrow columns). */
     compact?: boolean;
+    /** A hard protection rather than the app's judgment. */
+    hard?: boolean;
   }
-  let { verdict, long = false, compact = false }: Props = $props();
+  let { verdict, long = false, compact = false, hard = false }: Props = $props();
+  const key = $derived(hard ? "protected" : verdict);
 </script>
 
 <span
   class="vb"
   class:compact
   data-verdict={verdict}
-  style="--vc: var({VERDICT_TOKEN[verdict]})"
-  title={`${t(`advice-verdict-${verdict}`)} — ${t(`advice-verdict-hint-${verdict}`)}`}
+  data-hard={hard ? "" : undefined}
+  style="--vc: var({hard ? PROTECTED_TOKEN : VERDICT_TOKEN[verdict]})"
+  title={`${t(`advice-verdict-${key}`)} — ${t(`advice-verdict-hint-${key}`)}`}
 >
-  <Icon name={VERDICT_ICON[verdict]} size={12} />
-  {#if !compact}<span>{t(long ? `advice-verdict-${verdict}` : `advice-badge-${verdict}`)}</span>{/if}
+  <Icon name={hard ? "lock" : VERDICT_ICON[verdict]} size={12} />
+  {#if !compact}<span>{t(long ? `advice-verdict-${key}` : `advice-badge-${key}`)}</span>{/if}
 </span>
 
 <style>

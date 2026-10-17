@@ -489,6 +489,39 @@ fn claude_worktrees_wait_for_git_then_follow_it() {
     assert_eq!(live.reclaim(&f.tree, claude), 0);
     let wt = f.unit(&live, "Work/proj/.claude/worktrees/wt1");
     assert_eq!(wt.blocked.as_deref(), Some("session-live"));
+    // …but that is only the app's judgment: the user may still delete it anyway
+    assert!(!wt.hard);
+    let wt_id = f.id("Work/proj/.claude/worktrees/wt1");
+    assert_eq!(live.override_block(&f.tree, wt_id), None);
+    assert_eq!(live.override_block(&f.tree, claude), None);
+    // "delete anyway": git may not remove it → the whole folder to the quarantine;
+    // git may remove it → still the git way
+    let forced = |removable: bool| {
+        let mut it = item(Some("session-live"));
+        if let Some(w) = it.worktree.as_mut() {
+            w.removable = removable;
+        }
+        let r = Report {
+            items: vec![it],
+            ..Report::default()
+        };
+        nfd_devtools::ai_leftovers::prepare_forced(&r, &[f.p("Work/proj/.claude/worktrees/wt1")])
+    };
+    let (p, refused) = forced(false);
+    assert!(refused.is_empty() && p.jobs.is_empty());
+    assert_eq!(p.plan.items.len(), 1);
+    assert_eq!(p.plan.items[0].path, f.p("Work/proj/.claude/worktrees/wt1"));
+    assert_eq!(p.plan.items[0].mode, nfd_core::plan::DeleteMode::Quarantine);
+    let (p, _) = forced(true);
+    assert_eq!(p.jobs.len(), 1);
+    // a hard block is never forced
+    let r = Report {
+        items: vec![item(Some("contains-history"))],
+        ..Report::default()
+    };
+    let (p, refused) =
+        nfd_devtools::ai_leftovers::prepare_forced(&r, &[f.p("Work/proj/.claude/worktrees/wt1")]);
+    assert!(p.plan.items.is_empty() && p.jobs.is_empty() && refused.len() == 1);
     assert!(
         live.prepare(
             &f.tree,
@@ -634,4 +667,74 @@ fn json_shape_is_stable() {
     );
     assert_eq!(v["node"]["root"], true);
     assert!(v["node"]["inside"]["safe"].as_u64().is_some_and(|b| b > 0));
+}
+
+#[test]
+fn delete_anyway_only_where_the_app_judged() {
+    let f = fixture();
+    let a = f.advise();
+    // hard protections: Windows (and what it holds), programs, conversation history
+    assert_eq!(a.override_block(&f.tree, f.id("Windows")), Some("hard"));
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Windows/System32/kernel.dll")),
+        Some("inside-hard")
+    );
+    let sxs = f.unit(&a, "Windows/WinSxS");
+    assert!(sxs.hard, "WinSxS is refused by the SafetyGate");
+    let pf = f.unit(&a, "Program Files");
+    assert_eq!(
+        (pf.reason, pf.hard, pf.entry == f.id("Program Files")),
+        (Reason::Programs, true, true),
+        "{pf:?}"
+    );
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Program Files")),
+        Some("hard")
+    );
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Users/nano/.claude/projects")),
+        Some("hard")
+    );
+    // a folder holding conversation history cannot go as a whole
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Users/nano/.claude")),
+        Some("contains-hard")
+    );
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Work/proj")),
+        Some("contains-hard"),
+        "Aider's chat log is inside"
+    );
+    // judgments: a project's .git, a 🔒 rule, personal media, a whole folder of them
+    let git = f.unit(&a, "Work/proj/.git");
+    assert!(!git.hard);
+    assert_eq!(a.override_block(&f.tree, f.id("Work/proj/.git")), None);
+    assert_eq!(
+        a.override_block(&f.tree, f.id("Users/nano/AppData/Local/App/Cache/keep")),
+        None
+    );
+    assert_eq!(a.override_block(&f.tree, f.id("Users/nano/Pictures")), None);
+    assert_eq!(a.override_block(&f.tree, f.id("Work/web")), None);
+    let d = a.detail(&f.tree, &f.ends, f.id("Windows")).expect("detail");
+    assert_eq!(d.override_block.as_deref(), Some("hard"));
+    let s = a.suggestions(&f.tree);
+    for g in &s.groups {
+        if matches!(
+            g.reason,
+            Reason::System | Reason::Programs | Reason::Protected | Reason::AgentHistory
+        ) {
+            assert!(!g.overridable, "{}", g.key);
+        }
+        if g.actionable {
+            assert!(!g.overridable, "{}", g.key);
+        }
+    }
+    assert!(
+        s.groups
+            .iter()
+            .any(|g| g.overridable && g.source.as_deref() == Some("git-folder"))
+            || s.groups
+                .iter()
+                .all(|g| g.source.as_deref() != Some("git-folder"))
+    );
 }

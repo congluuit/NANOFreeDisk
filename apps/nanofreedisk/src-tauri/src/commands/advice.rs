@@ -240,11 +240,33 @@ pub fn advice_summary(
 
 #[tauri::command]
 pub fn advice_detail(state: State<'_, AppState>, id: u32) -> CmdResult<Option<EntryAdvice>> {
+    let resolve = nfd_platform::Native.resolver();
     with_session(&state, |s| {
-        s.advice
+        let mut d = s
+            .advice
             .as_ref()
-            .and_then(|a| a.detail(&s.tree, &s.ends, id))
+            .and_then(|a| a.detail(&s.tree, &s.ends, id))?;
+        // "Delete anyway" also needs the SafetyGate's lexical yes for this path
+        if d.override_block.is_none() {
+            d.override_block = override_gate(s, id, &resolve);
+        }
+        Some(d)
     })
+}
+
+/// The SafetyGate's refusal of `id` for a hand-picked delete, if any (`root` for the
+/// scanned folder itself).
+fn override_gate(
+    s: &crate::session::Session,
+    id: u32,
+    resolve: &impl Fn(&str) -> Option<String>,
+) -> Option<String> {
+    let plan = s.plan_delete(&[id], resolve);
+    match plan.items.first() {
+        None => Some("root".to_owned()),
+        Some(i) if !i.allowed => Some(i.reason.unwrap_or("blocked").to_owned()),
+        Some(_) => None,
+    }
 }
 
 /// Compute the advice again; `rules_dir` replaces the built-in rule packs (GUI smoke
@@ -314,6 +336,180 @@ pub async fn advice_clean(
     let result = run_clean(
         &app, &window, &state, &k, &keys, prepared, &root, caution, expert,
     )
+    .await;
+    *adv.cancel.lock().map_err(|e| err("internal", e))? = None;
+    refresh(&app);
+    result
+}
+
+/// "Delete anyway": the user overrules the app's judgment on `ids` (kept, guide
+/// only, blocked by a session or by git). Never on a hard protection — the entry is,
+/// lies inside or holds something the SafetyGate refuses or conversation history —
+/// and only with `ack`. Nothing is deleted for good: an agent worktree git may remove
+/// still goes the git way (`git worktree remove`, the branch stays), everything else
+/// moves to the quarantine (Activity kind `override`, restorable for 7 days).
+#[tauri::command]
+pub async fn advice_override(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    adv: State<'_, AdviceState>,
+    ids: Vec<u32>,
+    ack: bool,
+) -> CmdResult<AdviceOutcome> {
+    if !ack {
+        return Err(err(
+            "not-confirmed",
+            "Delete anyway needs the acknowledgement",
+        ));
+    }
+    let resolve = nfd_platform::Native.resolver();
+    let (plain, ai_paths, mut skipped) = with_session(&state, |s| {
+        let a = s.advice.as_ref()?;
+        let mut plain = Vec::new();
+        let mut ai_paths = Vec::new();
+        let mut skipped: Vec<(u32, &'static str)> = Vec::new();
+        let mut ids = ids.clone();
+        ids.sort_unstable();
+        ids.dedup();
+        for id in ids {
+            if let Some(code) = a.override_block(&s.tree, id) {
+                skipped.push((id, code));
+                continue;
+            }
+            let plan = s.plan_delete(&[id], &resolve);
+            match plan.items.first() {
+                None => {
+                    skipped.push((id, "root"));
+                    continue;
+                }
+                Some(i) if !i.allowed => {
+                    skipped.push((id, i.reason.unwrap_or("blocked")));
+                    continue;
+                }
+                Some(_) => {}
+            }
+            let agent = a.unit(id).is_some_and(|u| {
+                u.entry == id
+                    && matches!(
+                        u.reason,
+                        nfd_advice::Reason::AgentWorktree | nfd_advice::Reason::AgentLeftover
+                    )
+            }) && a.enriched;
+            match (agent, s.path(id)) {
+                (true, Some(p)) => ai_paths.push((id, p)),
+                _ => plain.push(id),
+            }
+        }
+        Some((plain, ai_paths, skipped))
+    })?
+    .ok_or_else(|| err("no-advice", "the advice is not ready yet"))?;
+    let cancel = {
+        let mut slot = adv.cancel.lock().map_err(|e| err("internal", e))?;
+        if slot.is_some() {
+            return Err(err("busy", "a clean is already running"));
+        }
+        let c = Arc::new(AtomicBool::new(false));
+        *slot = Some(c.clone());
+        c
+    };
+    let result = async {
+        let mut items = Vec::new();
+        for id in &plain {
+            if let Some(p) = with_session(&state, |s| s.plan_item(*id, DeleteMode::Quarantine))? {
+                items.push(p);
+            }
+        }
+        let mut jobs = Vec::new();
+        if !ai_paths.is_empty() {
+            let report = app.state::<AiState>().latest();
+            let paths: Vec<PathBuf> = ai_paths.iter().map(|(_, p)| p.clone()).collect();
+            match report {
+                Some(r) => {
+                    let (p, refused) = ai_leftovers::prepare_forced(&r, &paths);
+                    items.extend(p.plan.items);
+                    jobs = p.jobs;
+                    for (id, path) in &ai_paths {
+                        if refused.contains(path) {
+                            skipped.push((*id, "hard"));
+                        }
+                    }
+                }
+                // the check that judged them is gone: move them like any folder
+                None => {
+                    for (id, _) in &ai_paths {
+                        if let Some(p) =
+                            with_session(&state, |s| s.plan_item(*id, DeleteMode::Quarantine))?
+                        {
+                            items.push(p);
+                        }
+                    }
+                }
+            }
+        }
+        let mut plan: CleanPlan = plan::build(items, PlanOptions::default());
+        for item in &mut plan.items {
+            item.mode = DeleteMode::Quarantine;
+            item.selected = true;
+        }
+        let mut all = Vec::new();
+        let mut journal_error = None;
+        let mut cancelled = false;
+        if plan.selected().next().is_some() {
+            let (dto, op) = clean::execute_plan_returning(
+                &app,
+                &window,
+                &state,
+                plan,
+                "override",
+                cancel.clone(),
+                Box::new(|_| Ok(())),
+            )
+            .await?;
+            journal_error = dto.journal_error;
+            cancelled |= op.cancelled;
+            all.extend(op.items);
+        }
+        if !jobs.is_empty() && !cancelled {
+            let (done, problem, stopped) =
+                ai_cmd::remove_worktrees(&app, &state, jobs, cancel.clone()).await?;
+            journal_error = journal_error.or(problem);
+            cancelled |= stopped;
+            all.extend(done);
+            app.state::<AiState>().clear();
+        }
+        {
+            let mut guard = state.session.write().map_err(|e| err("internal", e))?;
+            if let Some(s) = guard.as_mut() {
+                let done: Vec<u32> = all
+                    .iter()
+                    .filter(|i| i.status == exec::ItemStatus::Done)
+                    .filter_map(|i| nfd_advice::locate(&s.tree, &s.children, &i.path))
+                    .collect();
+                for id in done {
+                    s.mark_removed(id);
+                }
+            }
+        }
+        if all.is_empty() {
+            return Err(err("nothing-to-clean", "nothing to delete"));
+        }
+        Ok(AdviceOutcome {
+            operation: Some(clean::op_dto(
+                &Operation {
+                    id: String::new(),
+                    kind: "override".into(),
+                    started_at: 0,
+                    finished_at: 0,
+                    items: all,
+                    cancelled,
+                },
+                journal_error,
+            )),
+            recycled: Vec::new(),
+            skipped: skipped.clone(),
+        })
+    }
     .await;
     *adv.cancel.lock().map_err(|e| err("internal", e))? = None;
     refresh(&app);

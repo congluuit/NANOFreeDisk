@@ -1120,6 +1120,82 @@ pub fn prepare(report: &Report, picked: &[PathBuf]) -> Prepared {
     Prepared { plan, jobs }
 }
 
+/// Reasons an item is held back that are only this module's judgment (an active
+/// session, git state, a recent write…): the user may overrule them ("Delete
+/// anyway"). Every other code — SafetyGate refusals, conversation history inside —
+/// is a hard protection.
+pub const SOFT_BLOCKS: &[&str] = &[
+    "session-live",
+    "session-open",
+    "session-recent",
+    "recent-write",
+    "dirty",
+    "not-merged",
+    "not-removable",
+    "locked",
+    "unverified",
+    "git-failed",
+    "no-git",
+    "foreign-worktree",
+    "too-many-ignored",
+    "too-large",
+    "tracked",
+    "not-ignored",
+];
+
+/// `true` when `code` is only a judgment the user may overrule ([`SOFT_BLOCKS`]).
+#[must_use]
+pub fn soft_block(code: &str) -> bool {
+    SOFT_BLOCKS.contains(&code)
+}
+
+/// What "Delete anyway" does with the `picked` items of `report` that are held back
+/// only by a judgment ([`soft_block`]): a registered worktree git may remove (clean,
+/// merged or pushed) still goes the git way — ignored files to the quarantine, then
+/// `git worktree remove`, the branch stays; anything else (uncommitted changes, an
+/// unmerged branch, a live session's scratchpad) moves to the quarantine as a whole,
+/// restorable for 7 days. Items with a hard block are left out and returned.
+#[must_use]
+pub fn prepare_forced(report: &Report, picked: &[PathBuf]) -> (Prepared, Vec<PathBuf>) {
+    let wanted: Vec<String> = picked.iter().map(|p| norm(&p.to_string_lossy())).collect();
+    let is_wanted = |p: &Path| wanted.contains(&norm(&p.to_string_lossy()));
+    let mut items: Vec<PlanItem> = Vec::new();
+    let mut jobs = Vec::new();
+    let mut refused = Vec::new();
+    for it in report.items.iter().filter(|i| is_wanted(&i.path)) {
+        if it.blocked.as_deref().is_some_and(|b| !soft_block(b)) {
+            refused.push(it.path.clone());
+            continue;
+        }
+        match &it.worktree {
+            Some(wt) if wt.registered && wt.removable => {
+                for ig in &wt.ignored {
+                    items.push(PlanItem::manual(
+                        it.path.join(&ig.rel),
+                        ig.is_dir,
+                        ig.totals.bytes,
+                        ig.totals.files,
+                        ig.mtime,
+                    ));
+                }
+                jobs.push(job_of(&it.path, wt, &it.totals));
+            }
+            _ => items.push(PlanItem::manual(
+                it.path.clone(),
+                is_dir(&it.path) || it.totals.files != 1,
+                it.totals.bytes,
+                it.totals.files,
+                it.mtime,
+            )),
+        }
+    }
+    let mut plan = plan::build(items, PlanOptions::default());
+    for item in &mut plan.items {
+        item.mode = DeleteMode::Quarantine;
+    }
+    (Prepared { plan, jobs }, refused)
+}
+
 /// The paths "Clean finished sessions (safe only)" picks: every pre-selected item
 /// and pre-selected build output of worktrees that cannot be removed.
 #[must_use]

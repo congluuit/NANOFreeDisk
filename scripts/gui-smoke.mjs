@@ -913,6 +913,41 @@ try {
     const back = await invoke("activity_restore", { id: advOp.id });
     check("advice: restore brings the build output back", back.every?.((r) => r.status === "restored") && existsSync(join(advFixture, "proj", "target", "debug", "app.bin")), JSON.stringify(back));
   }
+  // "Delete anyway": the user may overrule the app's judgment, never a hard protection
+  const chatAgain = await invoke("advice_detail", { id: await invoke("find_path", { path: "proj\\.aider.chat.history.md" }) });
+  check("delete anyway: conversation history is a hard protection", chatAgain?.unit?.hard === true && chatAgain.overrideBlock === "hard", JSON.stringify(chatAgain?.overrideBlock));
+  const projAdv = await invoke("advice_detail", { id: await invoke("find_path", { path: "proj" }) });
+  check("delete anyway: a folder holding a chat log cannot go as a whole", projAdv?.overrideBlock === "contains-hard", JSON.stringify(projAdv?.overrideBlock));
+  const gitId = await invoke("find_path", { path: "proj\\.git" });
+  const gitAdv = await invoke("advice_detail", { id: gitId });
+  check("delete anyway: a project's .git is only the app's judgment", gitAdv?.unit?.verdict === "keep" && gitAdv.unit.hard === false && gitAdv.overrideBlock === null, JSON.stringify(gitAdv?.overrideBlock));
+  const refusedChat = await invoke("advice_override", { ids: [chatId], ack: true });
+  check("delete anyway refuses conversation history", refusedChat?.__error?.code === "nothing-to-clean" && existsSync(join(advFixture, "proj", ".aider.chat.history.md")), JSON.stringify(refusedChat));
+  const noAckOverride = await invoke("advice_override", { ids: [gitId], ack: false });
+  check("delete anyway needs the acknowledgement", noAckOverride?.__error?.code === "not-confirmed" && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(noAckOverride));
+  // the UI path: select .git, "Delete anyway…", tick, confirm
+  await nav("analyze");
+  await evaluate(`(() => { const r = [...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('proj')); r?.querySelector('.chev')?.click(); })()`);
+  for (let i = 0; i < 30 && !(await evaluate("[...document.querySelectorAll('.tree .row')].some((x) => x.innerText.trim().startsWith('.git'))")); i++) await sleep(100);
+  await evaluate(`[...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('.git'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
+  for (let i = 0; i < 30 && !(await evaluate("!!document.querySelector('[data-advice-action=override]')")); i++) await sleep(100);
+  check("details offer Delete anyway on what the app only judged", await evaluate("!!document.querySelector('[data-advice-action=override]')"));
+  await evaluate("document.querySelector('[data-advice-action=override]')?.click()");
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('[data-override-confirm]')")); i++) await sleep(100);
+  check("Delete anyway asks for an acknowledgement first", await evaluate("document.querySelector('[data-override-go]')?.disabled === true"));
+  await shot("2d-delete-anyway");
+  await evaluate("document.querySelector('[data-override-ack]')?.click()");
+  await sleep(150);
+  await evaluate("document.querySelector('[data-override-go]')?.click()");
+  for (let i = 0; i < 40 && existsSync(join(advFixture, "proj", ".git")); i++) await sleep(150);
+  check("delete anyway moves it to the quarantine", !existsSync(join(advFixture, "proj", ".git")) && existsSync(join(advFixture, "proj", ".aider.chat.history.md")));
+  const ovOp = (await invoke("activity_list", { limit: 5 })).find?.((o) => o.kind === "override");
+  if (ovOp) operations.push(ovOp.id);
+  check("activity lists the Delete anyway", ovOp?.restorable === 1, JSON.stringify(ovOp));
+  if (ovOp) {
+    const back = await invoke("activity_restore", { id: ovOp.id });
+    check("delete anyway can be undone", back.every?.((r) => r.status === "restored") && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(back));
+  }
   const healthAdv = await invoke("health");
   check("health uses the advice instead of Old & large", !healthAdv.findings?.some((f) => f.kind === "old-large"), JSON.stringify(healthAdv.findings?.map((f) => f.kind)));
   await invoke("advice_refresh", { rulesDir: null });

@@ -14,15 +14,20 @@ export const VERDICT_TOKEN: Record<Verdict, string> = {
   safe: "--risk-safe",
   caution: "--risk-caution",
   guide: "--risk-advanced",
-  keep: "--risk-protected",
+  // "better keep" is the app's suggestion (it may be wrong); red is kept for hard
+  // protections ([PROTECTED_TOKEN])
+  keep: "--tm-3",
   unknown: "--tm-other",
 };
+
+/** Hard protections (SafetyGate, conversation history): never deleted. */
+export const PROTECTED_TOKEN = "--risk-protected";
 
 export const VERDICT_ICON: Record<Verdict, string> = {
   safe: "check",
   caution: "alert",
-  guide: "shield",
-  keep: "lock",
+  guide: "zoom",
+  keep: "shield",
   unknown: "search",
 };
 
@@ -133,13 +138,19 @@ export function segments(t: ByVerdict | null | undefined): { verdict: Verdict; b
   return VERDICTS.filter((v) => t[v] > 0).map((v) => ({ verdict: v, bytes: t[v], share: t[v] / total }));
 }
 
-/** What the tree's badge shows: the unit's verdict, or (a mixed folder) "can free X". */
-export function badgeOf(a: NodeAdvice | undefined): { verdict: Verdict | null; partly: boolean } {
-  if (!a) return { verdict: null, partly: false };
-  if (a.verdict) return { verdict: a.verdict, partly: false };
-  if (a.reclaim > 0) return { verdict: null, partly: true };
+/** What the tree's badge shows: the unit's verdict (and whether it is a hard
+ * protection), or (a mixed folder) "can free X". */
+export function badgeOf(a: NodeAdvice | undefined): { verdict: Verdict | null; partly: boolean; hard: boolean } {
+  if (!a) return { verdict: null, partly: false, hard: false };
+  if (a.verdict) return { verdict: a.verdict, partly: false, hard: a.hard };
+  if (a.reclaim > 0) return { verdict: null, partly: true, hard: false };
   const only = VERDICTS.filter((v) => a.inside[v] > 0);
-  return { verdict: only.length === 1 ? only[0] : null, partly: false };
+  return { verdict: only.length === 1 ? only[0] : null, partly: false, hard: false };
+}
+
+/** Fluent key of a "Delete anyway" refusal (`advice-hard-<code>`). */
+export function hardKey(code: string): string {
+  return ["hard", "inside-hard", "contains-hard", "root"].includes(code) ? `advice-hard-${code}` : "advice-hard-other";
 }
 
 /** Where a non-runnable action leads: a view (and tab) of the app. */

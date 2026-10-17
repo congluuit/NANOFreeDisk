@@ -31,6 +31,16 @@ export interface ConfirmRequest {
   touched: number[];
 }
 
+/** "Delete anyway": what the user overrules the app on. */
+export interface OverrideRequest {
+  ids: number[];
+  rows: ConfirmRow[];
+  /** Why the app kept it. */
+  why: string;
+  blocked: string | null;
+  bytes: number;
+}
+
 export const advice = $state({
   summary: null as AdviceSummary | null,
   loading: false,
@@ -40,6 +50,8 @@ export const advice = $state({
   picksSeq: -1,
   /** Confirmation dialog open. */
   confirm: null as ConfirmRequest | null,
+  /** "Delete anyway" dialog open. */
+  override: null as OverrideRequest | null,
   running: false,
 });
 
@@ -114,6 +126,29 @@ export async function cleanAdvice(req: ConfirmRequest, caution: boolean): Promis
   } finally {
     advice.running = false;
     advice.confirm = null;
+    void loadAdvice();
+  }
+}
+
+/** "Delete anyway": move what the app kept out of the way (quarantine, or git for a
+ * clean worktree) after the user acknowledged it. */
+export async function overrideAdvice(req: OverrideRequest): Promise<void> {
+  if (!req.ids.length || advice.running) return;
+  advice.running = true;
+  try {
+    const out = await api.adviceOverride(req.ids, true);
+    const loc = intlLocale();
+    const op = out.operation;
+    toast(t("advice-override-done", { size: formatSize(op?.freed ?? 0, loc), count: formatCount((op?.done ?? 0) + (op?.partial ?? 0), loc) }), "ok");
+    const problems = (op?.skipped ?? 0) + (op?.failed ?? 0);
+    if (problems) toast(t("advice-done-problems", { count: problems }), "info");
+    if (out.skipped.length) toast(t("advice-override-skipped", { count: out.skipped.length }), "info");
+    await afterDelete(req.ids);
+  } catch (e) {
+    fail(e);
+  } finally {
+    advice.running = false;
+    advice.override = null;
     void loadAdvice();
   }
 }

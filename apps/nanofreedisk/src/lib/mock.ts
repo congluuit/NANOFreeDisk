@@ -466,7 +466,8 @@ function adviceNode(id: number): NodeAdvice {
     const x = unitOf[d] >= 0 ? units[unitOf[d]] : null;
     if (x && entries[d].kind === "file" && !entries[d].removed && actionable(x)) reclaim += entries[d].size;
   }
-  return { verdict: u?.verdict ?? null, reason: u?.reason ?? null, root: !!u && u.entry === id, inside, reclaim };
+  const hard = !!u && (u.reason === "system" || u.reason === "programs");
+  return { verdict: u?.verdict ?? null, reason: u?.reason ?? null, root: !!u && u.entry === id, hard, inside, reclaim };
 }
 
 function mockGroups() {
@@ -487,6 +488,8 @@ function mockGroups() {
       key, verdict: first.verdict, reason: first.reason, level: first.level, source: first.source, app: first.app, title: first.title,
       impact: first.impact, untouched: first.untouched, action: first.action, blocked: first.blocked, store: first.store, requiresClosed: [],
       bytes, recent: 0, files: sized.reduce((s, x) => s + x.files, 0), count: sized.length, selected: actionable && first.selected, actionable,
+      hard: first.reason === "system" || first.reason === "programs",
+      overridable: !actionable && first.reason !== "system" && first.reason !== "programs" && first.reason !== "explained",
       location: sized.length === 1 ? path(units[sized[0].i].entry).slice(3) : null, elsewhere: false,
       items: sized.slice(0, 20).map((x) => ({ id: units[x.i].entry, path: path(units[x.i].entry).slice(3), bytes: x.bytes, files: x.files, blocked: null })),
     };
@@ -515,12 +518,24 @@ const adviceHandlers: Record<string, (a: Record<string, any>) => unknown> = {
       .filter((p) => p.bytes > 0)
       .sort((a, b) => b.bytes - a.bytes)
       .slice(0, 8);
-    return { id, node: adviceNode(id), unit: u, group: null, unitPath: u && u.entry !== id ? path(u.entry).slice(3) : null, parts, enriched: true };
+    const node = adviceNode(id);
+    const overrideBlock = id === 0 ? "root" : node.hard ? (u && u.entry === id ? "hard" : "inside-hard") : u?.reason === "explained" ? "volume-root" : null;
+    return { id, node, unit: u ? { ...u, hard: node.hard } : null, group: null, unitPath: u && u.entry !== id ? path(u.entry).slice(3) : null, parts, enriched: true, overrideBlock };
   },
   advice_refresh: () => {
     buildAdvice();
   },
   advice_cancel: () => undefined,
+  advice_override: ({ ids }) => {
+    const before = rolled[0].size;
+    for (const id of ids as number[]) {
+      for (const d of descendants(id)) entries[d].removed = true;
+      entries[id].removed = true;
+    }
+    rollUp();
+    buildAdvice();
+    return { operation: { freed: before - rolled[0].size, done: (ids as number[]).length, partial: 0, skipped: 0, failed: 0, cancelled: false }, recycled: [], skipped: [] };
+  },
   advice_clean: ({ keys }) => {
     const groups = mockGroups();
     const ids: number[] = [];

@@ -4,7 +4,7 @@
   // action (clean by rule / quarantine / git, the official command, the guide, or the
   // Recycle Bin for what nothing knows about). Kept items get no delete button.
   import { api } from "../api";
-  import { actionTarget, bi, blockedKey, segments, titleOf, VERDICT_TOKEN } from "../advice";
+  import { actionTarget, bi, blockedKey, hardKey, PROTECTED_TOKEN, segments, titleOf, VERDICT_TOKEN } from "../advice";
   import { advice } from "../advice/state.svelte";
   import { dev } from "../devcache/state.svelte";
   import { formatSize } from "../format";
@@ -51,6 +51,24 @@
   const title = $derived(unit ? titleOf(unit, lang) : null);
   const runnable = $derived(!!unit && (unit.action === "clean" || unit.action === "quarantine" || unit.action === "ai-leftovers"));
   const actionable = $derived(!!unit && !unit.blocked && (unit.verdict === "safe" || unit.verdict === "caution") && (unit.level !== "advanced" || expert()));
+  // the app holds something back here: kept, guide only, or blocked (session, git…)
+  const heldBack = $derived(
+    unit ? !actionable && unit.verdict !== "unknown" : (info?.node.inside.keep ?? 0) + (info?.node.inside.guide ?? 0) > 0,
+  );
+  const canOverride = $derived(heldBack && info?.overrideBlock == null && detail.id !== rootId);
+
+  /** "Delete anyway": the user overrules the app's judgment on this entry. */
+  function askOverride() {
+    if (!info) return;
+    const label = title ? t(title.key, title.args) : detail.name;
+    advice.override = {
+      ids: [detail.id],
+      rows: [{ key: String(detail.id), verdict: unit?.verdict ?? "keep", label, location: detail.path, bytes: detail.onDisk, impact: unit ? bi(unit.impact, lang) : "" }],
+      why: unit ? bi(unit.impact, lang) : t("advice-details-mixed", { free: formatSize(reclaim, loc) }),
+      blocked: unit?.blocked ?? null,
+      bytes: detail.onDisk,
+    };
+  }
 
   /** Ask to clean this unit (`entry|id`) or everything inside this folder (`within|id`). */
   function clean(scope: "entry" | "within") {
@@ -102,10 +120,10 @@
 {#if !loaded}
   <p class="muted small">{t("advice-details-loading")}</p>
 {:else if info}
-  <section class="advice" data-advice-card data-verdict={verdict ?? "mixed"} style="--vc: var({VERDICT_TOKEN[verdict ?? 'unknown']})">
+  <section class="advice" data-advice-card data-verdict={verdict ?? "mixed"} style="--vc: var({unit?.hard ? PROTECTED_TOKEN : VERDICT_TOKEN[verdict ?? 'unknown']})">
     <div class="head">
       <span class="label muted small">{t("advice-details-title")}</span>
-      {#if verdict}<VerdictBadge {verdict} long />{/if}
+      {#if verdict}<VerdictBadge {verdict} long hard={unit?.hard ?? false} />{/if}
       {#if title}<strong class="ellipsis">{t(title.key, title.args)}</strong>{/if}
     </div>
     {#if unit}
@@ -174,7 +192,13 @@
       {#if unit && unit.action === "recycle-bin" && isRoot && actionable}
         <button class="btn danger-outline" data-advice-action="recycle-bin" onclick={() => askDelete([detail.id])} title={t("advice-action-hint-recycle-bin")}><Icon name="trash" size={16} />{t("advice-action-recycle-bin")}</button>
       {/if}
+      {#if canOverride}
+        <button class="btn danger-outline" data-advice-action="override" onclick={askOverride} title={t("advice-override-hint")}><Icon name="trash" size={16} />{t("advice-override")}</button>
+      {/if}
     </div>
+    {#if heldBack && info.overrideBlock && detail.id !== rootId}
+      <p class="hardnote small" data-hard-block={info.overrideBlock}><Icon name="lock" size={13} />{t(hardKey(info.overrideBlock), { code: info.overrideBlock })}</p>
+    {/if}
   </section>
 {/if}
 
@@ -275,6 +299,12 @@
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 4px;
+  }
+  .hardnote {
+    display: flex;
+    gap: 5px;
+    align-items: flex-start;
+    color: var(--risk-protected);
   }
   .danger-outline {
     border-color: var(--danger);

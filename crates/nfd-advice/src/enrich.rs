@@ -8,7 +8,7 @@ use nfd_core::RiskLevel;
 use nfd_core::model::ChildIndex;
 use nfd_core::scanner::ScanTree;
 use nfd_devtools::ai_leftovers::catalog::Kind;
-use nfd_devtools::ai_leftovers::{Item, Report};
+use nfd_devtools::ai_leftovers::{self, Item, Report};
 
 use crate::classify::{Class, class_of};
 use crate::text::{self, Text};
@@ -79,6 +79,10 @@ impl Advice {
                     store: None,
                     requires_closed: Vec::new(),
                     cutoff: None,
+                    hard: a
+                        .blocked
+                        .as_deref()
+                        .is_some_and(|b| !ai_leftovers::soft_block(b)),
                 };
                 let au = self.push(unit);
                 self.claim(ends, aid, au);
@@ -129,6 +133,7 @@ impl Advice {
                 store: None,
                 requires_closed: Vec::new(),
                 cutoff: None,
+                hard: false,
             });
             self.unit_of[id as usize] = u;
             changed = true;
@@ -188,6 +193,10 @@ fn ai_unit(id: u32, item: &Item) -> Unit {
         store: None,
         requires_closed: Vec::new(),
         cutoff: None,
+        hard: item
+            .blocked
+            .as_deref()
+            .is_some_and(|b| !ai_leftovers::soft_block(b)),
     }
 }
 
