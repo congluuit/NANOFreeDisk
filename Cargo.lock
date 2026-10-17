@@ -3205,6 +3205,7 @@ dependencies = [
  "nfd-core",
  "nfd-platform",
  "nfd-rules",
+ "proptest",
  "rayon",
  "serde",
  "serde_json",

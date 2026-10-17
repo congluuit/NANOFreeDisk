@@ -6,6 +6,7 @@
 //! `hw` / `sensors` / `ps`, and `monitor` (Phase 6). Watch and health commands arrive with their phases (see
 //! `docs/PLAN.md` §4.7).
 
+mod ai_leftovers;
 mod clean;
 mod devcache;
 mod diff;
@@ -63,6 +64,10 @@ enum Command {
     /// Git repositories and projects under a folder, with their build output; `clean`
     /// moves the build output to the quarantine.
     Repos(repos::ReposArgs),
+    /// What AI coding agents left behind per session (worktrees, scratchpads, browser
+    /// snapshots, test output…); `clean` removes the leftovers of finished sessions.
+    /// Conversation history is never touched.
+    AiLeftovers(ai_leftovers::AiArgs),
     /// Package managers' own cache cleanup commands (`npm cache clean`, `pnpm store
     /// prune`, …): list, or run one after confirming the exact command.
     Stores(stores::StoresArgs),
@@ -145,6 +150,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Toolchains(args) => repos::toolchains(&args),
         Command::Repos(args) => repos::repos(args),
         Command::Stores(args) => stores::run(args),
+        Command::AiLeftovers(args) => ai_leftovers::run(args),
         Command::Dupes(args) => dupes::run(args),
         Command::Quarantine { action } => quarantine::run(action),
         Command::Plan {

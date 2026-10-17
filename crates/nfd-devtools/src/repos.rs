@@ -226,7 +226,7 @@ fn last_commit(git_dir: &Path) -> Option<(i64, String)> {
 }
 
 /// The real git directory of a repository (`.git`, or where a `.git` file points).
-fn git_dir(repo: &Path) -> PathBuf {
+pub(crate) fn git_dir(repo: &Path) -> PathBuf {
     let dot = repo.join(".git");
     if dot.is_file() {
         if let Ok(text) = std::fs::read_to_string(&dot) {
@@ -260,8 +260,9 @@ fn git_lines(git: &Path, repo: &Path, args: &[&str]) -> Option<Vec<String>> {
     )
 }
 
-/// Generic artifacts git ignores, and artifacts holding tracked files.
-fn git_checks(git: &Path, repo: &Path, rels: &[String]) -> (Vec<String>, Vec<String>) {
+/// Generic artifacts git ignores, and artifacts holding tracked files (relative paths,
+/// `/`-separated).
+pub(crate) fn git_checks(git: &Path, repo: &Path, rels: &[String]) -> (Vec<String>, Vec<String>) {
     if rels.is_empty() {
         return (Vec::new(), Vec::new());
     }

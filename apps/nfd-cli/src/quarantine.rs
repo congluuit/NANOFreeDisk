@@ -192,6 +192,18 @@ pub fn execute_verified(
     (op, journal_ok)
 }
 
+/// Record an operation that did not go through the executor (git commands) in the
+/// undo journal and the audit log. Returns whether the journal was written.
+pub fn record(op: &Operation, db: Option<PathBuf>) -> bool {
+    let ok = crate::diff::open_history(db)
+        .ok()
+        .is_some_and(|mut h| h.record_operation(op).is_ok());
+    if let Some(dir) = nfd_history::audit::default_dir() {
+        let _ = nfd_history::audit::append(&dir, op);
+    }
+    ok
+}
+
 /// Problems, totals and the undo hint of an operation.
 pub fn print_outcome(op: &Operation, journal_ok: bool) {
     for r in op

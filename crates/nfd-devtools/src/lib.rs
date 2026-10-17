@@ -6,11 +6,13 @@
 //! * [`toolchains`] — installed SDKs / runtimes / editors and how to remove them (C2).
 //! * [`repos`] + [`artifacts`] — Repo Finder and the build artifact policy (C3, C9).
 //! * [`stores`] — package-store cleanup with the tools' own commands (C4).
+//! * [`ai_leftovers`] — what AI coding agents leave behind per session (C10).
 //!
 //! Nothing here deletes anything: modules either produce
 //! [`PlanItem`](nfd_core::plan::PlanItem)s for the Phase 3 Planner → SafetyGate →
 //! Executor → UndoJournal path, or describe a command the user may run.
 
+pub mod ai_leftovers;
 pub mod artifacts;
 pub mod devcache;
 pub mod fsutil;

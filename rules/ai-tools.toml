@@ -595,6 +595,18 @@ impact_vi       = "Phiên agent và Claude Code mở từ ứng dụng desktop, 
 verified_on     = 2026-10-16
 
 [[rule]]
+id              = "anthropic.claude-desktop.msix-sessions"
+vendor          = "Anthropic"
+app             = "Claude Desktop"
+category        = "ai-app"
+platform        = ["windows"]
+paths           = ["${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude-code-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/side-session-notes/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/IndexedDB/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/Local Storage/**"]
+level           = "protected"
+impact          = "Sessions, notes and chat state of the Microsoft Store build of the desktop app (its real AppData folder). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên, ghi chú và trạng thái chat của bản Microsoft Store của ứng dụng desktop (thư mục AppData thật của nó). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-17
+
+[[rule]]
 id              = "cursor.chats"
 vendor          = "Anysphere"
 app             = "Cursor"

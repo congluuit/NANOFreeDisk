@@ -26,6 +26,9 @@ pub struct RunOutput {
     pub timed_out: bool,
     pub cancelled: bool,
     pub millis: u64,
+    /// stdout was longer than the bytes kept (only its tail is in `stdout`).
+    #[serde(skip)]
+    pub truncated: bool,
 }
 
 impl RunOutput {
@@ -75,11 +78,12 @@ pub fn which_in(name: &str, path: OsString) -> Option<PathBuf> {
     None
 }
 
-fn tail(mut bytes: Vec<u8>) -> String {
-    if bytes.len() > KEEP {
-        bytes.drain(..bytes.len() - KEEP);
+fn tail(mut bytes: Vec<u8>, keep: usize) -> (String, bool) {
+    let cut = bytes.len() > keep;
+    if cut {
+        bytes.drain(..bytes.len() - keep);
     }
-    String::from_utf8_lossy(&bytes).into_owned()
+    (String::from_utf8_lossy(&bytes).into_owned(), cut)
 }
 
 fn reader(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
@@ -94,9 +98,9 @@ fn reader(mut pipe: impl Read + Send + 'static) -> mpsc::Receiver<Vec<u8>> {
 
 /// Output of a reader; a grandchild that still holds the pipe open is not waited for
 /// longer than `wait`.
-fn collect(rx: Option<mpsc::Receiver<Vec<u8>>>, wait: Duration) -> String {
+fn collect(rx: Option<mpsc::Receiver<Vec<u8>>>, wait: Duration, keep: usize) -> (String, bool) {
     rx.and_then(|r| r.recv_timeout(wait).ok())
-        .map(tail)
+        .map(|b| tail(b, keep))
         .unwrap_or_default()
 }
 
@@ -138,7 +142,8 @@ fn spawn(program: &Path, args: &[String], cwd: Option<&Path>) -> io::Result<Chil
     cmd.spawn()
 }
 
-/// Run `program args…` and wait at most `timeout`; `cancel` stops it early.
+/// Run `program args…` and wait at most `timeout`; `cancel` stops it early. The last
+/// 16 KB of stdout / stderr are kept.
 ///
 /// # Errors
 /// The program could not be started.
@@ -148,6 +153,22 @@ pub fn run(
     cwd: Option<&Path>,
     timeout: Duration,
     cancel: Option<&AtomicBool>,
+) -> io::Result<RunOutput> {
+    run_keeping(program, args, cwd, timeout, cancel, KEEP)
+}
+
+/// [`run`] keeping up to `keep` bytes of stdout (listings that must be complete:
+/// [`RunOutput::truncated`] says when they were not).
+///
+/// # Errors
+/// The program could not be started.
+pub fn run_keeping(
+    program: &Path,
+    args: &[String],
+    cwd: Option<&Path>,
+    timeout: Duration,
+    cancel: Option<&AtomicBool>,
+    keep: usize,
 ) -> io::Result<RunOutput> {
     let start = Instant::now();
     let mut child = spawn(program, args, cwd)?;
@@ -175,8 +196,8 @@ pub fn run(
     } else {
         Duration::from_secs(2)
     };
-    result.stdout = collect(out, wait);
-    result.stderr = collect(err, wait);
+    (result.stdout, result.truncated) = collect(out, wait, keep.max(KEEP));
+    result.stderr = collect(err, wait, KEEP).0;
     result.millis = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
     Ok(result)
 }

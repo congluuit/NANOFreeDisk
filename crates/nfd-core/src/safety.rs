@@ -102,6 +102,12 @@ pub const AGENT_HISTORY_TEMPLATES: &[&str] = &[
     "${APPDATA}/Claude/side-session-notes",
     "${APPDATA}/Claude/IndexedDB",
     "${APPDATA}/Claude/Local Storage",
+    // …and the same folders of the Microsoft Store (MSIX) build of the desktop app
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude-code-sessions",
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions",
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/side-session-notes",
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/IndexedDB",
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/Local Storage",
     // OpenAI Codex
     "${HOME}/.codex/sessions",
     "${HOME}/.codex/archived_sessions",
@@ -168,11 +174,33 @@ pub const AGENT_HISTORY_TEMPLATES: &[&str] = &[
 ];
 
 /// File and folder names that hold AI chat history wherever they are (inside
-/// projects): Aider's chat log and input history, SpecStory's saved chats.
+/// projects): Aider's chat log, input history and LLM log, SpecStory's saved chats.
 pub const AGENT_HISTORY_NAMES: &[&str] = &[
     ".aider.chat.history.md",
     ".aider.input.history",
+    ".aider.llm.history",
     ".specstory",
+];
+
+/// `(folder, name)` pairs that hold AI chat history wherever the folder is: the
+/// agents' home folders moved with `CODEX_HOME`, `CLAUDE_CONFIG_DIR`,
+/// `GEMINI_CLI_HOME`… keep their sessions under the same names (lower case).
+pub const AGENT_HISTORY_SUFFIXES: &[(&str, &str)] = &[
+    (".codex", "sessions"),
+    (".codex", "archived_sessions"),
+    (".codex", "history.jsonl"),
+    (".codex", "session_index.jsonl"),
+    (".codex", "memories"),
+    (".codex", "attachments"),
+    (".claude", "projects"),
+    (".claude", "sessions"),
+    (".claude", "history.jsonl"),
+    (".gemini", "tmp"),
+    (".gemini", "history"),
+    (".qwen", "tmp"),
+    (".continue", "sessions"),
+    (".copilot", "session-state"),
+    (".copilot", "history-session-state"),
 ];
 
 /// The user-data subset of [`PROTECTED_TEMPLATES`]: never touched by a rule, but the
@@ -408,10 +436,36 @@ pub(crate) fn wildcard(pattern: &str, name: &str) -> bool {
     p[pi..].iter().all(|&c| c == '*')
 }
 
-/// Name of an [`AGENT_HISTORY_NAMES`] entry among the components of `cand`.
-pub(crate) fn agent_history_name(cand: &str) -> Option<&'static str> {
-    cand.split('/')
-        .find_map(|part| AGENT_HISTORY_NAMES.iter().find(|n| **n == part).copied())
+/// The chat-history entry ([`AGENT_HISTORY_NAMES`], [`AGENT_HISTORY_SUFFIXES`]) a
+/// folder entry `name` inside a folder named `parent` is, if any (case-insensitive).
+/// Used on paths and by walkers that look for history *below* a folder.
+#[must_use]
+pub fn agent_history_entry(parent: Option<&str>, name: &str) -> Option<&'static str> {
+    let name = name.to_lowercase();
+    if let Some(n) = AGENT_HISTORY_NAMES.iter().find(|n| **n == name) {
+        return Some(n);
+    }
+    let parent = parent?.to_lowercase();
+    AGENT_HISTORY_SUFFIXES
+        .iter()
+        .find(|(p, n)| *p == parent && *n == name)
+        .map(|(p, _)| *p)
+}
+
+/// The chat-history entry among the components of `cand` ([`agent_history_entry`]),
+/// as `name` or `folder/name`.
+pub(crate) fn agent_history_name(cand: &str) -> Option<String> {
+    let parts: Vec<&str> = cand.split('/').collect();
+    parts.iter().enumerate().find_map(|(i, part)| {
+        let parent = i.checked_sub(1).map(|j| parts[j]);
+        agent_history_entry(parent, part).map(|hit| {
+            if hit.eq_ignore_ascii_case(part) {
+                hit.to_owned()
+            } else {
+                format!("{hit}/{part}")
+            }
+        })
+    })
 }
 
 /// Expand a `${VAR}/rest` template into its [`comparable`] form.

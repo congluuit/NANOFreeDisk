@@ -9,8 +9,8 @@ use nfd_core::RiskLevel;
 use nfd_core::exec::{self, ExecOptions, ItemStatus, QuarantineRoots};
 use nfd_core::plan::{CleanPlan, DeleteMode, PlanItem};
 use nfd_core::safety::{
-    AGENT_HISTORY_NAMES, AGENT_HISTORY_TEMPLATES, Blocked, LiveProbe, Origin, SafetyGate,
-    is_protected_template,
+    AGENT_HISTORY_NAMES, AGENT_HISTORY_SUFFIXES, AGENT_HISTORY_TEMPLATES, Blocked, LiveProbe,
+    Origin, SafetyGate, agent_history_entry, is_protected_template,
 };
 
 fn resolver(var: &str) -> Option<String> {
@@ -239,4 +239,53 @@ fn the_executor_never_moves_a_transcript() {
         assert_eq!(r.reason.as_deref(), Some("protected"), "{r:#?}");
     }
     assert!(transcript.exists() && rollout.exists() && chat.exists());
+}
+
+#[test]
+fn moved_agent_homes_keep_their_sessions_anywhere() {
+    let gate = SafetyGate::new(&resolver);
+    let base = if cfg!(windows) {
+        "D:/dev/app"
+    } else {
+        "/dev/app"
+    };
+    for (folder, name) in AGENT_HISTORY_SUFFIXES {
+        for path in [
+            format!("{base}/{folder}/{name}"),
+            format!("{base}/sub/{}/{}/x.jsonl", folder.to_uppercase(), name),
+        ] {
+            for origin in ORIGINS {
+                assert!(
+                    matches!(
+                        gate.check_path(Path::new(&path), origin),
+                        Err(Blocked::Protected { .. })
+                    ),
+                    "{path} ({origin:?})"
+                );
+            }
+        }
+        assert!(agent_history_entry(Some(folder), name).is_some());
+        assert!(is_protected_template(&format!(
+            "${{HOME}}/proj/{folder}/{name}/**"
+        )));
+    }
+    // the agents' project configuration and logs stay cleanable / pickable
+    for path in [
+        format!("{base}/.codex/log"),
+        format!("{base}/.codex/config.toml"),
+        format!("{base}/.claude/worktrees/x/target"),
+        format!("{base}/sessions"),
+        format!("{base}/tmp"),
+    ] {
+        assert_eq!(
+            gate.check_path(Path::new(&path), Origin::Manual),
+            Ok(()),
+            "{path}"
+        );
+    }
+    assert_eq!(agent_history_entry(None, "sessions"), None);
+    assert_eq!(
+        agent_history_entry(None, ".Aider.LLM.History"),
+        Some(".aider.llm.history")
+    );
 }
