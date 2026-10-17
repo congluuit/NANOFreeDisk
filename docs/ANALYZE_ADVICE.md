@@ -15,7 +15,7 @@ Phân tích giờ là **nơi duy nhất gợi ý dọn gì**: mỗi đường d�
 | 🟢 `safe` — Có thể xóa an toàn | tạo lại tự động / không còn cần | tích sẵn, một cú bấm |
 | 🟡 `caution` — Thận trọng | xóa được nhưng mất gì đó (lịch sử, tải lại, build lại lâu) | phải tự tích + xác nhận |
 | 🟠 `guide` — Chỉ hướng dẫn | chỉ công cụ của Windows / của tool thu nhỏ được an toàn | chỉ giải thích |
-| 🔴 `keep` — Không được xóa | Windows, chương trình, thông tin đăng nhập, lịch sử hội thoại, 🔒 Giữ, đang dùng | không có nút xóa |
+| 🔵 `keep` — Nên giữ (🔒 "Bảo vệ" khi là bảo vệ cứng) | ứng dụng khuyên giữ (đang dùng, chưa lưu nơi khác, thiết lập…); bảo vệ cứng = Windows, chương trình, thông tin đăng nhập, lịch sử hội thoại | đánh giá → **Vẫn xóa…** (§4b); bảo vệ cứng → không bao giờ |
 | ⚪ `unknown` — Chưa rõ | không có thông tin (kể cả ảnh/video cá nhân) | người dùng tự quyết (Thùng rác) |
 
 Rule mức 🟠 Advanced → `caution` + chỉ chọn được ở Expert.
@@ -54,6 +54,19 @@ Văn bản "nếu xóa…" / "không bị đụng tới" EN + VI nằm trong d�
 - Phân tích: tab **Gợi ý** mặc định bên phải (Treemap / Sunburst thành tab, treemap có "Màu theo đánh giá" và ít nhãn hơn); cây có cột Đánh giá + Giải phóng được; bảng chi tiết có thẻ "Có xóa được không?" (lý do, nếu xóa, không bị đụng tới, bên trong theo verdict, các phần lớn nhất, nút đúng: dọn theo quy tắc / quarantine / git / lệnh chính thức / Thùng rác; mục 🔴/🟠 không có nút xóa, thanh chọn của cây không cho tích).
 - Home "Giải phóng X GB — xem gợi ý" và Health Score (`reclaimable` thay `old-large`; `junk` chỉ tính rác ngoài thư mục đã quét) dùng cùng tổng.
 - Simple: nhóm 🟠 hiện nhưng khóa ("Chỉ ở chế độ Chuyên gia"), ẩn id rule; Expert: hiện nguồn, lệnh `nfd advise`.
+
+## 4b. "Vẫn xóa…" — người dùng có quyền quyết định cuối (0.1.1)
+
+Phần mềm có thể đánh giá sai. Ví dụ thật: các worktree trong `NANOFreeDisk\.claude` bị giữ (`session-live`) chỉ vì các phiên AI còn hoạt động trong 24 giờ, trong khi mọi commit đã được push — người dùng biết rõ hơn. Vì vậy tách hai loại "giữ lại":
+
+| Loại | Ví dụ | Vẫn xóa được? |
+|---|---|---|
+| **Đánh giá của ứng dụng** (badge xanh "Nên giữ", hoặc 🟡/🟠 bị chặn) | worktree của phiên còn chạy / còn mở, chưa merge, còn thay đổi chưa commit, revision Playwright mới nhất, rule 🔒, `.git` của dự án, thư mục "chỉ hướng dẫn" mà SafetyGate không cấm (Docker `wsl`, `AppData\Local\Packages`), ảnh cá nhân | **Có** — nút **Vẫn xóa…** (thẻ chi tiết, nhóm "Lớn nhưng nên giữ"), phải tick "Tôi hiểu" |
+| **Bảo vệ cứng** (badge đỏ 🔒 "Bảo vệ", `Unit::hard`) | Windows, Program Files, gốc ổ, thông tin đăng nhập, WinSxS / pagefile (SafetyGate từ chối), **lịch sử hội thoại AI** (PLAN §5.1), mọi thứ nằm trong chúng, thư mục chứa chúng | **Không** — giải thích lý do (`advice-hard-*`) |
+
+`Advice::override_block(id)`: `hard` (unit cứng), `inside-hard` (nằm trong unit cứng — kể cả khi là phần khoét như `Windows\Temp`), `contains-hard` (bên trong có unit cứng, vd. dự án có `.aider.chat.history.md`); Tauri thêm kiểm tra lexical của SafetyGate (`plan_delete`, `root`). Lý do chặn của AI leftovers chia mềm/cứng bằng `ai_leftovers::SOFT_BLOCKS` (mã lạ = cứng, an toàn mặc định).
+
+`advice_override(ids, ack)`: không có `ack` → từ chối; worktree đã đăng ký mà git cho gỡ (sạch, đã merge/push) → vẫn đi đường git (`ai_leftovers::prepare_forced`: tệp bị bỏ qua vào quarantine, `git worktree remove`, nhánh giữ nguyên); mọi thứ khác → **quarantine** nguyên khối (Planner → SafetyGate kiểm tra lại trên đĩa → Executor), Activity kind `override`, khôi phục 7 ngày. Không bao giờ xóa vĩnh viễn, không bao giờ `--force`.
 
 ## 5. CLI
 

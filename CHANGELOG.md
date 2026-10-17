@@ -6,9 +6,20 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-17
+
+### Added
+- **"Delete anyway…"** — the app's verdicts can be wrong (it kept Claude Code worktrees whose commits were already pushed, only because their sessions had been active that day), so what it keeps *by judgment* can now be overruled: Analyze → the details card, or a kept group in Suggestions → **Delete anyway…**, with the reason the app kept it and an explicit "I understand" tick. Nothing is deleted for good: a git worktree with nothing uncommitted is removed with `git worktree remove` (branch and commits stay), anything else moves to the quarantine (Cleanup history, kind *Deleted anyway*, restorable for 7 days). **Hard protections are not judgments and stay blocked** — Windows, Program Files, drive roots, credentials and AI conversation history (PLAN §5.1), and folders that hold them — and the app now says which one it is.
+- Badges tell the two apart: **Better keep** (blue, the app's suggestion) vs **🔒 Protected** (red, never deleted). `nfd advise` marks them too.
+
 ### Fixed
 - Installers: a failed install no longer leaves a broken entry behind. In the per-user NSIS package, a folder that needs administrator rights (Program Files) disables Next and says why; file errors no longer offer "Ignore"; a failed fresh install is rolled back (files, Apps & features entry, saved location); entries whose uninstaller is gone are cleaned up when either installer starts, so the next install can use another folder without a trip to Control Panel. The branded setup reports "cannot write to this folder" and rolls back the same way.
 - Release notes list the branded `NANOFreeDisk-Setup-<version>-x64.exe` first, in bold, as the recommended download.
+- Ending a process tree: a parent that exits on its own while it is being ended now counts as ended instead of failing with "access denied".
+- Suggestions: a safe group that appears when the same scan is judged again (after git checked the agent worktrees) is ticked like the others.
+
+### Changed
+- CI and the release check build and test on Windows only; releases publish only the Windows packages (each includes `nfd.exe`).
 
 ## [0.1.0] - 2026-10-17
 
@@ -106,5 +117,6 @@ First preview release for Windows 10/11 (x64): branded setup, MSI, classic EXE a
 - **Drive health's administrator reads use the shared elevated helper**: if Advanced sensors or the disk monitor's file detail already started it, there is no second UAC prompt (and the other way round); the helper stays until the app closes.
 - **AI conversation history is never deleted** (PLAN §5.1): the SafetyGate protects the session / conversation folders of Claude Code and Claude Desktop, Codex, Gemini CLI, Antigravity, Copilot (VS Code and CLI), Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Qwen Code, LM Studio and Jan, plus Aider chat logs and `.specstory` folders inside projects, against every origin — rules of any level, DevCache, Duplicates and items picked by hand — and refuses the folders that contain them. The rules that used to offer old transcripts (🟡 Claude Code / Codex sessions, Gemini CLI `tmp` and history, Copilot chat, Cursor and VS Code `workspaceStorage`, Windsurf Cascade, Continue, Cline, Roo Code) are now 🔴 Keep rules, and new Keep rules list the other agents' history in DevCache.
 
-[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/congluuit/NANOFreeDisk/releases/tag/v0.1.0

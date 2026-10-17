@@ -53,6 +53,7 @@
 | | Feature | Why |
 |---|---|---|
 | 💯 | **Health Score home page** (0–100) with three big buttons: *Free X GB safely now*, *What is eating my disk*, *Is my drive healthy* — every point lost has a **Fix** button | One number, three clicks, no manual |
+| ✋ | **You have the last word** — the app's "better keep" is a judgment and can be wrong, so **Delete anyway…** overrules it (to the quarantine, restorable for 7 days; a clean git worktree via `git worktree remove`). Only hard protections — Windows, programs, credentials, AI conversation history — can never be deleted, and the app says which one applies | Safe defaults without taking the decision away from you |
 | 💡 | **Suggestions instead of hunting** — Analyze lists what can go across the whole scan ("80 GB AI agent worktrees in `NANOFreeDisk\.claude`, 35 GB Rust build output…") and the big things to keep with why (Windows, conversation history, your photos), so you never have to search Junk files or Dev caches yourself ([`docs/ANALYZE_ADVICE.md`](docs/ANALYZE_ADVICE.md)) | "Can I delete this, and what happens if I do?" answered for every folder |
 | 🔀 | **"What changed?"** — diff two scans (today vs. last week): which folders grew, which files are new, how many GB | Answers "why did C: fill up by itself?" |
 | 📖 | **Folder Encyclopedia** — click any system/app folder (WinSxS, `AppData\Local\Packages`, `Package Cache`, `.ollama`…) and get *What is this? Can I delete it? What happens if I do?* Community-editable | Nobody has to Google again |
