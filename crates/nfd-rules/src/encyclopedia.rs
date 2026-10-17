@@ -399,6 +399,15 @@ impl Matcher {
         false
     }
 
+    /// The article for `path` itself only (no ancestor), if any.
+    #[must_use]
+    pub fn at(&self, path: &Path, exists: &impl Fn(&Path) -> bool) -> Option<&Article> {
+        let cur = norm(&path.to_string_lossy());
+        (0..self.articles.len())
+            .find(|&i| self.matches_here(i, &cur, exists))
+            .map(|i| &self.articles[i])
+    }
+
     /// The article for `path` itself, else for its nearest ancestor that has one.
     /// `exists` checks sibling markers (e.g. a Unity `Library` next to `Assets`).
     #[must_use]

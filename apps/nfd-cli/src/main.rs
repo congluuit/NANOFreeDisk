@@ -7,6 +7,7 @@
 //! `hw` / `sensors` / `ps`, and `monitor` (Phase 6). Watch and health commands arrive with their phases (see
 //! `docs/PLAN.md` §4.7).
 
+mod advise;
 mod ai_leftovers;
 mod browsers;
 mod clean;
@@ -52,6 +53,9 @@ enum Command {
     },
     /// Scan a path and report what uses the space (never follows junctions or symlinks).
     Scan(scan::ScanArgs),
+    /// What can be deleted, what needs care and what must stay — and what happens if
+    /// it is deleted — for a folder or drive (read-only; same verdicts as the app).
+    Advise(advise::AdviseArgs),
     /// What changed between two saved scans of a folder (`nfd scan --save`, or the app).
     Diff(diff::DiffArgs),
     /// Find junk with the rule packs and clean it (dry run unless --apply).
@@ -149,6 +153,7 @@ fn run() -> anyhow::Result<ExitCode> {
     match cli.command {
         Command::Rules { action } => rules(action),
         Command::Scan(args) => scan::run(args),
+        Command::Advise(args) => advise::run(args),
         Command::Diff(args) => diff::run(args),
         Command::Clean(args) => clean::run(args),
         Command::Devcache { action } => devcache::run(action),

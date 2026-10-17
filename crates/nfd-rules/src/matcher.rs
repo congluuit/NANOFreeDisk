@@ -422,6 +422,44 @@ impl Matcher {
             .collect()
     }
 
+    /// The literal base folder of every rule path (Protected rules included), with
+    /// the index of its rule: nothing outside these folders can match that rule. Lets
+    /// a caller that walks a whole scan (`nfd-advice`) ask
+    /// [`Self::rules_matching_among`] only the rules that may answer.
+    #[must_use]
+    pub fn bases(&self) -> Vec<(PathBuf, usize)> {
+        let mut out: Vec<(PathBuf, usize)> = self
+            .rules
+            .iter()
+            .enumerate()
+            .flat_map(|(i, r)| r.paths.iter().map(move |p| (p.base.clone(), i)))
+            .collect();
+        out.sort();
+        out.dedup();
+        out
+    }
+
+    /// The rule at `index` (as [`Self::bases`] numbers them).
+    #[must_use]
+    pub fn rule(&self, index: usize) -> Option<&Rule> {
+        self.rules.get(index).map(|r| &r.rule)
+    }
+
+    /// [`Self::rules_matching`] restricted to the rules at `indices`.
+    #[must_use]
+    pub fn rules_matching_among(&self, path: &Path, indices: &[usize]) -> Vec<(&Rule, &str)> {
+        let text = slash(path);
+        indices
+            .iter()
+            .filter_map(|&i| self.rules.get(i))
+            .filter(|r| {
+                r.paths.iter().any(|p| full_match(p, &text))
+                    && !r.exclude.iter().any(|e| e.is_match(&text))
+            })
+            .map(|r| (&r.rule, r.pack.as_str()))
+            .collect()
+    }
+
     /// The SafetyGate the matcher checks candidates with.
     #[must_use]
     pub const fn gate(&self) -> &SafetyGate {

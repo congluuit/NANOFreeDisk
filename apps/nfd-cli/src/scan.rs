@@ -54,6 +54,10 @@ pub struct ScanArgs {
     #[arg(long)]
     save: bool,
 
+    /// After the tables, what can be deleted and what must stay (same as `nfd advise`).
+    #[arg(long, conflicts_with_all = ["json", "csv"])]
+    advice: bool,
+
     /// History database used by --save [default: the desktop app's].
     #[arg(long, value_name = "FILE", requires = "save")]
     db: Option<PathBuf>,
@@ -79,7 +83,12 @@ pub fn run(args: ScanArgs) -> anyhow::Result<ExitCode> {
     } else {
         print_tables(&tree, args.top, args.min_size, &mut out)
     };
-    match written.and_then(|()| out.flush()) {
+    let written = written.and_then(|()| out.flush());
+    if args.advice && written.is_ok() {
+        drop(out);
+        crate::advise::print_for(&tree, &crate::advise::Options::default())?;
+    }
+    match written {
         // `nfd scan … | head` closing the pipe early is not an error.
         Err(e) if e.kind() != io::ErrorKind::BrokenPipe => Err(e).context("writing output"),
         _ => Ok(ExitCode::SUCCESS),
@@ -124,7 +133,12 @@ fn scan_with_progress(args: &ScanArgs) -> anyhow::Result<ScanTree> {
         exact_links: args.exact_links,
         ..ScanOptions::default()
     };
-    let path = args.path.clone();
+    scan_path(&args.path, options)
+}
+
+/// Scan `path` with a spinner on stderr (only when it is a terminal).
+pub(crate) fn scan_path(path: &Path, options: ScanOptions) -> anyhow::Result<ScanTree> {
+    let path = path.to_path_buf();
     let (tx, rx) = mpsc::channel();
     let worker = std::thread::Builder::new()
         .name("nfd-scan".into())
