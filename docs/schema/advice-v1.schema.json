@@ -1,0 +1,91 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/congluuit/NANOFreeDisk/blob/main/docs/schema/advice-v1.schema.json",
+  "title": "NANOFreeDisk advice (nanofreedisk.advice.v1)",
+  "description": "Output of `nfd advise <path> --json`: what can be deleted, what needs care, what only the proper tool may shrink and what must stay, for the scanned folder. Sizes in bytes (on disk), times in Unix seconds, paths relative to `root`. Read-only: nothing was deleted. Adding fields is backward compatible; renaming or removing one bumps the schema id.",
+  "type": "object",
+  "required": ["schema", "version", "root", "scannedAt", "totals", "reclaim", "enriched", "groups"],
+  "properties": {
+    "schema": { "const": "nanofreedisk.advice.v1" },
+    "version": { "type": "string", "description": "nfd version that wrote the report" },
+    "root": { "type": "string", "description": "Folder that was scanned" },
+    "scannedAt": { "type": "integer" },
+    "totals": { "$ref": "#/$defs/byVerdict", "description": "Every byte of the scan by verdict" },
+    "reclaim": { "$ref": "#/$defs/count", "description": "What actions that are not blocked can free (safe + caution)" },
+    "enriched": { "type": "boolean", "description": "AI agent worktrees were checked with git (false with --no-git)" },
+    "groups": { "type": "array", "items": { "$ref": "#/$defs/group" } }
+  },
+  "$defs": {
+    "count": { "type": "integer", "minimum": 0 },
+    "verdict": {
+      "enum": ["safe", "caution", "guide", "keep", "unknown"],
+      "description": "safe = recreated or not needed (one click); caution = something is lost, explicit tick; guide = only the proper system tool shrinks it; keep = never deleted (Windows, programs, credentials, conversation history, 🔒 Keep, still in use); unknown = nothing known, the user decides"
+    },
+    "byVerdict": {
+      "type": "object",
+      "required": ["safe", "caution", "guide", "keep", "unknown"],
+      "properties": {
+        "safe": { "$ref": "#/$defs/count" },
+        "caution": { "$ref": "#/$defs/count" },
+        "guide": { "$ref": "#/$defs/count" },
+        "keep": { "$ref": "#/$defs/count" },
+        "unknown": { "$ref": "#/$defs/count" }
+      }
+    },
+    "text": {
+      "type": "object",
+      "required": ["en", "vi"],
+      "properties": { "en": { "type": "string" }, "vi": { "type": "string" } }
+    },
+    "group": {
+      "type": "object",
+      "required": ["key", "verdict", "reason", "impact", "action", "bytes", "files", "count", "selected", "actionable", "elsewhere", "items"],
+      "properties": {
+        "key": { "type": "string", "description": "Stable for this advice; the app cleans by it" },
+        "verdict": { "$ref": "#/$defs/verdict" },
+        "reason": {
+          "enum": [
+            "rule", "keep-rule", "build-output", "agent-worktree", "agent-leftover", "agent-history",
+            "system", "programs", "protected", "personal", "explained", "old-large", "old-installer", "duplicate"
+          ]
+        },
+        "level": { "enum": ["safe", "caution", "advanced", "protected", null] },
+        "source": { "type": ["string", "null"], "description": "Rule id, build-output kind, encyclopedia article id, protected template, AI leftovers catalog id" },
+        "app": { "type": ["string", "null"] },
+        "title": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }] },
+        "impact": { "$ref": "#/$defs/text", "description": "If you delete this… (or why it stays)" },
+        "untouched": { "oneOf": [{ "$ref": "#/$defs/text" }, { "type": "null" }], "description": "What stays even when it is cleaned" },
+        "action": {
+          "enum": ["clean", "quarantine", "ai-leftovers", "recycle-bin", "store", "duplicates", "guide", "none"],
+          "description": "The right way: the rule's own walk into the quarantine, hand-picked into the quarantine, git worktree remove / quarantine, the Recycle Bin, the package manager's own command, the Duplicates view, only explained, nothing"
+        },
+        "blocked": { "type": ["string", "null"], "description": "Why not now: git-check, unverified, session-live, session-open, dirty, not-merged, not-removable, newest, a SafetyGate code…" },
+        "store": { "type": ["string", "null"], "description": "Official cleanup command id (nfd stores)" },
+        "requiresClosed": { "type": "array", "items": { "type": "string" } },
+        "bytes": { "$ref": "#/$defs/count", "description": "Bytes of the group's verdict" },
+        "recent": { "$ref": "#/$defs/count", "description": "Bytes the rule leaves for now (written too recently)" },
+        "files": { "$ref": "#/$defs/count" },
+        "count": { "$ref": "#/$defs/count", "description": "Folders / files in the group" },
+        "selected": { "type": "boolean", "description": "Pre-selected (safe, not blocked, not Advanced)" },
+        "actionable": { "type": "boolean" },
+        "location": { "type": ["string", "null"], "description": "Common folder of the group" },
+        "elsewhere": { "type": "boolean", "description": "Found by the rule packs outside the scanned folder (app only)" },
+        "items": {
+          "type": "array",
+          "description": "The biggest members (up to 20)",
+          "items": {
+            "type": "object",
+            "required": ["path", "bytes", "files"],
+            "properties": {
+              "id": { "type": ["integer", "null"] },
+              "path": { "type": "string" },
+              "bytes": { "$ref": "#/$defs/count" },
+              "files": { "$ref": "#/$defs/count" },
+              "blocked": { "type": ["string", "null"] }
+            }
+          }
+        }
+      }
+    }
+  }
+}

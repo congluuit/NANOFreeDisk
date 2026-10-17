@@ -595,6 +595,13 @@ NANOFreeDisk/
 - [x] UI "Nâng cao: dọn một trang web" trong pack Bộ đệm trình duyệt (mở sẵn ở Expert, nút mở ở Simple), tìm kiếm, nhóm theo trình duyệt → hồ sơ; CLI `nfd browsers sites|clean-site`; `locales/{en,vi}/{selection,browsers}.ftl`; `gui-smoke` (thanh chọn theo view id, fixture Chrome / Firefox tổng hợp, trình duyệt đang chạy bị từ chối, quarantine + restore từng byte)
 - [x] Đo trên máy tham chiếu (chỉ đọc, `nfd browsers sites`, bản release ~4 s): Chrome 5 831 entry blockfile đọc được và gán site, 19 562 entry Code Cache, 6 origin CacheStorage; Edge, Brave (đang chạy → chỉ liệt kê). Không dọn gì trên hồ sơ thật
 
+**Phân tích → Gợi ý: verdict cho mọi đường dẫn (A10)** (chi tiết: `docs/ANALYZE_ADVICE.md`; xong 2026-10-17)
+
+- [x] Crate `nfd-advice`: một lượt từ trên xuống trên arena của lần quét đánh dấu *unit* (rule pack + rule 🔒, build output C9 theo marker, worktree `.claude/worktrees` chờ git, lịch sử hội thoại, vị trí SafetyGate bảo vệ, bài Bách khoa "chỉ hướng dẫn", ảnh/video cá nhân, bộ cài cũ / tệp lớn cũ); bên trong unit chỉ quyền chặt hơn khoét ra; một lượt từ dưới lên cộng byte theo verdict (🟢 an toàn / 🟡 thận trọng / 🟠 chỉ hướng dẫn / 🔴 không được xóa / ⚪ chưa rõ) và phần giải phóng được; rule chỉ hỏi những rule có thư mục gốc chứa nút (`Matcher::bases`, `rules_matching_among`)
+- [x] Làm giàu: báo cáo AI leftovers (git + phiên: sạch & đã merge → 🟢 cả worktree, bẩn / chưa merge / `session-live` → 🔴), bản sao thừa của lần tìm trùng lặp; gợi ý gom nhóm + "rác ở nơi khác" từ lần quét Tệp rác; `prepare` → walk lại chính rule / quarantine / `ai_leftovers::prepare` / Thùng rác, 🟡 cần xác nhận, 🟠 cần Expert, không bao giờ đi nguyên khối thư mục chứa thứ phải giữ
+- [x] Ứng dụng: tính trong nền sau quét / xóa (`advice-ready`), tab **Gợi ý** mặc định trong Phân tích (Treemap / Sunburst thành tab, treemap màu theo verdict, ít nhãn), cột Đánh giá + Giải phóng được trong cây, thẻ "Có xóa được không?" trong bảng chi tiết, `advice_clean` (kind `advice`), Home + Health Score (`reclaimable`) dùng chung tổng; `locales/{en,vi}/advice.ftl`
+- [x] CLI `nfd advise <path> [--json] [--lang vi] [--no-git]` (schema `nanofreedisk.advice.v1`), `nfd scan --advice`; test engine (fixture `.claude` worktree, thư mục hội thoại, đường dẫn hệ thống), `advice.test.ts`, `gui-smoke`
+
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 
 1. *Lưu trữ*: crate mới `nfd-history` (SQLite qua `rusqlite` feature `bundled`; kiểm tra MSRV 1.85 và `cargo deny` trước khi thêm). DB ở `%LOCALAPPDATA%\NANOFreeDisk\history.db`. Bảng `scans(id, root, volume_serial, started_at, elapsed_ms, files, dirs, on_disk, free_bytes, total_bytes)`, `dir_sizes(scan_id, path_hash, path, depth, on_disk, files)` — **chỉ thư mục tới độ sâu 6 + mọi thư mục ≥ 50 MB** (không lưu từng tệp: 1 triệu tệp → vài chục nghìn dòng) — và `top_files(scan_id, path, on_disk, mtime)` top 500. Đường dẫn chuẩn hóa chữ thường + `path_hash` (xxh3) để join nhanh. Giữ 30 snapshot / root (cấu hình được), tự xóa cũ; có tùy chọn tắt lưu lịch sử.
@@ -632,6 +639,7 @@ Ký hiệu phiên bản: **①** = v1.0 · **②** = v1.x · **③** = v2+. Cộ
 | A7 | **Explorer integration**: context menu "Analyze with NANOFreeDisk", "Find duplicates here", "Compact folder" ①; cột **Folder size** trong Explorer (shell extension COM) ② | Dùng ngay nơi đang đứng | Đọc | ①/② |
 | A8 | Quét **profile user khác**, ổ mạng/UNC, VHD/VHDX mount, WSL rootfs (`\\wsl$`) | Admin/IT, dev dùng WSL | Đọc | ② |
 | A9 | **Age heatmap & extension sunburst**, "ai sở hữu" (owner SID → tên) | Nhìn là hiểu | Đọc | ① |
+| A10 | **Gợi ý trong Phân tích**: verdict cho mọi thư mục (xóa an toàn / thận trọng / chỉ hướng dẫn / không được xóa / chưa rõ), byte bên trong theo verdict, "nếu xóa…", cái gì không bị đụng tới, hành động đúng cách — gom từ mọi module (`nfd-advice`) | Một nơi duy nhất trả lời "xóa được không, xóa thì sao?" | Theo nguồn | ① |
 
 #### B. Clean+ & Privacy
 

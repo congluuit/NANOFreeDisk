@@ -28,10 +28,11 @@
   <a href="#-build-from-source">Build</a> ·
   <a href="#-roadmap">Roadmap</a> ·
   <a href="#-contributing">Contributing</a> ·
+  <a href="#-support-the-author">☕ Donate</a> ·
   <a href="docs/PLAN.md">Development plan (vi)</a>
 </p>
 
-> **Status:** 🚧 pre-alpha — the scanner, the `nfd scan` CLI and the first slice of the desktop app (drive overview, treemap/sunburst, search, safe Recycle Bin, EN/VI, themes) work; cleaning, DevCache, health and installers are next. Star/watch the repo to follow releases.
+> **Status:** 🧪 preview (v0.1.x) — everything below works on Windows 10/11: scan & **suggestions** (what can go, what must stay, and why), safe cleaning with quarantine and undo, DevCache + AI leftovers, duplicates, disk activity monitor, drive health, hardware sensors, EN/VI, themes, four installer packages. Still to come before 1.0: the NTFS MFT fast scan, code signing, profiles & onboarding. Star/watch the repo to follow releases — and [☕ buy the author a coffee](#-support-the-author) if it helps you.
 
 ---
 
@@ -39,19 +40,20 @@
 
 | | Pillar | What you get |
 |---|---|---|
-| 📊 | **Analyze** | Treemap, sunburst and sortable tree of any drive or folder. NTFS fast path reads the MFT (WizTree-class speed, ~1M files in seconds). Understands hardlinks, junctions, sparse/compressed files and OneDrive cloud placeholders, so numbers add up. |
+| 📊 | **Analyze** | Right after a scan: **what you can free and what must stay** — every folder gets a verdict (Safe / Needs care / Guide only / Keep / Unknown), the bytes inside it by verdict, "if you delete this…", what is not touched and a one-click right way (rule → quarantine, `git worktree remove`, the package manager's own command…). Treemap, sunburst and sortable tree of any drive or folder. NTFS fast path reads the MFT (WizTree-class speed, ~1M files in seconds). Understands hardlinks, junctions, sparse/compressed files and OneDrive cloud placeholders, so numbers add up. |
 | 🧹 | **Clean** | Rule-based junk detection: Windows temp & logs, crash dumps, thumbnail caches, browser caches, GPU shader caches, build artifacts (`target/`, `node_modules/`, `Library/`, `DerivedDataCache/`…). Every item carries a **risk level** and a plain-language **"if you delete this…"** note. |
 | 🤖 | **DevCache** | A curated catalog of the temp/cache/session folders left behind by **Claude Code, Claude Desktop, OpenAI Codex, ChatGPT, Gemini CLI, GitHub Copilot, Cursor, Windsurf, Cline/Roo, Continue, Zed, Kiro, Trae, Ollama, LM Studio, Hugging Face, VS Code, JetBrains, Visual Studio, npm/pnpm/pip/uv/cargo/go/NuGet/Gradle, Unity, Unreal, Godot**… Shows what is safe, what costs you history or a re-download, and what is deliberately kept (configs, credentials, memory). |
 | ⧉ | **Duplicates** | Size → partial BLAKE3 → full BLAKE3 pipeline with a hash cache, gentle on the PC (background I/O priority, one file at a time on hard disks), never downloads cloud placeholders. Identical files and identical folders; keep the oldest / newest / a preferred folder, send the rest to the Recycle Bin, or replace them with NTFS hard links / ReFS block clones — every copy re-checked byte for byte right before it moves, and everything restorable. |
 | 📈 | **Monitor** | Real-time disk activity: which process reads and writes, how fast, IOPS, each disk's throughput, queue length, latency and busy time, a 60 s / 10 min chart and a 24-hour history. Without admin rights it uses each process's I/O counters; with one UAC prompt a private kernel trace session (ETW) adds the files being read and written and **"who touched this folder?"**. Spots runaway loggers, indexers and sync clients (optional alert) — and never stops anything by itself. |
 | ♥ | **Health** | S.M.A.R.T. (ATA) and NVMe health log, temperature, wear, reallocated/pending sectors, TRIM status, dirty volumes, free-space trend with "disk full in N days" forecast, tray alerts, exportable report. |
-| ⌨ | **CLI** | Everything above as `nfd` for scripts and CI: `nfd scan`, `nfd clean --dry-run`, `nfd devcache`, `nfd dupes`, `nfd monitor`, `nfd health`. |
+| ⌨ | **CLI** | Everything above as `nfd` for scripts and CI: `nfd scan`, `nfd advise`, `nfd clean --dry-run`, `nfd devcache`, `nfd ai-leftovers`, `nfd dupes`, `nfd monitor`, `nfd health`. |
 
 ### Also in v1.0 — the "easy to use" layer
 
 | | Feature | Why |
 |---|---|---|
 | 💯 | **Health Score home page** (0–100) with three big buttons: *Free X GB safely now*, *What is eating my disk*, *Is my drive healthy* — every point lost has a **Fix** button | One number, three clicks, no manual |
+| 💡 | **Suggestions instead of hunting** — Analyze lists what can go across the whole scan ("80 GB AI agent worktrees in `NANOFreeDisk\.claude`, 35 GB Rust build output…") and the big things to keep with why (Windows, conversation history, your photos), so you never have to search Junk files or Dev caches yourself ([`docs/ANALYZE_ADVICE.md`](docs/ANALYZE_ADVICE.md)) | "Can I delete this, and what happens if I do?" answered for every folder |
 | 🔀 | **"What changed?"** — diff two scans (today vs. last week): which folders grew, which files are new, how many GB | Answers "why did C: fill up by itself?" |
 | 📖 | **Folder Encyclopedia** — click any system/app folder (WinSxS, `AppData\Local\Packages`, `Package Cache`, `.ollama`…) and get *What is this? Can I delete it? What happens if I do?* Community-editable | Nobody has to Google again |
 | 🗂 | **Repo Finder** — every git repo on the drive with `.git` vs build-artifact size (`target/`, `node_modules/`, `Library/`, `DerivedDataCache/`, `bin/obj`, `.venv`…), last commit, uncommitted changes; clean artifacts to quarantine, `git gc`, archive | npkill + cargo-sweep + Unity cleaner for every language, one screen |
@@ -163,7 +165,8 @@ Requirements: Windows 10 1809+ / Windows 11, x64. The GUI uses the WebView2 runt
 ## ⌨ CLI
 
 ```text
-nfd scan <path> [--fast] [--top N] [--json|--csv] [--min-size 10MB]
+nfd scan <path> [--fast] [--top N] [--json|--csv] [--min-size 10MB] [--advice]
+nfd advise <path> [--json] [--lang vi] [--no-git]   # what can go, what must stay, and why
 nfd clean [--rules ai-tools,browsers] [--level safe] [--dry-run] [--mode recycle|quarantine]
 nfd devcache [list|clean --vendor anthropic --level safe|unknown]
 nfd toolchains [--json]
@@ -191,11 +194,14 @@ nfd clean --rules ai-tools --level safe --dry-run
   <img src="docs/assets/architecture.svg" alt="Architecture" width="90%">
 </p>
 
-- **`nfd-core`** — entry arena, parallel scanner (+ NTFS MFT fast path), dedupe, the `Planner → SafetyGate → Executor` pipeline, quarantine and undo journal. UI-agnostic; 100 % test-coverage target for `safety`.
-- **`nfd-rules`** — TOML rule-pack loader, glob matcher, risk levels, DevCache catalog.
+- **`nfd-core`** — entry arena, parallel scanner (+ NTFS MFT fast path), the `Planner → SafetyGate → Executor` pipeline, quarantine, insights (Old & Large, empty folders, shortcuts), Health Score. UI-agnostic; 100 % test-coverage target for `safety`.
+- **`nfd-advice`** — the verdict of every path of a scan (safe / needs care / guide only / keep / unknown), bytes by verdict per folder, suggestions and the right action, combining everything below.
+- **`nfd-rules`** — TOML rule-pack loader, glob matcher, risk levels, Folder Encyclopedia.
+- **`nfd-devtools`** — DevCache grouping, unknown caches, toolchains, Repo Finder + build-artifact policy, package-store commands, AI leftovers (sessions, git worktrees).
+- **`nfd-dupes`** · **`nfd-browsers`** · **`nfd-history`** — duplicate finder (BLAKE3, hash cache), per-website browser caches, scan history + undo journal (SQLite).
 - **`nfd-monitor`** — ETW consumers, per-process I/O counters, PDH disk counters.
-- **`nfd-health`** — SMART/NVMe via IOCTL (NVMe without admin rights), CrystalDiskInfo-style verdicts, volume checks, alerts.
-- **`nfd-platform`** — the `Platform` trait; Windows implementation on `windows-rs` now, macOS/Linux later.
+- **`nfd-health`** · **`nfd-hwinfo`** · **`nfd-sensors`** · **`nfd-tasks`** · **`nfd-helper`** — SMART/NVMe via IOCTL (NVMe without admin rights), hardware inventory, sensors, processes, and the small elevated helper (one UAC prompt).
+- **`nfd-platform`** — Windows APIs on `windows-sys` (file info, Recycle Bin, Restart Manager, volumes, shell menu).
 - **`apps/nanofreedisk`** — Tauri 2 desktop app (Svelte UI). **`apps/nfd-cli`** — the CLI. **`apps/nanofreedisk-setup`** — the branded installer (egui).
 
 Full design, module specs, risk analysis and the phase-by-phase roadmap live in [`docs/PLAN.md`](docs/PLAN.md) (Vietnamese).
@@ -231,9 +237,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 cargo nextest run --workspace      # or: cargo test --workspace
 cargo deny check
 pnpm --dir apps/nanofreedisk check   # svelte-check (warnings fail)
-pnpm --dir apps/nanofreedisk test    # treemap/sunburst/theme unit tests
+pnpm --dir apps/nanofreedisk test    # UI unit tests (selection, advice, treemap, theme…)
 node scripts/check-locales.mjs       # EN and VI must have the same keys
+node scripts/gui-smoke.mjs           # end-to-end test of the built app on temporary fixtures
 ```
+
+NANOFreeDisk targets Windows only: CI lints and tests on Windows runners (formatting, licenses and the UI checks run on Linux runners because they do not depend on the OS).
 
 ---
 
@@ -246,13 +255,14 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 | 0 | Foundation: workspace, CI/CD, docs, DevCache catalog v0 | ✅ |
 | 1 | Core scanner (standard + MFT), `nfd scan` | 🟡 standard mode done, MFT next |
 | 2 | GUI: Health Score home, treemap/sunburst/list, instant search, "What changed?", Old & Large, Folder Encyclopedia, HTML report, Simple/Expert, Ctrl+K | ✅ done — plus age heatmap, empty folders / broken shortcuts / orphan junctions, Explorer menu, `nfd diff` / `nfd explain` ([demo](docs/assets/demo/nanofreedisk-demo.webp)) |
-| 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ⏳ |
+| 3 | SafetyGate, Planner/Executor, Quarantine, Time Machine undo log, scheduled 🟢 clean, Recycle Bin manager, junk & GPU rule packs | ✅ done — Clean view, Activity log with Restore, quarantine with 7-day purge, `nfd clean` / `nfd quarantine`; scheduled clean and the Recycle Bin manager remain for v1.x |
 | 4 | DevCache Manager UI, Repo Finder, Toolchain Inventory, vendor-CLI package cleanup, build-artifact policy, full rule packs | ✅ done — 123 DevCache rules, unknown-folder detection, `nfd devcache` / `toolchains` / `repos` / `stores` |
 | 5 | Duplicate finder | ✅ done — Duplicates view (files + folders), "Find duplicates here", replace with hard links / ReFS block clones, `nfd dupes` (size → partial → full BLAKE3, hash cache, keeper re-checked before every move) |
 | 6 | Disk Activity monitor (ETW), log-spam detector | ✅ done — Disk activity view (live chart, disks, processes → files, files being written, 24 h history, "Who touched this?"), I/O counters without admin or a private ETW session through the elevated helper, log-spam alert, tray "Pause monitor", `nfd monitor` |
 | 7 | Drive health (SMART / NVMe), free-space forecast, quotas & alerts, dump/log advisor | ✅ done — Health view + `nfd health` (NVMe health log without admin rights, ATA SMART / USB SAT through the elevated helper, CrystalDiskInfo-style verdict, volume checks, HTML/JSON report), Health Score, drive alerts and tray icon; quotas and the dump/log advisor remain for v1.x |
-| 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ⏳ |
-| 9 | **v1.0** release for Windows | ⏳ |
+| 8 | Installers (branded, MSI, NSIS, portable), updater, signing, profiles & onboarding, tray | ✅ installers, updater and tray done — code signing (SignPath) and profiles & onboarding pending |
+| — | **Suggestions in Analyze**: a verdict for every folder, "if you delete this…", one place that suggests what to clean | ✅ done — `nfd-advice`, `nfd advise` ([details](docs/ANALYZE_ADVICE.md)) |
+| 9 | **v1.0** release for Windows | ⏳ preview builds (v0.1.x) on the Releases page |
 
 ### v1.x — one or two modules per minor release
 
@@ -299,15 +309,18 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/); any
 
 **Lưu Đức Thành Công** — [nanodev.io.vn](https://nanodev.io.vn/) · [@congluuit](https://github.com/congluuit)
 
-If NANOFreeDisk saved you some gigabytes and you'd like to say thanks:
+## ☕ Support the author
 
-<details>
-<summary>☕ Donate (VietQR · BIDV)</summary>
+NANOFreeDisk is free, open source and made by one developer in Vietnam. If it saved you some gigabytes (or an evening of guessing which folder is safe to delete), a coffee keeps it going — thank you! The same QR code is in the app under **Settings → Support the author**.
+
+*Ủng hộ tác giả: quét mã VietQR bằng bất kỳ ứng dụng ngân hàng nào.*
+
 <p align="center">
   <img src="docs/assets/qr-bidv-donate.jpg" alt="VietQR BIDV — LUU DUC THANH CONG — 6503695458" width="280"><br>
-  <b>LUU DUC THANH CONG</b> · BIDV · <code>6503695458</code>
+  <b>LUU DUC THANH CONG</b> · BIDV (Ngân hàng TMCP Đầu tư và Phát triển Việt Nam) · <code>6503695458</code>
 </p>
-</details>
+
+Starring the repo, reporting a bug or contributing a cache rule helps just as much. ⭐
 
 ---
 
