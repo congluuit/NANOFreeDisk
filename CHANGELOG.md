@@ -6,6 +6,10 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+### Fixed
+- Installers: a failed install no longer leaves a broken entry behind. In the per-user NSIS package, a folder that needs administrator rights (Program Files) disables Next and says why; file errors no longer offer "Ignore"; a failed fresh install is rolled back (files, Apps & features entry, saved location); entries whose uninstaller is gone are cleaned up when either installer starts, so the next install can use another folder without a trip to Control Panel. The branded setup reports "cannot write to this folder" and rolls back the same way.
+- Release notes list the branded `NANOFreeDisk-Setup-<version>-x64.exe` first, in bold, as the recommended download.
+
 ## [0.1.0] - 2026-10-17
 
 First preview release for Windows 10/11 (x64): branded setup, MSI, classic EXE and portable packages, each with the `nfd` CLI.

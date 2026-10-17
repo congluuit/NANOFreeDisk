@@ -57,7 +57,7 @@ mod app {
 
     fn code_for(p: &Problem) -> i32 {
         match p {
-            Problem::NeedsAdmin => NEEDS_ADMIN,
+            Problem::NeedsAdmin | Problem::NotWritable(_) => NEEDS_ADMIN,
             Problem::Foreign(_) => FOREIGN,
             Problem::Running(_) => RUNNING,
             Problem::NoPayload | Problem::Io(_) => FAILED,
@@ -67,6 +67,9 @@ mod app {
     fn describe(t: &Text, p: &Problem) -> String {
         match p {
             Problem::NeedsAdmin => t.error_admin.to_owned(),
+            Problem::NotWritable(dir) => {
+                fill(t.error_not_writable, &[("dir", &dir.display().to_string())])
+            }
             Problem::NoPayload => t.error_payload.to_owned(),
             Problem::Running(names) => format!("{}\n\n{}", t.error_running, names.join(", ")),
             Problem::Foreign(e) => fill(

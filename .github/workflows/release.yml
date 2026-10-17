@@ -270,19 +270,10 @@ jobs:
           printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s minisign.key -m dist/SHA256SUMS.txt -t "NANOFreeDisk $VERSION"
           rm -f minisign.key
 
+      # the branded setup first and in bold: it is the recommended download
       - name: Release notes
         run: |
-          {
-            echo "## NANOFreeDisk $VERSION"
-            echo
-            echo "| Package | File |"
-            echo "|---|---|"
-            for f in dist/*; do b=$(basename "$f"); case "$b" in *.sig) continue;; esac; echo "| \`$b\` | [download](https://github.com/${{ github.repository }}/releases/download/v$VERSION/$b) |"; done
-            echo
-            echo "★ \`NANOFreeDisk-Setup-$VERSION-x64.exe\` is the recommended installer. Verify any file with \`SHA256SUMS.txt\` (and \`SHA256SUMS.txt.minisig\` when present)."
-            echo
-            cat RELEASE_NOTES.md 2>/dev/null || true
-          } > NOTES.md
+          bash scripts/release-notes.sh dist "$VERSION" "${{ github.repository }}" RELEASE_NOTES.md > NOTES.md
           cat NOTES.md
 
       - name: Create GitHub Release

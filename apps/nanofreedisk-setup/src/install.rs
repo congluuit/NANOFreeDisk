@@ -51,6 +51,9 @@ pub enum Step {
 #[derive(Debug, Clone)]
 pub enum Problem {
     NeedsAdmin,
+    /// The folder cannot be created or written by this user (Program Files for a
+    /// per-user install). Nothing is left behind.
+    NotWritable(PathBuf),
     NoPayload,
     Running(Vec<String>),
     Foreign(Existing),
@@ -109,16 +112,66 @@ pub fn existing() -> Vec<Existing> {
             }
             let marker: String = k.get_value(MARKER).unwrap_or_default();
             let dir: String = k.get_value("InstallLocation").unwrap_or_default();
+            let uninstall: String = k.get_value("UninstallString").unwrap_or_default();
+            if is_stale(&uninstall) {
+                continue;
+            }
             out.push(Existing {
                 ours: marker == "setup",
                 all_users,
                 dir: (!dir.is_empty()).then(|| PathBuf::from(dir.trim_matches('"'))),
                 version: k.get_value("DisplayVersion").unwrap_or_default(),
-                uninstall: k.get_value("UninstallString").unwrap_or_default(),
+                uninstall,
             });
         }
     }
     out
+}
+
+/// The uninstaller an `UninstallString` runs: the quoted path, or the text up to
+/// `.exe`. `None` for `msiexec` (the MSI keeps its own records).
+fn uninstaller_path(uninstall: &str) -> Option<PathBuf> {
+    let s = uninstall.trim();
+    let path = if let Some(rest) = s.strip_prefix('"') {
+        &rest[..rest.find('"')?]
+    } else {
+        let end = s.to_ascii_lowercase().find(".exe")? + 4;
+        &s[..end]
+    };
+    let file = Path::new(path)
+        .file_name()?
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    (file != "msiexec.exe").then(|| PathBuf::from(path))
+}
+
+/// An entry left by an install that failed half-way: its uninstaller is missing,
+/// so there is nothing to uninstall and it must not block a new install.
+fn is_stale(uninstall: &str) -> bool {
+    uninstaller_path(uninstall).is_some_and(|p| p.is_absolute() && !p.exists())
+}
+
+/// Delete stale NANOFreeDisk entries (see [`is_stale`]) from Apps & features. The
+/// machine-wide ones only go when this process is elevated.
+fn prune_stale() {
+    for all_users in [false, true] {
+        let Ok(arp) =
+            root(all_users).open_subkey_with_flags(ARP_ROOT, KEY_ALL_ACCESS | KEY_WOW64_64KEY)
+        else {
+            continue;
+        };
+        let names: Vec<String> = arp.enum_keys().flatten().collect();
+        for name in names {
+            let Ok(k) = arp.open_subkey(&name) else {
+                continue;
+            };
+            let display: String = k.get_value("DisplayName").unwrap_or_default();
+            let uninstall: String = k.get_value("UninstallString").unwrap_or_default();
+            if display == PRODUCT && is_stale(&uninstall) {
+                let _ = arp.delete_subkey_all(&name);
+            }
+        }
+    }
 }
 
 /// Bytes the payload will take on disk.
@@ -206,6 +259,7 @@ pub fn install(
     if plan.all_users && !sys::is_elevated() {
         return Err(Problem::NeedsAdmin);
     }
+    prune_stale();
     if let Some(other) = existing().into_iter().find(|e| !e.ours) {
         return Err(Problem::Foreign(other));
     }
@@ -213,14 +267,63 @@ pub fn install(
     if !running.is_empty() {
         return Err(Problem::Running(running));
     }
-    fs::create_dir_all(&plan.dir)?;
+
+    // what is there before: a failed install removes only what it added
+    let new_dirs = missing_dirs(&plan.dir);
+    let old = Manifest::read(&plan.dir);
+    let registered = ours().is_some();
+    let present: Vec<bool> = entries
+        .iter()
+        .map(|e| file_path(&plan.dir, &e.name).exists())
+        .collect();
+    let mut shortcuts = Vec::new();
+
+    let result = install_steps(plan, entries, old.as_ref(), &mut shortcuts, progress);
+    if result.is_err() {
+        if old.is_none() {
+            for (e, _) in entries.iter().zip(&present).filter(|(_, was)| !**was) {
+                remove_with_empty_parents(&file_path(&plan.dir, &e.name), &plan.dir);
+            }
+            let _ = fs::remove_file(plan.dir.join(MANIFEST));
+        }
+        if !registered {
+            let _ = root(plan.all_users).delete_subkey_all(ARP_KEY);
+            if plan.shell_menu {
+                let _ = nfd_platform::shell_menu::unregister();
+            }
+            for l in &shortcuts {
+                let _ = fs::remove_file(l);
+            }
+        }
+        // deepest first; only empty folders go
+        for d in &new_dirs {
+            let _ = fs::remove_dir(d);
+        }
+    }
+    result
+}
+
+fn install_steps(
+    plan: &Plan,
+    entries: &[Entry],
+    old: Option<&Manifest>,
+    shortcuts: &mut Vec<PathBuf>,
+    progress: &mut dyn FnMut(Step),
+) -> Result<Outcome, Problem> {
+    let denied = |e: io::Error| {
+        if e.kind() == io::ErrorKind::PermissionDenied {
+            Problem::NotWritable(plan.dir.clone())
+        } else {
+            Problem::from(e)
+        }
+    };
+    fs::create_dir_all(&plan.dir).map_err(denied)?;
 
     progress(Step::Files);
-    let old = Manifest::read(&plan.dir);
-    payload::extract(entries, &plan.dir)?;
+    payload::extract(entries, &plan.dir).map_err(denied)?;
     let files: Vec<String> = entries.iter().map(|e| e.name.clone()).collect();
     // an upgrade drops files the new version no longer ships
-    if let Some(old) = &old {
+    if let Some(old) = old {
         for f in old.files.iter().filter(|f| !files.contains(f)) {
             let _ = fs::remove_file(file_path(&plan.dir, f));
         }
@@ -255,11 +358,33 @@ pub fn install(
     progress(Step::Shortcuts);
     for link in shortcut_paths(plan.all_users, plan.start_menu, plan.desktop) {
         if sys::create_shortcut(&link, &exe, plan.lang.text().tagline).is_ok() {
+            shortcuts.push(link.clone());
             manifest.shortcuts.push(link);
         }
     }
     manifest.write(&plan.dir)?;
     Ok(outcome)
+}
+
+/// `dir` and its ancestors that do not exist yet, deepest first.
+fn missing_dirs(dir: &Path) -> Vec<PathBuf> {
+    dir.ancestors()
+        .take_while(|d| !d.as_os_str().is_empty() && !d.exists())
+        .map(Path::to_path_buf)
+        .collect()
+}
+
+/// Remove `path`, then its parent folders inside `dir` (not `dir` itself) while
+/// they are empty.
+fn remove_with_empty_parents(path: &Path, dir: &Path) {
+    let _ = fs::remove_file(path);
+    let mut parent = path.parent();
+    while let Some(p) = parent.filter(|p| p.starts_with(dir) && *p != dir) {
+        if fs::remove_dir(p).is_err() {
+            break;
+        }
+        parent = p.parent();
+    }
 }
 
 fn register(plan: &Plan, entries: &[Entry]) -> io::Result<()> {
@@ -341,15 +466,8 @@ pub fn uninstall(dir: &Path, remove_data: bool, silent: bool, lang: Lang) -> Res
             leftover_self = Some(path);
             continue;
         }
-        let _ = fs::remove_file(&path);
-        // empty parent folders inside the install folder (rules/…)
-        let mut parent = path.parent();
-        while let Some(p) = parent.filter(|p| p.starts_with(dir) && *p != dir) {
-            if fs::remove_dir(p).is_err() {
-                break;
-            }
-            parent = p.parent();
-        }
+        // and empty parent folders inside the install folder (rules/…)
+        remove_with_empty_parents(&path, dir);
     }
     let _ = fs::remove_file(dir.join(MANIFEST));
     let _ = root(manifest.all_users).delete_subkey_all(ARP_KEY);
@@ -388,4 +506,64 @@ fn delete_after_exit(exe: &Path, dir: &Path) {
         .current_dir(std::env::temp_dir())
         .creation_flags(CREATE_NO_WINDOW | DETACHED_PROCESS)
         .spawn();
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn uninstaller_path_reads_quoted_and_bare_commands() {
+        assert_eq!(
+            uninstaller_path(r#""C:\Program Files\NANOFreeDisk\uninstall.exe""#),
+            Some(PathBuf::from(
+                r"C:\Program Files\NANOFreeDisk\uninstall.exe"
+            ))
+        );
+        assert_eq!(
+            uninstaller_path(r#""D:\Apps\NANOFreeDisk\uninstall.exe" --uninstall"#),
+            Some(PathBuf::from(r"D:\Apps\NANOFreeDisk\uninstall.exe"))
+        );
+        assert_eq!(
+            uninstaller_path(r"C:\Apps\NFD\Uninstall.EXE /S"),
+            Some(PathBuf::from(r"C:\Apps\NFD\Uninstall.EXE"))
+        );
+        assert_eq!(uninstaller_path("MsiExec.exe /X{1234}"), None);
+        assert_eq!(uninstaller_path(""), None);
+        assert_eq!(uninstaller_path(r#""unterminated"#), None);
+    }
+
+    #[test]
+    fn stale_means_the_uninstaller_is_gone() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let un = dir.path().join("uninstall.exe");
+        fs::write(&un, b"x").expect("write");
+        assert!(!is_stale(&format!("\"{}\"", un.display())));
+        fs::remove_file(&un).expect("remove");
+        assert!(is_stale(&format!("\"{}\"", un.display())));
+        assert!(!is_stale("MsiExec.exe /X{1234}"));
+        assert!(!is_stale(""));
+    }
+
+    #[test]
+    fn missing_dirs_lists_only_what_does_not_exist_deepest_first() {
+        let base = tempfile::tempdir().expect("tmp");
+        let base = base.path();
+        let target = base.join("a").join("b");
+        assert_eq!(missing_dirs(&target), vec![target.clone(), base.join("a")]);
+        assert!(missing_dirs(base).is_empty());
+    }
+
+    #[test]
+    fn remove_with_empty_parents_stops_at_the_install_folder() {
+        let base = tempfile::tempdir().expect("tmp");
+        let base = base.path();
+        let file = base.join("rules").join("x").join("a.toml");
+        fs::create_dir_all(base.join("rules").join("x")).expect("mkdir");
+        fs::write(&file, b"").expect("write");
+        fs::write(base.join("keep.txt"), b"").expect("write");
+        remove_with_empty_parents(&file, base);
+        assert!(!base.join("rules").exists());
+        assert!(base.join("keep.txt").exists());
+    }
 }
