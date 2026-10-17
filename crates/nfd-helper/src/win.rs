@@ -315,7 +315,7 @@ impl Connection {
 
     /// Administrator-only drive reads (Phase 7).
     pub fn health(
-        &mut self,
+        &self,
         drives: &[(u32, bool)],
         volumes: &[String],
     ) -> Option<nfd_health::Privileged> {
@@ -332,17 +332,6 @@ impl Connection {
             _ => None,
         }
     }
-}
-
-/// Start the helper (one UAC prompt), do the drive reads, and close it again.
-pub fn health_once(
-    drives: &[(u32, bool)],
-    volumes: &[String],
-) -> Result<nfd_health::Privileged, StartError> {
-    let mut helper = start()?;
-    helper
-        .health(drives, volumes)
-        .ok_or(StartError::NoConnection)
 }
 
 /// The app's end: Advanced sensors from the helper, as a normal provider.

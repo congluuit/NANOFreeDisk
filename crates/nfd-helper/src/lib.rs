@@ -149,9 +149,7 @@ pub fn helper_args(args: &[String]) -> Option<(String, u32)> {
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{
-    Connection, RemoteMonitor, RemoteProvider, StartError, health_once, run_helper, start,
-};
+pub use win::{Connection, RemoteMonitor, RemoteProvider, StartError, run_helper, start};
 
 #[cfg(test)]
 mod tests {

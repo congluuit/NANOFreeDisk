@@ -58,7 +58,7 @@ Nhiệt độ không đổi trạng thái (như CrystalDiskInfo) mà là chỉ s
 ### 2.3 Elevated helper (dùng chung với Hardware Monitor)
 
 - `nfd-helper`: thêm `Request::Health` → `Response::Health { privileged }` (`nfd_health::Privileged`: bảng SMART + ngưỡng theo ổ, SAT theo ổ USB, dirty bit theo volume). Helper chỉ gọi các hàm đọc cố định của `nfd-health`; không có tham số lệnh từ app.
-- App: nút "Đọc đầy đủ (quyền quản trị)" trong view Health → khởi động helper qua UAC (`nfd_helper::start`), gửi `Health`, đóng helper. Kết quả gộp vào báo cáo (`HealthReport::merge`). Từ chối UAC → giữ kết quả không admin.
+- App: nút "Đọc đầy đủ (quyền quản trị)" trong view Health → dùng helper chung với Advanced sensors và Monitor (`hwmon::helper_connection`: helper đang chạy thì không hỏi UAC, chưa có thì khởi động qua UAC và giữ tới khi app đóng), gửi `Health`. Kết quả gộp vào báo cáo (`HealthReport::merge`). Từ chối UAC → giữ kết quả không admin.
 - CLI `nfd health` trong terminal admin đọc thẳng (không qua helper).
 
 ### 2.4 Health Score (F1)

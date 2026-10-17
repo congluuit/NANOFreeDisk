@@ -383,7 +383,7 @@ pub fn helper_connection(
     Ok(conn)
 }
 
-/// The helper slot, for the Monitor.
+/// The helper slot, shared by Advanced sensors, the Monitor and drive health.
 #[cfg(windows)]
 pub fn helper_slot(state: &HwState) -> Arc<Mutex<Option<nfd_helper::Connection>>> {
     state.helper.clone()

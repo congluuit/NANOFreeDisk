@@ -251,8 +251,10 @@ pub async fn health_report(app: AppHandle, refresh: bool) -> CmdResult<HealthRep
         .map_err(|e| err("internal", e))
 }
 
-/// Read SMART thresholds, USB bridges and the dirty bit through the elevated helper
-/// (one UAC prompt; the helper exits right after).
+/// Read SMART thresholds, USB bridges and the dirty bit through the elevated helper.
+/// The helper is the one Advanced sensors and the Monitor's file detail share: if it
+/// is already running there is no UAC prompt, otherwise this starts it (one prompt)
+/// and it stays available to them until the app exits.
 #[tauri::command]
 pub async fn health_elevated(app: AppHandle) -> CmdResult<HealthReport> {
     #[cfg(windows)]
@@ -261,10 +263,18 @@ pub async fn health_elevated(app: AppHandle) -> CmdResult<HealthReport> {
             let state = app.state::<HealthState>();
             let mut report = state.cached().unwrap_or_else(|| fresh(&app));
             let (drives, volumes) = nfd_health::privileged_targets(&report);
-            let p = nfd_helper::health_once(&drives, &volumes).map_err(|e| match e {
-                nfd_helper::StartError::Declined => err("declined", "UAC was declined"),
-                other => err("helper", format!("{other:?}")),
+            let hw = app.state::<super::hwmon::HwState>();
+            let slot = super::hwmon::helper_slot(&hw);
+            let conn = super::hwmon::helper_connection(&slot).map_err(|e| {
+                if e.code == "uac-declined" {
+                    err("declined", "UAC was declined")
+                } else {
+                    err("helper", e.message)
+                }
             })?;
+            let p = conn
+                .health(&drives, &volumes)
+                .ok_or_else(|| err("helper", "the elevated helper did not answer"))?;
             report.merge(&p);
             if let Ok(mut slot) = state.privileged.lock() {
                 *slot = Some(p);
