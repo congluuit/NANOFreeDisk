@@ -31,7 +31,7 @@ nfd-health = { path = "crates/nfd-health", version = "0.1.0" }
 
 # external
 serde = { version = "1", features = ["derive"] }
-toml = "0.9"
+toml = "1.1"
 thiserror = "2"
 anyhow = "1"
 clap = { version = "4", features = ["derive", "wrap_help"] }
