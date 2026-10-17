@@ -599,12 +599,12 @@ impl Ctx<'_> {
             (true, Some(g)) => worktrees::list(g, repo),
             _ => None,
         };
-        let wt_norm = norm(&wt_dir.to_string_lossy());
+        let wt_norm = worktrees::real_key(wt_dir);
         let mine: Vec<WtEntry> = registered
             .iter()
             .flatten()
             .filter(|e| {
-                let p = norm(&e.path.to_string_lossy());
+                let p = worktrees::real_key(&e.path);
                 within(&p, &wt_norm) && p != wt_norm
             })
             .cloned()
@@ -613,8 +613,8 @@ impl Ctx<'_> {
         names.sort();
         for name in names {
             let path = wt_dir.join(&name);
-            let key = norm(&path.to_string_lossy());
-            let reg = mine.iter().find(|e| norm(&e.path.to_string_lossy()) == key);
+            let key = worktrees::real_key(&path);
+            let reg = mine.iter().find(|e| worktrees::real_key(&e.path) == key);
             out.push(self.worktree(repo, entry, path, reg, registered.is_some()));
         }
         // registered worktrees whose folder is gone: `git worktree prune`

@@ -24,6 +24,28 @@ const REMOVE: Duration = Duration::from_secs(600);
 /// Bytes of a git listing kept (more = the listing is incomplete).
 const LISTING: usize = 8 << 20;
 
+/// Comparable form of a path the way git reports it: links resolved (`/var` →
+/// `/private/var` on macOS) and short 8.3 names made long (`RUNNER~1`), so a
+/// worktree is recognised whatever spelling the scan used. A path that is gone is
+/// resolved through its parent.
+#[must_use]
+pub fn real_key(path: &Path) -> String {
+    let real = std::fs::canonicalize(path).ok().or_else(|| {
+        let parent = std::fs::canonicalize(path.parent()?).ok()?;
+        Some(parent.join(path.file_name()?))
+    });
+    let text = real.map_or_else(
+        || path.to_string_lossy().into_owned(),
+        |r| r.to_string_lossy().into_owned(),
+    );
+    let text = text
+        .strip_prefix(r"\\?\UNC\")
+        .map(|rest| format!(r"\\{rest}"))
+        .or_else(|| text.strip_prefix(r"\\?\").map(str::to_owned))
+        .unwrap_or(text);
+    norm(&text)
+}
+
 /// One entry of `git worktree list --porcelain`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WtEntry {
@@ -312,11 +334,8 @@ pub fn recheck(git: &Path, job: &WorktreeJob) -> Option<&'static str> {
     let Some(entries) = list(git, &job.repo) else {
         return Some("git-failed");
     };
-    let want = norm(&job.path.to_string_lossy());
-    let Some(entry) = entries
-        .iter()
-        .find(|e| norm(&e.path.to_string_lossy()) == want)
-    else {
+    let want = real_key(&job.path);
+    let Some(entry) = entries.iter().find(|e| real_key(&e.path) == want) else {
         return Some("not-a-worktree");
     };
     if job.prune_only {
