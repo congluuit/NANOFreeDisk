@@ -232,6 +232,7 @@ verified_on = 2026-10-16
 - Nhóm theo **vendor** → **app** → **thư mục**, mỗi dòng hiện: kích thước, số file, lần sửa cuối, mức rủi ro, **"Nếu xóa thì…"**, app cần đóng (và trạng thái đang chạy hay không), nút *Mở thư mục* / *Thêm vào plan*.
 - Nút **"Dọn an toàn (chỉ 🟢)"** một chạm cho toàn bộ vendor.
 - Hiển thị **"Giữ lại gì"**: config/auth/settings được đánh dấu 🔒 Keep để người dùng thấy app đã cố tình bỏ qua.
+- Tab **AI leftovers** (C10, `docs/AI_LEFTOVERS.md`): leftover của AI agent theo dự án → công cụ → phiên; hội thoại không bao giờ bị xóa.
 - Phát hiện **thư mục lạ** trong `%USERPROFILE%` / `%APPDATA%` / `%LOCALAPPDATA%` có pattern cache/session/logs mà chưa có rule → gắn 🟡 "Chưa xác minh" + link đóng góp rule.
 - Có thể **đặt lịch** / nhắc khi vendor vượt ngưỡng (ví dụ `.ollama/models` > 50 GB).
 
@@ -575,6 +576,14 @@ NANOFreeDisk/
 - [ ] **VM Win10/11 sạch chưa kiểm** (không có VM) — người dùng chạy `scripts/smoke-test.ps1` trên VM; WebView2 bootstrap chỉ kiểm được trên máy thiếu WebView2
 - [ ] Ký số: chờ SignPath Foundation (bước ký trong `release.yml` tự bỏ qua khi chưa có secret); đưa khóa updater lên GitHub (`gh secret set`, xem `docs/PHASE8_INSTALLERS.md` §2.5)
 
+**AI Leftovers (C10)** (chi tiết: `docs/AI_LEFTOVERS.md`; 4 lát cắt, bắt đầu 2026-10-17)
+
+- [ ] Catalog `nfd_devtools::ai_leftovers` (worktree Claude Code, scratchpad `%TEMP%\claude\<dự án>\<phiên>`, `.playwright-mcp`, `.agent\{screenshots,tmp,logs}`, `.codex\log`, `.aider.tags.cache.v*`, `test-results` / `playwright-report` / `screenshots` / `scratch` chỉ khi git xác nhận, revision Playwright cũ — giữ bản mới nhất), `impact` EN + VI, `verified_on`; SafetyGate: `.aider.llm.history`, cặp `AGENT_HISTORY_SUFFIXES` (`.codex/sessions`… ở mọi nơi), đường dẫn MSIX của Claude desktop, kiểm tra con cháu `contains-history`
+- [ ] Nhận diện phiên: transcript Claude Code (`~/.claude/projects/*/*.jsonl`), session của desktop app (tiêu đề, hoạt động cuối, đã archive chưa), rollout Codex; "từ phiên X, N ngày trước"; phiên còn mở / hoạt động < 7 ngày → liệt kê, không chọn sẵn
+- [ ] Worktree: `git worktree list --porcelain`; chỉ `git worktree remove` + `prune` khi sạch và nhánh đã merge / push, tệp bị bỏ qua vào Quarantine trước, kiểm tra lại ngay trước khi gỡ; ngược lại 🟡 + chỉ dọn build output (C9); không bao giờ xóa nhánh; Activity (kind `command`) + audit
+- [ ] Tab **AI leftovers** trong Cache lập trình (dự án → công cụ → phiên), nút "Dọn phiên đã xong (chỉ an toàn)", Health Score `ai-leftovers`, gợi ý Home, `nfd ai-leftovers [list|clean] [--apply] [--json]`, `locales/{en,vi}/ai-leftovers.ftl`, `gui-smoke`
+- [ ] Test: đường dẫn hội thoại của mọi công cụ không bao giờ vào plan (proptest + fixture), worktree bẩn không bao giờ bị gỡ, thư mục git theo dõi không bao giờ đề xuất, leftover của phiên đang hoạt động không bao giờ chọn sẵn
+
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 
 1. *Lưu trữ*: crate mới `nfd-history` (SQLite qua `rusqlite` feature `bundled`; kiểm tra MSRV 1.85 và `cargo deny` trước khi thêm). DB ở `%LOCALAPPDATA%\NANOFreeDisk\history.db`. Bảng `scans(id, root, volume_serial, started_at, elapsed_ms, files, dirs, on_disk, free_bytes, total_bytes)`, `dir_sizes(scan_id, path_hash, path, depth, on_disk, files)` — **chỉ thư mục tới độ sâu 6 + mọi thư mục ≥ 50 MB** (không lưu từng tệp: 1 triệu tệp → vài chục nghìn dòng) — và `top_files(scan_id, path, on_disk, mtime)` top 500. Đường dẫn chuẩn hóa chữ thường + `path_hash` (xxh3) để join nhanh. Giữ 30 snapshot / root (cấu hình được), tự xóa cũ; có tùy chọn tắt lưu lịch sử.
@@ -640,6 +649,7 @@ Ký hiệu phiên bản: **①** = v1.0 · **②** = v1.x · **③** = v2+. Cộ
 | C7 | **IDE workspace hygiene**: VS Code/Cursor/JetBrains `workspaceStorage` cho project đã xóa, extension không dùng 90 ngày, log cũ | IDE nhanh hơn | 🟢/🟡 | ② |
 | C8 | **Log-spam detector** (trong Monitor): tiến trình ghi > X MB/phút liên tục, file log > 1 GB đang mở — ✅ Phase 6 | Bắt thủ phạm ghi ổ | Đọc | ① |
 | C9 | **Build artifact policy**: rule theo marker file (`Cargo.toml`, `package.json`, `.uproject`, `ProjectSettings/`), tùy chọn "giữ artifact repo mở trong 7 ngày gần nhất" | Không xóa nhầm project đang làm | 🟡 | ① |
+| C10 | **AI Leftovers** (`docs/AI_LEFTOVERS.md`): rác theo phiên của AI coding agent — worktree `.claude/worktrees` (chỉ `git worktree remove` khi sạch + đã merge/push), scratchpad Temp theo phiên, `.playwright-mcp`, ảnh chụp/tmp của agent, revision Playwright cũ; gán về phiên (tiêu đề, N ngày trước), phiên còn mở / < 7 ngày không chọn sẵn; hội thoại luôn 🔒 | Thời AI, rác nằm trong dự án và Temp theo từng phiên — người dùng không biết cái nào an toàn | 🟡 | ① |
 
 #### D. Games & Media
 
