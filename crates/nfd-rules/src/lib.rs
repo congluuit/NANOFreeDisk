@@ -62,6 +62,12 @@ pub struct Rule {
     pub regenerates: bool,
     #[serde(default)]
     pub min_age_days: u32,
+    /// Versioned tool folders (`chromium-1248`, `ffmpeg-1013`): only older revisions
+    /// are offered — of the `<name>-<number>` folders next to each other on disk, the
+    /// highest number of each name stays, and anything not named like a revision is
+    /// never offered ([`revision_of`]).
+    #[serde(default)]
+    pub keep_newest: bool,
     #[serde(default)]
     pub requires_closed: Vec<String>,
     pub impact: String,
@@ -71,6 +77,28 @@ pub struct Rule {
     #[serde(default)]
     pub docs: Option<String>,
     pub verified_on: toml::value::Datetime,
+}
+
+/// `(name, revision)` of a versioned tool folder (`chromium_headless_shell-1248` →
+/// `("chromium_headless_shell", 1248)`); `None` for anything else, including the
+/// signed-in browser profiles of Playwright MCP (`mcp-chrome-…`) and hidden folders.
+#[must_use]
+pub fn revision_of(name: &str) -> Option<(String, u64)> {
+    let lower = name.to_lowercase();
+    if lower.starts_with("mcp-") || lower.starts_with('.') {
+        return None;
+    }
+    let (base, rev) = lower.rsplit_once('-')?;
+    let ok = !base.is_empty()
+        && base
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
+        && !rev.is_empty()
+        && rev.chars().all(|c| c.is_ascii_digit());
+    if !ok {
+        return None;
+    }
+    Some((base.to_owned(), rev.parse().ok()?))
 }
 
 fn default_platforms() -> Vec<String> {

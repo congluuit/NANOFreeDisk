@@ -122,6 +122,7 @@ fn finds_project_temp_and_browser_leftovers_and_keeps_history() {
         10,
     );
     write(&home.join("temp/claude/bash-edit-diff/123-456/a.diff"), 10);
+    write(&home.join("temp/claude/scr/notes.txt"), 10);
 
     let pw = home.join("ms-playwright");
     for d in [
@@ -168,6 +169,14 @@ fn finds_project_temp_and_browser_leftovers_and_keeps_history() {
             .is_none()
     );
     assert!(item(&r, "claude/bash-edit-diff").selected);
+    let odd = item(&r, "claude/scr");
+    assert_eq!(
+        odd.level,
+        RiskLevel::Caution,
+        "not Claude Code's own folder"
+    );
+    assert!(!odd.selected);
+    assert!(is_claude_temp_name("D--Working-app") && is_claude_temp_name("-home-me"));
     assert!(is_session_id("3f84adc8-0277-448e-b6ab-422b34ca8709"));
     assert!(!is_session_id("bash-edit-diff"));
 
@@ -573,4 +582,38 @@ fn a_recent_session_keeps_its_worktree() {
     assert_eq!(it.keep, Some("session-open"));
     assert!(!it.selected);
     assert!(preselected(&r).iter().all(|p| !p.starts_with(&wt)));
+}
+
+#[test]
+fn a_live_session_blocks_its_worktree_and_scratchpad() {
+    let Some(git) = Git::new() else { return };
+    let dir = tempfile::tempdir().expect("tmp");
+    let home = dir.path();
+    let repo = repo(&git, home);
+    let wt = add_worktree(&git, &repo, "live");
+    write_text(&wt.join("wip.rs"), "work in progress");
+    let id = "0f0f0f0f-0000-4000-8000-00000000000f";
+    transcript(home, id, &wt, "Working right now");
+    write(
+        &home.join(format!("temp/claude/D--live/{id}/scratchpad/x")),
+        10,
+    );
+    let mut src = sources(home);
+    src.not_projects.clear();
+    let now = Options {
+        now: exec::unix_now(),
+        ..Options::default()
+    };
+    let r = scan(&now, &src, Some(&git.0), &gate(), None);
+    let w = item(&r, ".claude/worktrees/live");
+    assert_eq!(w.blocked.as_deref(), Some("session-live"));
+    assert!(
+        w.worktree.as_ref().expect("wt").artifacts.is_empty(),
+        "not even its build output"
+    );
+    let t = item(&r, &format!("claude/D--live/{id}"));
+    assert_eq!(t.blocked.as_deref(), Some("session-live"));
+    // even when picked by hand
+    let prepared = prepare(&r, &[wt.clone(), t.path.clone()]);
+    assert!(prepared.jobs.is_empty() && prepared.plan.items.is_empty());
 }

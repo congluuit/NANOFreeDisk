@@ -56,6 +56,7 @@ reason-locked = Worktree đang bị khóa.
 reason-too-many-ignored = Quá nhiều tệp bị bỏ qua để liệt kê hết.
 reason-foreign-worktree = Worktree của một repository khác.
 reason-ignored-left = Một số tệp bị bỏ qua không chuyển được vào quarantine nên git không gỡ worktree.
+reason-session-live = Phiên của nó hoạt động trong 24 giờ qua và có thể vẫn đang làm việc: không động tới.
 reason-not-a-worktree = git không còn liệt kê nó là worktree.
 
 activity-kind-ai-leftovers = Đã dọn rác của AI

@@ -507,6 +507,12 @@ impl Ctx<'_> {
         i64::from(self.opts.keep_recent_days) * 86_400
     }
 
+    /// The session may still be working: active in the last [`LIVE_HOURS`]. Its
+    /// leftovers cannot even be ticked by hand.
+    fn live(&self, session: Option<&SessionRef>) -> bool {
+        session.is_some_and(|s| self.opts.now - s.last_active < LIVE_HOURS * 3600)
+    }
+
     /// Why a leftover touched by `session` and last written at `newest` is kept.
     fn keep(&self, session: Option<&SessionRef>, newest: i64) -> Option<&'static str> {
         match session {
@@ -528,7 +534,9 @@ impl Ctx<'_> {
         m: &Measure,
         session: Option<SessionRef>,
     ) -> Item {
-        let blocked = refuse(self.gate, &path, m);
+        let blocked = refuse(self.gate, &path, m).or_else(|| {
+            (self.live(session.as_ref()) || in_use_here(&path)).then(|| "session-live".to_owned())
+        });
         let keep = self.keep(session.as_ref(), m.totals.newest.max(mtime(&path)));
         Item {
             mtime: mtime(&path),
@@ -751,6 +759,12 @@ impl Ctx<'_> {
         if refused.is_some() {
             blocked = refused;
         }
+        // the worktree of a session that may still be working (this one included)
+        // is never touched, not even its build output
+        let live = self.live(session.as_ref()) || in_use_here(&path);
+        if live {
+            blocked = Some("session-live".into());
+        }
         if reg.is_some() && blocked.is_none() {
             level = RiskLevel::Safe;
             wt.removable = true;
@@ -809,10 +823,16 @@ impl Ctx<'_> {
                 .filter(|n| is_session_id(n))
                 .collect();
             if ids.is_empty() {
-                // a tool folder without sessions (`bash-edit-diff`): one item
+                // a folder without sessions: Claude Code's own (`bash-edit-diff`, a
+                // project's folder) is one item; anything else someone put there is
+                // only offered as 🟡
                 let path = temp.join(&project);
                 let m = measure(&path, self.opts.max_entries);
-                out.push(self.item(entry, path, format!("claude/{project}"), None, &m, None));
+                let mut it = self.item(entry, path, format!("claude/{project}"), None, &m, None);
+                if !is_claude_temp_name(&project) {
+                    it.level = RiskLevel::Caution;
+                }
+                out.push(it);
                 continue;
             }
             for id in ids {
@@ -859,6 +879,28 @@ impl Ctx<'_> {
     }
 }
 
+/// Leftovers of a session active this recently are blocked (it may still be working).
+pub const LIVE_HOURS: i64 = 24;
+
+/// `true` when this process works inside `path` (its current folder or its program).
+fn in_use_here(path: &Path) -> bool {
+    let key = worktrees::real_key(path);
+    [std::env::current_dir().ok(), std::env::current_exe().ok()]
+        .into_iter()
+        .flatten()
+        .any(|p| within(&worktrees::real_key(&p), &key))
+}
+
+/// Folders Claude Code itself makes in `%TEMP%\claude`: a project's folder (its
+/// path encoded, `D--Work-app`, `-home-me-app`) or a tool folder it is known to use.
+#[must_use]
+pub fn is_claude_temp_name(name: &str) -> bool {
+    let b = name.as_bytes();
+    (b.len() > 3 && b[0].is_ascii_alphabetic() && b[1] == b'-' && b[2] == b'-')
+        || name.starts_with('-')
+        || ["bash-edit-diff"].contains(&name)
+}
+
 /// `true` for a session id folder name (`3f84adc8-0277-448e-b6ab-422b34ca8709`).
 #[must_use]
 pub fn is_session_id(name: &str) -> bool {
@@ -876,21 +918,7 @@ pub fn is_session_id(name: &str) -> bool {
 /// `None` for anything else (`mcp-chrome-…` profiles, `.links`).
 #[must_use]
 pub fn browser_revision(name: &str) -> Option<(String, u64)> {
-    let lower = name.to_lowercase();
-    if lower.starts_with("mcp-") || lower.starts_with('.') {
-        return None;
-    }
-    let (browser, rev) = lower.rsplit_once('-')?;
-    let ok = !browser.is_empty()
-        && browser
-            .chars()
-            .all(|c| c.is_ascii_lowercase() || c == '_' || c == '-')
-        && !rev.is_empty()
-        && rev.chars().all(|c| c.is_ascii_digit());
-    if !ok {
-        return None;
-    }
-    Some((browser.to_owned(), rev.parse().ok()?))
+    nfd_rules::revision_of(name)
 }
 
 fn job_of(path: &Path, wt: &Worktree, totals: &Totals) -> WorktreeJob {

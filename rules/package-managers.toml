@@ -143,11 +143,13 @@ vendor          = "Microsoft"
 app             = "Playwright"
 category        = "package-manager"
 platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/ms-playwright/**"]
-level           = "caution"
-impact          = "Browsers downloaded for Playwright tests. Tests fail until you run `npx playwright install` again."
-impact_vi       = "Trình duyệt tải về cho test Playwright. Test sẽ lỗi cho tới khi chạy lại `npx playwright install`."
-verified_on     = 2026-10-16
+paths           = ["${LOCALAPPDATA}/ms-playwright/*"]
+keep_newest     = true
+level           = "safe"
+regenerates     = true
+impact          = "Older revisions of the browsers Playwright downloaded; the newest of each browser (chromium, chromium_headless_shell, firefox, webkit, ffmpeg…) stays, and Playwright MCP's browser profiles are never touched. A project pinned to an older Playwright downloads its revision again with `npx playwright install`."
+impact_vi       = "Các bản cũ của trình duyệt Playwright đã tải; bản mới nhất của mỗi trình duyệt (chromium, chromium_headless_shell, firefox, webkit, ffmpeg…) được giữ, profile trình duyệt của Playwright MCP không bao giờ bị động tới. Dự án ghim Playwright cũ sẽ tải lại bằng `npx playwright install`."
+verified_on     = 2026-10-17
 
 [[rule]]
 id              = "google.puppeteer.browsers"

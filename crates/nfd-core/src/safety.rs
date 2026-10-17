@@ -102,12 +102,16 @@ pub const AGENT_HISTORY_TEMPLATES: &[&str] = &[
     "${APPDATA}/Claude/side-session-notes",
     "${APPDATA}/Claude/IndexedDB",
     "${APPDATA}/Claude/Local Storage",
+    // working folders of the app's project-less ("scratch") sessions: the app removes
+    // them itself with the session
+    "${APPDATA}/Claude/scratch-workspaces",
     // …and the same folders of the Microsoft Store (MSIX) build of the desktop app
     "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude-code-sessions",
     "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions",
     "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/side-session-notes",
     "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/IndexedDB",
     "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/Local Storage",
+    "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/scratch-workspaces",
     // OpenAI Codex
     "${HOME}/.codex/sessions",
     "${HOME}/.codex/archived_sessions",

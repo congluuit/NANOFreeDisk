@@ -398,6 +398,9 @@ impl Matcher {
                 kept.push(c);
             }
         }
+        if rule.keep_newest {
+            kept.retain(|c| older_revision(&c.path));
+        }
         summary.candidates = kept.len();
         summary.bytes = kept.iter().map(|c| c.bytes).sum();
         summary.files = kept.iter().map(|c| c.files).sum();
@@ -424,6 +427,29 @@ impl Matcher {
     pub const fn gate(&self) -> &SafetyGate {
         &self.gate
     }
+}
+
+/// `true` when `path` is a revision folder ([`crate::revision_of`]) and a folder of
+/// the same name with a higher revision sits next to it on disk (links ignored).
+fn older_revision(path: &Path) -> bool {
+    let Some((name, rev)) = path
+        .file_name()
+        .and_then(|n| crate::revision_of(&n.to_string_lossy()))
+    else {
+        return false;
+    };
+    let Some(parent) = path.parent() else {
+        return false;
+    };
+    fsinfo::read_dir(parent, false).is_ok_and(|items| {
+        items.iter().any(|i| {
+            i.info
+                .as_ref()
+                .is_ok_and(|f| f.is_dir && f.link == LinkKind::None)
+                && crate::revision_of(&i.name.to_string_lossy())
+                    .is_some_and(|(n, r)| n == name && r > rev)
+        })
+    })
 }
 
 /// Whether `text` (a `/`-separated path) is matched by `p` as a whole: a candidate it
@@ -807,6 +833,41 @@ verified_on = 2026-10-16
         );
         assert_eq!(names(&report, root), ["C/x/junk.bin", "C/y.bin"]);
         assert!(report.rules[0].skipped >= 1);
+    }
+
+    #[test]
+    fn keep_newest_offers_only_older_revisions() {
+        let dir = tempfile::tempdir().expect("tmp");
+        let root = dir.path();
+        for d in [
+            "pw/chromium-1223",
+            "pw/chromium-1248",
+            "pw/chromium_headless_shell-1223",
+            "pw/chromium_headless_shell-1248",
+            "pw/ffmpeg-1011",
+            "pw/ffmpeg-1013",
+            "pw/webkit-2083",
+            "pw/mcp-chrome-1234",
+            "pw/b",
+        ] {
+            write(&root.join(d).join("x.bin"), 1);
+        }
+        let report = run(root, r#""${LOCALAPPDATA}/pw/*""#, "keep_newest = true");
+        assert_eq!(
+            names(&report, root),
+            [
+                "pw/chromium-1223",
+                "pw/chromium_headless_shell-1223",
+                "pw/ffmpeg-1011"
+            ]
+        );
+        assert_eq!(report.rules[0].candidates, 3);
+        assert_eq!(
+            crate::revision_of("Chromium_Headless_Shell-1248"),
+            Some(("chromium_headless_shell".into(), 1248))
+        );
+        assert_eq!(crate::revision_of("mcp-chrome-1234"), None);
+        assert_eq!(crate::revision_of("chromium"), None);
     }
 
     #[test]

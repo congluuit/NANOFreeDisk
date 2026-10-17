@@ -46,6 +46,7 @@ exclude         = []                           # optional globs that win over `p
 level           = "safe"                       # safe | caution | advanced | protected
 regenerates     = true                         # does the app recreate it automatically?
 min_age_days    = 1                            # skip files newer than this (optional)
+keep_newest     = true                         # versioned folders (`chromium-1248`): offer only older revisions (optional)
 requires_closed = ["app.exe"]                  # processes that must not be running (optional)
 impact          = "One or two sentences a non-expert understands: what is lost, what is NOT lost."
 docs            = "https://…"                  # optional

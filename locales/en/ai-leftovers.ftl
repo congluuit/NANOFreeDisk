@@ -61,6 +61,7 @@ reason-locked = The worktree is locked.
 reason-too-many-ignored = Too many ignored files to list completely.
 reason-foreign-worktree = A worktree of another repository.
 reason-ignored-left = Some ignored files could not be moved to the quarantine, so git did not remove it.
+reason-session-live = Its session was active in the last 24 hours and may still be working: left alone.
 reason-not-a-worktree = git no longer lists it as a worktree.
 
 activity-kind-ai-leftovers = AI leftovers cleaned

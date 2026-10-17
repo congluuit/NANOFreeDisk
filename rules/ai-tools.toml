@@ -588,10 +588,10 @@ vendor          = "Anthropic"
 app             = "Claude Desktop"
 category        = "ai-app"
 platform        = ["windows"]
-paths           = ["${APPDATA}/Claude/local-agent-mode-sessions/**", "${APPDATA}/Claude/claude-code-sessions/**", "${APPDATA}/Claude/side-session-notes/**"]
+paths           = ["${APPDATA}/Claude/local-agent-mode-sessions/**", "${APPDATA}/Claude/claude-code-sessions/**", "${APPDATA}/Claude/side-session-notes/**", "${APPDATA}/Claude/scratch-workspaces/**"]
 level           = "protected"
-impact          = "Agent and Claude Code sessions started from the desktop app, with their notes. Conversation history is never deleted (PLAN §5.1)."
-impact_vi       = "Phiên agent và Claude Code mở từ ứng dụng desktop, kèm ghi chú của chúng. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+impact          = "Agent and Claude Code sessions started from the desktop app, with their notes and the working folders of project-less sessions (the app removes those with the session). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Phiên agent và Claude Code mở từ ứng dụng desktop, kèm ghi chú và thư mục làm việc của phiên không gắn dự án (ứng dụng tự xóa chúng cùng phiên). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
 
 [[rule]]
@@ -600,7 +600,7 @@ vendor          = "Anthropic"
 app             = "Claude Desktop"
 category        = "ai-app"
 platform        = ["windows"]
-paths           = ["${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude-code-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/side-session-notes/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/IndexedDB/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/Local Storage/**"]
+paths           = ["${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/claude-code-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/local-agent-mode-sessions/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/side-session-notes/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/IndexedDB/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/Local Storage/**", "${LOCALAPPDATA}/Packages/Claude_pzs8sxrjxfjjc/LocalCache/Roaming/Claude/scratch-workspaces/**"]
 level           = "protected"
 impact          = "Sessions, notes and chat state of the Microsoft Store build of the desktop app (its real AppData folder). Conversation history is never deleted (PLAN §5.1)."
 impact_vi       = "Phiên, ghi chú và trạng thái chat của bản Microsoft Store của ứng dụng desktop (thư mục AppData thật của nó). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."

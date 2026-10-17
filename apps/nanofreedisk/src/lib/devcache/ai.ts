@@ -17,6 +17,7 @@ export const AI_BLOCKED = [
   "foreign-worktree",
   "ignored-left",
   "not-a-worktree",
+  "session-live",
 ] as const;
 
 /** Why a leftover is listed but not pre-selected (each has an `ail-keep-*` message). */
