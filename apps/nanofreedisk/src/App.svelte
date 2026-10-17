@@ -35,19 +35,51 @@
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
 
-  const NAV: { id: View | null; icon: string; label: string; phase?: string }[] = [
+  type NavItem = { id: View; icon: string; label: string };
+  type NavGroup = { group: string; icon: string; label: string; items: NavItem[] };
+
+  // Grouped by what the user wants to do; the cleanup history always stays last.
+  const NAV: (NavItem | NavGroup)[] = [
     { id: "home", icon: "home", label: "nav-home" },
     { id: "analyze", icon: "analyze", label: "nav-analyze" },
-    { id: "oldlarge", icon: "drive", label: "nav-oldlarge" },
-    { id: "tidy", icon: "folder", label: "nav-tidy" },
-    { id: "clean", icon: "clean", label: "nav-clean" },
-    { id: "activity", icon: "undo", label: "nav-activity" },
-    { id: "hardware", icon: "cpu", label: "nav-hardware" },
-    { id: "devcache", icon: "devcache", label: "nav-devcache" },
-    { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
-    { id: "monitor", icon: "monitor", label: "nav-monitor" },
-    { id: "health", icon: "health", label: "nav-health" },
+    {
+      group: "free",
+      icon: "clean",
+      label: "nav-group-free",
+      items: [
+        { id: "clean", icon: "clean", label: "nav-clean" },
+        { id: "devcache", icon: "devcache", label: "nav-devcache" },
+        { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
+        { id: "oldlarge", icon: "drive", label: "nav-oldlarge" },
+        { id: "tidy", icon: "folder", label: "nav-tidy" },
+      ],
+    },
+    {
+      group: "pc",
+      icon: "health",
+      label: "nav-group-pc",
+      items: [
+        { id: "health", icon: "health", label: "nav-health" },
+        { id: "hardware", icon: "cpu", label: "nav-hardware" },
+        { id: "monitor", icon: "monitor", label: "nav-monitor" },
+      ],
+    },
   ];
+
+  const isGroup = (entry: NavItem | NavGroup): entry is NavGroup => "group" in entry;
+
+  // Groups the user opened or closed by hand; the group of the open view is always shown.
+  let opened = $state<Record<string, boolean>>({});
+  const groupOpen = (g: NavGroup) =>
+    opened[g.group] ?? g.items.some((item) => item.id === app.view);
+  const toggleGroup = (g: NavGroup) => (opened[g.group] = !groupOpen(g));
+  $effect(() => {
+    // jumping to a view (palette, Home buttons, shortcuts) reopens its group
+    const view = app.view;
+    for (const entry of NAV) {
+      if (isGroup(entry) && entry.items.some((item) => item.id === view)) opened[entry.group] = true;
+    }
+  });
 
   let systemDark = $state(true);
 
@@ -118,25 +150,52 @@
       <span class="ellipsis">{t("palette-open")}</span>
       <kbd>Ctrl K</kbd>
     </button>
-    <ul>
-      {#each NAV as item (item.label)}
-        <li>
-          <button
-            class="nav"
-            class:active={item.id === app.view}
-            disabled={!item.id}
-            title={item.phase ? t("nav-soon", { phase: item.phase }) : t(item.label)}
-            onclick={() => item.id && (app.view = item.id)}
-            aria-current={item.id === app.view ? "page" : undefined}
-          >
-            <Icon name={item.icon} />
-            <span class="ellipsis">{t(item.label)}</span>
-            {#if item.phase}<small>{item.phase.replace("Phase ", "P")}</small>{/if}
-          </button>
-        </li>
+    {#snippet navButton(item: NavItem, child: boolean)}
+      <button
+        class="nav"
+        class:child
+        class:active={item.id === app.view}
+        data-view={item.id}
+        title={t(item.label)}
+        onclick={() => (app.view = item.id)}
+        aria-current={item.id === app.view ? "page" : undefined}
+      >
+        <Icon name={item.icon} size={child ? 16 : 18} />
+        <span class="ellipsis">{t(item.label)}</span>
+      </button>
+    {/snippet}
+    <ul class="nav-list">
+      {#each NAV as entry (entry.label)}
+        {#if isGroup(entry)}
+          {@const open = groupOpen(entry)}
+          {@const holdsActive = entry.items.some((item) => item.id === app.view)}
+          <li class="group">
+            <button
+              class="group-head"
+              class:holds-active={holdsActive && !open}
+              aria-expanded={open}
+              aria-controls={`nav-${entry.group}`}
+              onclick={() => toggleGroup(entry)}
+            >
+              <Icon name={entry.icon} />
+              <span class="ellipsis">{t(entry.label)}</span>
+              <span class="caret" class:open><Icon name="chevron" size={14} /></span>
+            </button>
+            <ul id={`nav-${entry.group}`} class="children" hidden={!open}>
+              {#each entry.items as item (item.id)}
+                <li>{@render navButton(item, true)}</li>
+              {/each}
+            </ul>
+          </li>
+        {:else}
+          <li>{@render navButton(entry, false)}</li>
+        {/if}
       {/each}
     </ul>
     <div class="spacer"></div>
+    <!-- the cleanup history always stays last, apart from the task groups -->
+    {@render navButton({ id: "activity", icon: "undo", label: "nav-activity" }, false)}
+    <div class="divider"></div>
     <div class="mode" role="radiogroup" aria-label={t("mode-label")}>
       {#each ["simple", "expert"] as const as m (m)}
         <button
@@ -271,19 +330,63 @@
     color: var(--text);
     box-shadow: inset 3px 0 0 var(--accent);
   }
-  .nav:disabled {
-    opacity: 0.55;
-    cursor: default;
+  .nav.child {
+    padding: 6px 10px 6px 34px;
+    font-size: 0.95em;
   }
-  .nav small {
+  .nav-list {
+    overflow-y: auto;
+    min-height: 0;
+  }
+  .group {
+    margin-top: 6px;
+  }
+  .group-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 8px 10px;
+    border: none;
+    border-radius: var(--radius-sm);
+    background: transparent;
+    color: var(--text);
+    font-weight: 600;
+    text-align: left;
+  }
+  .group-head:hover {
+    background: var(--hover);
+  }
+  .group-head.holds-active {
+    box-shadow: inset 3px 0 0 var(--accent);
+  }
+  .caret {
+    display: flex;
     margin-left: auto;
-    font-size: 0.72em;
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    padding: 0 4px;
+    color: var(--text-muted);
+    transition: transform 0.15s ease;
+  }
+  .caret.open {
+    transform: rotate(90deg);
+  }
+  .children {
+    list-style: none;
+    margin: 2px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .children[hidden] {
+    display: none;
   }
   .spacer {
     flex: 1;
+  }
+  .divider {
+    height: 1px;
+    margin: 6px 4px 8px;
+    background: var(--border);
   }
   .find {
     display: flex;

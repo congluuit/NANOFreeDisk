@@ -8,7 +8,9 @@ app-tagline = Biết cái gì chiếm ổ đĩa. Giải phóng an toàn.
 
 nav-home = Trang chủ
 nav-analyze = Phân tích
-nav-clean = Dọn dẹp
+nav-clean = Tệp rác
+nav-group-free = Dọn dẹp
+nav-group-pc = Sức khỏe máy
 nav-devcache = Cache lập trình
 nav-duplicates = Tệp trùng lặp
 nav-monitor = Hoạt động ổ đĩa

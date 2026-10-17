@@ -1,7 +1,7 @@
 # Màn hình Dọn dẹp, Nhật ký hoạt động và bộ máy an toàn (Phase 3). Nạp cùng app.ftl;
 # mọi key phải có trong en/clean.ftl.
 
-nav-activity = Hoạt động
+nav-activity = Lịch sử dọn dẹp
 
 ## Dọn dẹp
 clean-title = Dọn dẹp

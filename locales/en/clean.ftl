@@ -1,7 +1,7 @@
 # Clean view, Activity log and the safety engine (Phase 3). Loaded together with
 # app.ftl; every key must exist in vi/clean.ftl too.
 
-nav-activity = Activity
+nav-activity = Cleanup history
 
 ## Clean
 clean-title = Clean

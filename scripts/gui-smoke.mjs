@@ -300,7 +300,14 @@ async function scan(path, record = true) {
   throw new Error(`scan ${id} of ${path} did not finish`);
 }
 
-const nav = (i) => evaluate(`document.querySelectorAll('.side .nav')[${i}].click()`);
+// sidebar entries by view id (the sidebar is grouped, so positions are not stable);
+// a number still means "the i-th entry" for the lookups below
+const nav = (v) =>
+  evaluate(
+    typeof v === "number"
+      ? `document.querySelectorAll('.side .nav')[${v}].click()`
+      : `document.querySelector('.side .nav[data-view="${v}"]').click()`,
+  );
 
 try {
   const page = await target();
@@ -379,7 +386,7 @@ try {
   rmSync(reportPath);
 
   // UI reflects the scan
-  await evaluate("document.querySelectorAll('.side .nav')[1].click()");
+  await nav("analyze");
   await sleep(1200);
   await shot("2-analyze-fixture");
 
@@ -402,7 +409,7 @@ try {
   // Clean with a rule pack that only matches the fixture's junk folder: the Clean
   // view scans with it (window.__nfdRulesDir), then the commands are driven directly
   await evaluate(`window.__nfdRulesDir = ${JSON.stringify(rulesDir)}`);
-  await nav(4);
+  await nav("clean");
   for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('Smoke fixture')")); i++) {
     await evaluate("(() => { const b = document.querySelectorAll('main header .actions-top .btn')[1]; if (b && !b.disabled) b.click(); })()");
     await sleep(250);
@@ -422,7 +429,7 @@ try {
     JSON.stringify(cleaned),
   );
   check("clean keeps the folder the rule cleans inside", existsSync(join(fixture, "junk")));
-  await nav(5);
+  await nav("activity");
   for (let i = 0; i < 30 && !(await evaluate("document.querySelectorAll('.op').length > 0")); i++) await sleep(150);
   check("Activity view lists operations", await evaluate("document.querySelectorAll('.op').length >= 3"));
   await shot("10-activity");
@@ -526,13 +533,13 @@ try {
   await sleep(300);
 
   // new views and the command palette
-  await nav(2);
+  await nav("oldlarge");
   await sleep(800);
   await evaluate("document.querySelectorAll('.tabs .tab')[2].click()");
   await sleep(500);
   check("Old & large view lists the installer", await evaluate("document.querySelector('main').innerText.includes('old-setup.msi')"));
   await shot("4-old-large");
-  await nav(3);
+  await nav("tidy");
   for (let i = 0; i < 30 && !(await evaluate("document.querySelector('main').innerText.includes('broken.lnk')")); i++) await sleep(150);
   check("Tidy view lists the broken shortcut", await evaluate("document.querySelector('main').innerText.includes('broken.lnk')"));
   await shot("5-tidy");
@@ -547,13 +554,13 @@ try {
   check("palette closes on Esc", await evaluate("!document.querySelector('.palette')"));
 
   // What changed? tab and the Health Score on Home
-  await nav(1);
+  await nav("analyze");
   await sleep(800);
   await evaluate("document.querySelector('[data-tab=changes]')?.click()");
   for (let i = 0; i < 30 && !(await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false")); i++) await sleep(150);
   check("What changed? tab lists the new clip", await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false"));
   await shot("7-changes");
-  await nav(0);
+  await nav("home");
   for (let i = 0; i < 100 && !(await evaluate("!!document.querySelector('.health .num b')")); i++) await sleep(100);
   check("Home shows the health score", await evaluate("!!document.querySelector('.health .num b')"));
   for (let i = 0; i < 50 && !(await evaluate("!!document.querySelector('.temps [data-temp=gpu]')")); i++) await sleep(100);
@@ -563,6 +570,13 @@ try {
   // Phase 4: DevCache with a pack that only matches its own fixture
   const devNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Dev caches|Cache lập trình/.test(b.innerText))");
   check("Dev caches is in the sidebar", devNav >= 0);
+  const sideViews = await evaluate("[...document.querySelectorAll('.side .nav')].map((b) => b.dataset.view ?? 'settings')");
+  check(
+    "sidebar groups the tasks and keeps the cleanup history last",
+    (await evaluate("document.querySelectorAll('.side .group-head').length")) === 2 &&
+      sideViews.slice(-2).join() === "activity,settings",
+    sideViews.join(),
+  );
   await evaluate(`window.__nfdDevRulesDir = ${JSON.stringify(devRulesDir)}`);
   await nav(devNav);
   for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('NANO Dev')")); i++) await sleep(150);
@@ -875,7 +889,7 @@ try {
 
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [[0, "home"], [1, "analyze"], [2, "oldlarge"], [3, "tidy"], [4, "clean"], [5, "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"]]) {
+  for (const [i, view] of [["home", "home"], ["analyze", "analyze"], ["oldlarge", "oldlarge"], ["tidy", "tidy"], ["clean", "clean"], ["activity", "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"]]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");

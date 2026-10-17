@@ -8,7 +8,9 @@ app-tagline = See what fills your disk. Free it safely.
 
 nav-home = Home
 nav-analyze = Analyze
-nav-clean = Clean
+nav-clean = Junk files
+nav-group-free = Free up space
+nav-group-pc = PC health
 nav-devcache = Dev caches
 nav-duplicates = Duplicates
 nav-monitor = Disk activity
