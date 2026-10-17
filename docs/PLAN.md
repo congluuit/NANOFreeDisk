@@ -365,7 +365,7 @@ Kèm: `SHA256SUMS.txt`, `SHA256SUMS.txt.minisig` (minisign), `sbom.cdx.json`, `C
    - `cargo audit` không có lỗ hổng critical;
    - rule packs validate; fmt/clippy/test xanh.
 2. **build-windows**: build app (Tauri → MSI + NSIS), CLI, custom setup; chạy **smoke test**: cài silent → `nfd --version` → `nfd scan %TEMP% --json` → gỡ silent; ký số nếu có secret.
-3. **build-core-crossplatform**: `nfd-cli` cho `x86_64-unknown-linux-gnu`, `aarch64-apple-darwin` (chỉ core/CLI, đảm bảo tương lai).
+3. ~~**build-core-crossplatform**~~: bỏ từ 0.1.0 — NANOFreeDisk chỉ phát hành cho Windows (CI và release chỉ build / test trên Windows; `nfd.exe` đi kèm mọi gói Windows).
 4. **checksums + sbom + minisign**.
 5. **changelog**: `git-cliff --latest` → body Release.
 6. **publish**: tạo GitHub Release (draft/prerelease nếu tag có `-rc`/`-beta`), upload asset, cập nhật `latest.json` cho updater.

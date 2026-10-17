@@ -211,45 +211,11 @@ jobs:
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────
-  # 3. build-core — CLI for Linux/macOS (keeps the port honest)
-  # ─────────────────────────────────────────────────────────────
-  build-core:
-    name: build cli (${{ matrix.target }})
-    needs: release-check
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { os: ubuntu-latest, target: x86_64-unknown-linux-gnu }
-          - { os: macos-latest,  target: aarch64-apple-darwin }
-    env:
-      VERSION: ${{ needs.release-check.outputs.version }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-      - uses: Swatinem/rust-cache@v2
-      - run: cargo build --release -p nfd-cli --target ${{ matrix.target }}
-      - name: Package
-        shell: bash
-        run: |
-          mkdir -p dist
-          tar -C target/${{ matrix.target }}/release -czf dist/nfd-$VERSION-${{ matrix.target }}.tar.gz nfd
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cli-${{ matrix.target }}
-          path: dist/*
-
-  # ─────────────────────────────────────────────────────────────
-  # 4. publish — checksums, SBOM, latest.json, changelog, GitHub Release
+  # 3. publish — checksums, SBOM, latest.json, changelog, GitHub Release
   # ─────────────────────────────────────────────────────────────
   publish:
     name: publish release
-    needs: [release-check, build-windows, build-core]
+    needs: [release-check, build-windows]
     if: ${{ github.event_name == 'push' || !inputs.dry_run }}
     runs-on: ubuntu-latest
     env:
@@ -267,7 +233,7 @@ jobs:
         run: |
           mkdir -p dist
           # not the unsigned copies uploaded for SignPath
-          find artifacts/windows-x64 artifacts/cli-* -type f -exec cp {} dist/ \;
+          find artifacts/windows-x64 -type f -exec cp {} dist/ \;
           ls -la dist
 
       - name: SBOM (CycloneDX)
@@ -331,7 +297,7 @@ jobs:
           fail_on_unmatched_files: true
 
   # ─────────────────────────────────────────────────────────────
-  # 5. post-release — winget manifest PR (after v1.0 and a WINGET_TOKEN)
+  # 4. post-release — winget manifest PR (after v1.0 and a WINGET_TOKEN)
   # ─────────────────────────────────────────────────────────────
   winget:
     name: winget manifest
