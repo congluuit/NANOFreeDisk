@@ -107,7 +107,7 @@ fn common_prefix(paths: &[String]) -> Option<String> {
 
 impl Advice {
     /// Group key of unit `u`.
-    fn group_key(&self, tree: &ScanTree, u: usize) -> String {
+    pub(crate) fn group_key(&self, tree: &ScanTree, u: usize) -> String {
         let x = &self.units[u];
         let split = match x.reason {
             Reason::System
@@ -232,17 +232,24 @@ impl Advice {
         }
     }
 
-    /// Entry ids of the units of `keys` that may be acted on, with their units.
+    /// The units of `keys` that may be acted on: group keys of [`Self::suggestions`],
+    /// `entry|<id>` (the unit starting at that entry) or `within|<id>` (every unit
+    /// inside that folder).
     #[must_use]
-    pub fn actionable_units(&self, tree: &ScanTree, keys: &[String]) -> Vec<usize> {
+    pub fn actionable_units(&self, tree: &ScanTree, ends: &[u32], keys: &[String]) -> Vec<usize> {
         let groups = self.group_units(tree);
-        let mut out: Vec<usize> = keys
-            .iter()
-            .filter_map(|k| groups.get(k))
-            .flatten()
-            .copied()
-            .filter(|&u| self.units[u].actionable())
-            .collect();
+        let mut out: Vec<usize> = Vec::new();
+        for k in keys {
+            let id = |prefix: &str| k.strip_prefix(prefix).and_then(|n| n.parse::<u32>().ok());
+            if let Some(id) = id("entry|") {
+                out.extend(self.units.iter().position(|u| u.entry == id));
+            } else if let Some(id) = id("within|") {
+                out.extend(self.units_within(ends, id));
+            } else if let Some(g) = groups.get(k) {
+                out.extend(g);
+            }
+        }
+        out.retain(|&u| self.units[u].actionable());
         out.sort_unstable();
         out.dedup();
         out

@@ -315,11 +315,11 @@ fn how(g: &Group, vi: bool, root: &Path) -> Option<String> {
     match g.action {
         Action::Clean => pick(
             "clean with the rule, into the quarantine (7 days to restore)",
-            "dọn theo quy tắc, vào quarantine (7 ngày để khôi phục)",
+            "dọn theo quy tắc, vào khu cách ly (7 ngày để khôi phục)",
         ),
         Action::Quarantine => pick(
             "move into the quarantine (7 days to restore)",
-            "chuyển vào quarantine (7 ngày để khôi phục)",
+            "chuyển vào khu cách ly (7 ngày để khôi phục)",
         ),
         Action::AiLeftovers => pick(
             "`git worktree remove` / quarantine (nfd ai-leftovers clean)",

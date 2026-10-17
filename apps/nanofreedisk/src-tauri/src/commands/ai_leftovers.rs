@@ -39,6 +39,57 @@ impl AiState {
         let guard = self.report.lock().ok()?;
         guard.as_ref().map(|r| r.selected_bytes)
     }
+
+    /// The last scan (Analyze's advice reuses it, and refines agent worktrees with it).
+    pub(super) fn latest(&self) -> Option<Report> {
+        self.report.lock().ok()?.clone()
+    }
+
+    /// Keep a scan made elsewhere (the advice's own check) for the cleaning commands.
+    pub(super) fn set(&self, report: Report) {
+        if let Ok(mut slot) = self.report.lock() {
+            *slot = Some(report);
+        }
+    }
+
+    /// Forget the last scan (after a clean: it is stale).
+    pub(super) fn clear(&self) {
+        if let Ok(mut slot) = self.report.lock() {
+            *slot = None;
+        }
+    }
+}
+
+/// Remove `jobs` with git (`git worktree remove`, `prune`) on a worker thread and
+/// journal them as kind `worktree`. Returns the item results, a journal problem and
+/// whether `cancel` stopped it.
+pub(super) async fn remove_worktrees(
+    app: &AppHandle,
+    state: &State<'_, AppState>,
+    jobs: Vec<worktrees::WorktreeJob>,
+    cancel: std::sync::Arc<std::sync::atomic::AtomicBool>,
+) -> CmdResult<(Vec<exec::ItemResult>, Option<String>, bool)> {
+    let op = tauri::async_runtime::spawn_blocking(move || {
+        let started = exec::unix_now();
+        let git = process::git();
+        let results = jobs
+            .iter()
+            .enumerate()
+            .filter_map(|(n, j)| {
+                git.as_deref()
+                    .map(|g| worktrees::remove(g, j, n, Some(&cancel)))
+            })
+            .collect();
+        worktrees::operation(results, exec::new_op_id(started), started, exec::unix_now())
+    })
+    .await
+    .map_err(|e| err("internal", e))?;
+    let journal_error = if op.items.is_empty() {
+        None
+    } else {
+        clean::journal(app, state, &op)
+    };
+    Ok((op.items, journal_error, op.cancelled))
 }
 
 /// Where the sessions and leftovers are read from: this machine, or (GUI smoke
@@ -191,25 +242,11 @@ pub async fn ai_leftovers_clean(
         }
     }
     if !prepared.jobs.is_empty() && !cancelled {
-        let jobs = prepared.jobs;
-        let c = cancel.clone();
-        let op = tauri::async_runtime::spawn_blocking(move || {
-            let started = exec::unix_now();
-            let git = process::git();
-            let results = jobs
-                .iter()
-                .enumerate()
-                .filter_map(|(n, j)| git.as_deref().map(|g| worktrees::remove(g, j, n, Some(&c))))
-                .collect();
-            worktrees::operation(results, exec::new_op_id(started), started, exec::unix_now())
-        })
-        .await
-        .map_err(|e| err("internal", e))?;
-        if !op.items.is_empty() {
-            journal_error = journal_error.or(clean::journal(&app, &state, &op));
-        }
-        cancelled |= op.cancelled;
-        items.extend(op.items);
+        let (done, problem, stopped) =
+            remove_worktrees(&app, &state, prepared.jobs, cancel.clone()).await?;
+        journal_error = journal_error.or(problem);
+        cancelled |= stopped;
+        items.extend(done);
     }
     dev.stop();
     *ai.report.lock().map_err(|e| err("internal", e))? = None;

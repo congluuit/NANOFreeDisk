@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
+pub mod advice;
 pub mod ai_leftovers;
 pub mod browsers;
 pub mod clean;
@@ -278,10 +279,13 @@ pub fn start_scan(
                     } else {
                         (None, None)
                     };
-                    let session = Session::new(tree, vol.1, vol.2);
+                    let mut session = Session::new(tree, vol.1, vol.2);
+                    session.seq = id;
                     if let Ok(mut slot) = state.session.write() {
                         *slot = Some(session);
                     }
+                    // what can go and what must stay, in the background
+                    advice::refresh(&app);
                     Finished {
                         scan: id,
                         ok: true,
@@ -719,14 +723,28 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
             }
         })
     };
-    let junk = app
-        .state::<clean::CleanState>()
-        .safe_bytes()
-        .map(|bytes| JunkFacts {
-            bytes,
-            volume_total: facts.iter().find(|v| v.system).map_or(0, |v| v.total),
-        });
+    // with an advice, the junk inside the scan is part of what it can free: the
+    // "junk" finding then counts only what the rule packs found elsewhere
+    let advised = advice::scanned_root(&state);
+    let junk_bytes = match &advised {
+        Some(root) => app.state::<clean::CleanState>().with_report(|r| {
+            r.candidates
+                .iter()
+                .filter(|c| c.level == nfd_core::RiskLevel::Safe)
+                .filter(|c| !nfd_advice::path_within(&c.path, root))
+                .map(|c| c.bytes)
+                .sum()
+        }),
+        None => app.state::<clean::CleanState>().safe_bytes(),
+    };
+    let junk = junk_bytes.map(|bytes| JunkFacts {
+        bytes,
+        volume_total: facts.iter().find(|v| v.system).map_or(0, |v| v.total),
+    });
     let mut score = health::score_with(&facts, scan.as_ref(), junk.as_ref());
+    if let Some((root, volume_total, reclaim)) = advice::health_facts(&state) {
+        health::add_advice(&mut score, &root, volume_total, reclaim);
+    }
     hwmon::add_heat_findings(&app, &mut score);
     diskhealth::add_findings(&app, &mut score);
     // AI leftovers of finished sessions (the last scan of the DevCache tab)

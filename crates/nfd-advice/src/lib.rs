@@ -388,6 +388,8 @@ pub struct EntryAdvice {
     pub node: NodeAdvice,
     /// The unit the entry belongs to.
     pub unit: Option<Unit>,
+    /// Its suggestion group ([`Advice::suggestions`]).
+    pub group: Option<String>,
     /// Where that unit starts (relative to the scanned folder), when not here.
     pub unit_path: Option<String>,
     /// The biggest classified parts below the entry.
@@ -408,6 +410,16 @@ pub fn key_of(path: &str) -> String {
         s.pop();
     }
     s
+}
+
+/// `true` when `inner` is `outer` or lies inside it (case-insensitive, either
+/// separator).
+#[must_use]
+pub fn path_within(inner: &Path, outer: &Path) -> bool {
+    within(
+        &key_of(&inner.to_string_lossy()),
+        &key_of(&outer.to_string_lossy()),
+    )
 }
 
 /// `key` joined with a child name.
@@ -495,7 +507,11 @@ impl Advice {
     }
 
     /// Units starting at or below `id`.
-    fn units_within<'a>(&'a self, ends: &'a [u32], id: u32) -> impl Iterator<Item = usize> + 'a {
+    pub(crate) fn units_within<'a>(
+        &'a self,
+        ends: &'a [u32],
+        id: u32,
+    ) -> impl Iterator<Item = usize> + 'a {
         let end = ends.get(id as usize).copied().unwrap_or(id + 1);
         self.units
             .iter()
@@ -546,8 +562,10 @@ impl Advice {
             .collect();
         parts.sort_by(|a, b| b.bytes.cmp(&a.bytes).then(a.id.cmp(&b.id)));
         parts.truncate(8);
+        let group = unit.map(|u| self.group_key(tree, u));
         let u = unit.map(|u| self.units[u].clone());
         Some(EntryAdvice {
+            group,
             id,
             node: self.node(tree, id),
             unit_path: u

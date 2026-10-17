@@ -91,6 +91,7 @@ pub fn run() {
         .manage(commands::clean::CleanState::default())
         .manage(commands::devcache::DevState::default())
         .manage(commands::ai_leftovers::AiState::default())
+        .manage(commands::advice::AdviceState::default())
         .manage(commands::browsers::BrowserState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
@@ -167,6 +168,11 @@ pub fn run() {
             commands::devcache::devcache_reveal,
             commands::devcache::devcache_propose,
             commands::devcache::devcache_notify,
+            commands::advice::advice_summary,
+            commands::advice::advice_detail,
+            commands::advice::advice_refresh,
+            commands::advice::advice_clean,
+            commands::advice::advice_cancel,
             commands::ai_leftovers::ai_leftovers_scan,
             commands::ai_leftovers::ai_leftovers_plan,
             commands::ai_leftovers::ai_leftovers_clean,

@@ -8,7 +8,7 @@ import { cleanHandlers, mockDeleted } from "./clean/mock";
 import { devHandlers } from "./devcache/mock";
 import { dupeHandlers } from "./dupes/mock";
 import { healthHandlers } from "./health/mock";
-import type { DeleteItem, Filter, Node, Slice } from "./types";
+import type { AdviceReason, DeleteItem, Filter, Node, NodeAdvice, Slice } from "./types";
 import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
 import { monitorHandlers } from "./monitor/mock";
@@ -114,6 +114,7 @@ function build(): void {
   add(root, "hiberfil.sys", "file", 6_871_947_673, 3);
   add(named(root, ["Users", "nano"]), "AppData-link", "junction");
   rollUp();
+  units = [];
 }
 
 function rollUp(): void {
@@ -168,6 +169,7 @@ function node(id: number): Node {
     attrs: ATTR_NAMES.filter((_, i) => e.attrs & (1 << i)),
     hasChildren: e.kind === "dir" && live.length > 0,
     hardlinkDup: false,
+    advice: adviceNode(id),
   };
 }
 
@@ -220,6 +222,8 @@ function slice(id: number, maxDepth: number, minBytes: number, maxNodes: number)
     }
     if (rest > 0) push(REST_ID, index, rest, 3, "", depth + 1);
   }
+  if (!units.length) buildAdvice();
+  s.verdicts = s.ids.map((i) => (i === REST_ID || unitOf[i] < 0 ? 255 : VERDICT_ORDER.indexOf(units[unitOf[i]].verdict)));
   return s;
 }
 
@@ -362,7 +366,183 @@ const MOCK_ARTICLES = [
   },
 ];
 
+
+// ── Advice (Analyze → Suggestions): a few verdicts by path, like nfd-advice ──────
+
+type MVerdict = "safe" | "caution" | "guide" | "keep" | "unknown";
+interface MUnit {
+  entry: number;
+  verdict: MVerdict;
+  reason: AdviceReason;
+  level: string | null;
+  source: string | null;
+  app: string | null;
+  title: { en: string; vi: string } | null;
+  impact: { en: string; vi: string };
+  untouched: { en: string; vi: string } | null;
+  action: string;
+  blocked: string | null;
+  selected: boolean;
+  store: string | null;
+  requiresClosed: string[];
+  cutoff: number | null;
+}
+const VERDICT_ORDER: MVerdict[] = ["safe", "caution", "guide", "keep", "unknown"];
+const bi = (en: string, vi: string) => ({ en, vi });
+let units: MUnit[] = [];
+let unitOf: number[] = [];
+
+function mockUnit(id: number, verdict: MVerdict, reason: AdviceReason, action: string, impact: { en: string; vi: string }, extra: Partial<MUnit> = {}): MUnit {
+  return {
+    entry: id, verdict, reason, level: verdict === "safe" ? "safe" : verdict === "caution" ? "caution" : null, source: null, app: null,
+    title: null, impact, untouched: null, action, blocked: null, selected: verdict === "safe" && action !== "recycle-bin",
+    store: null, requiresClosed: [], cutoff: null, ...extra,
+  };
+}
+
+function classifyMock(id: number): MUnit | null {
+  const p = path(id).toLowerCase();
+  const e = entries[id];
+  const name = e.name.toLowerCase();
+  const parent = e.parent >= 0 ? entries[e.parent].name.toLowerCase() : "";
+  if (p === "c:\\windows") return mockUnit(id, "keep", "system", "none", bi("Part of Windows. Deleting files here breaks Windows or its updates.", "Một phần của Windows. Xóa tệp ở đây làm hỏng Windows hoặc bản cập nhật."));
+  if (p === "c:\\program files") return mockUnit(id, "keep", "programs", "none", bi("Installed programs: uninstall them from Settings → Apps instead.", "Chương trình đã cài: hãy gỡ trong Cài đặt → Ứng dụng."));
+  if (name === "pagefile.sys" || name === "hiberfil.sys")
+    return mockUnit(id, "guide", "explained", "guide", bi("Windows' memory on disk; only Windows' own settings shrink it.", "Bộ nhớ của Windows trên đĩa; chỉ thiết lập của Windows thu nhỏ được."), { title: name === "pagefile.sys" ? bi("Page file", "Tệp hoán đổi") : bi("Hibernation file", "Tệp ngủ đông"), source: name.replace(".sys", "") });
+  if (parent === "temp" && p.includes("\\appdata\\local\\temp\\"))
+    return mockUnit(id, "safe", "rule", "clean", bi("Per-user temporary files. Files newer than 24 hours are skipped.", "Tệp tạm của người dùng. Tệp mới hơn 24 giờ được bỏ qua."), { app: "Windows", source: "windows.temp.user", untouched: bi("Only what the rule covers goes, into the quarantine (restorable for 7 days).", "Chỉ những gì quy tắc bao phủ bị dọn, vào khu cách ly (khôi phục được trong 7 ngày).") });
+  if (p.includes("\\.cargo\\registry") && parent === "registry")
+    return mockUnit(id, "caution", "rule", "clean", bi("Downloaded crates; every project downloads them again on the next build.", "Crate đã tải; mọi dự án sẽ tải lại ở lần build sau."), { app: "Cargo", source: "rust.cargo.registry" });
+  if (name === "videos" && parent === "nano") return mockUnit(id, "unknown", "personal", "none", bi("Your own photos, videos or music. Only you know what is worth keeping.", "Ảnh, video hoặc nhạc của riêng bạn. Chỉ bạn biết cái gì đáng giữ."));
+  if (p.includes("\\downloads\\") && e.kind === "file" && /\.(iso|exe|msi|zip)$/.test(name))
+    return mockUnit(id, "caution", "old-installer", "recycle-bin", bi("An installer or disk image left in Downloads for more than 30 days.", "Bộ cài hoặc ảnh đĩa nằm trong Downloads hơn 30 ngày."), { untouched: bi("It goes to the Recycle Bin: you can restore it from there.", "Tệp được chuyển vào Thùng rác: có thể khôi phục từ đó.") });
+  if (p.startsWith("c:\\projects\\") && e.kind === "dir" && (name.startsWith("build") || name.startsWith("debug") || name.startsWith("release")))
+    return mockUnit(id, name.startsWith("release") ? "caution" : "safe", "build-output", "quarantine", bi("Rust build output (`target`): the next `cargo build` creates it again.", "Kết quả build của Rust (`target`): lần `cargo build` sau sẽ tạo lại."), { source: "rust", untouched: bi("Source code and git history stay; only the build folder goes, into the quarantine.", "Mã nguồn và lịch sử git được giữ; chỉ thư mục build bị dọn, vào khu cách ly.") });
+  return null;
+}
+
+function buildAdvice(): void {
+  units = [];
+  unitOf = new Array(entries.length).fill(-1);
+  const order: number[] = [];
+  const stack = [0];
+  while (stack.length) {
+    const n = stack.pop()!;
+    order.push(n);
+    for (const k of kids[n]) stack.push(k);
+  }
+  for (const id of order) {
+    if (entries[id].removed) continue;
+    const own = classifyMock(id);
+    if (own) {
+      units.push(own);
+      unitOf[id] = units.length - 1;
+    } else {
+      const p = entries[id].parent;
+      unitOf[id] = p >= 0 ? unitOf[p] : -1;
+    }
+  }
+}
+
+function verdictTotals(id: number): Record<MVerdict, number> {
+  const t: Record<MVerdict, number> = { safe: 0, caution: 0, guide: 0, keep: 0, unknown: 0 };
+  const ids = entries[id].kind === "file" ? [id] : descendants(id);
+  for (const d of ids) {
+    if (entries[d].kind !== "file" || entries[d].removed) continue;
+    const u = unitOf[d];
+    t[u >= 0 ? units[u].verdict : "unknown"] += entries[d].size;
+  }
+  return t;
+}
+
+function adviceNode(id: number): NodeAdvice {
+  if (!units.length) buildAdvice();
+  const u = unitOf[id] >= 0 ? units[unitOf[id]] : null;
+  const inside = verdictTotals(id);
+  const actionable = (x: MUnit) => !x.blocked && (x.verdict === "safe" || x.verdict === "caution") && ["clean", "quarantine", "ai-leftovers", "recycle-bin"].includes(x.action);
+  let reclaim = 0;
+  const ids = entries[id].kind === "file" ? [id] : descendants(id);
+  for (const d of ids) {
+    const x = unitOf[d] >= 0 ? units[unitOf[d]] : null;
+    if (x && entries[d].kind === "file" && !entries[d].removed && actionable(x)) reclaim += entries[d].size;
+  }
+  return { verdict: u?.verdict ?? null, reason: u?.reason ?? null, root: !!u && u.entry === id, inside, reclaim };
+}
+
+function mockGroups() {
+  if (!units.length) buildAdvice();
+  const by = new Map<string, number[]>();
+  units.forEach((u, i) => {
+    if (entries[u.entry].removed) return;
+    const split = (["system", "programs", "personal", "explained"] as string[]).includes(u.reason) ? `|${u.entry}` : "";
+    const key = `${u.verdict}|${u.reason}|${u.source ?? ""}${split}`;
+    by.set(key, [...(by.get(key) ?? []), i]);
+  });
+  const groups = [...by.entries()].map(([key, members]) => {
+    const first = units[members[0]];
+    const sized = members.map((i) => ({ i, bytes: verdictTotals(units[i].entry)[first.verdict], files: rolled[units[i].entry].files })).sort((a, b) => b.bytes - a.bytes);
+    const bytes = sized.reduce((s, x) => s + x.bytes, 0);
+    const actionable = !first.blocked && (first.verdict === "safe" || first.verdict === "caution") && ["clean", "quarantine", "ai-leftovers", "recycle-bin"].includes(first.action);
+    return {
+      key, verdict: first.verdict, reason: first.reason, level: first.level, source: first.source, app: first.app, title: first.title,
+      impact: first.impact, untouched: first.untouched, action: first.action, blocked: first.blocked, store: first.store, requiresClosed: [],
+      bytes, recent: 0, files: sized.reduce((s, x) => s + x.files, 0), count: sized.length, selected: actionable && first.selected, actionable,
+      location: sized.length === 1 ? path(units[sized[0].i].entry).slice(3) : null, elsewhere: false,
+      items: sized.slice(0, 20).map((x) => ({ id: units[x.i].entry, path: path(units[x.i].entry).slice(3), bytes: x.bytes, files: x.files, blocked: null })),
+    };
+  }).filter((g) => g.bytes > 0);
+  groups.sort((a, b) => VERDICT_ORDER.indexOf(a.verdict) - VERDICT_ORDER.indexOf(b.verdict) || b.bytes - a.bytes);
+  return groups;
+}
+
+const adviceHandlers: Record<string, (a: Record<string, any>) => unknown> = {
+  advice_summary: () => {
+    const groups = mockGroups();
+    const totals = verdictTotals(0);
+    return {
+      computing: false, seq: 1, root: "C:\\",
+      suggestions: { totals, reclaim: adviceNode(0).reclaim, groups, enriched: true },
+      elsewhere: [],
+    };
+  },
+  advice_detail: ({ id }) => {
+    if (!units.length) buildAdvice();
+    const u = unitOf[id] >= 0 ? units[unitOf[id]] : null;
+    const inside = new Set(descendants(id));
+    const parts = units
+      .filter((x) => x !== u && inside.has(x.entry) && !entries[x.entry].removed)
+      .map((x) => ({ id: x.entry, path: path(x.entry).slice(3), verdict: x.verdict, reason: x.reason, source: x.source, app: x.app, title: x.title, blocked: x.blocked, bytes: verdictTotals(x.entry)[x.verdict] }))
+      .filter((p) => p.bytes > 0)
+      .sort((a, b) => b.bytes - a.bytes)
+      .slice(0, 8);
+    return { id, node: adviceNode(id), unit: u, group: null, unitPath: u && u.entry !== id ? path(u.entry).slice(3) : null, parts, enriched: true };
+  },
+  advice_refresh: () => {
+    buildAdvice();
+  },
+  advice_cancel: () => undefined,
+  advice_clean: ({ keys }) => {
+    const groups = mockGroups();
+    const ids: number[] = [];
+    for (const k of keys as string[]) {
+      const m = /^(entry|within)\|(\d+)$/.exec(k);
+      if (m) ids.push(Number(m[2]));
+      else for (const g of groups.filter((x) => x.key === k)) ids.push(...g.items.map((i) => i.id));
+    }
+    const before = rolled[0].size;
+    for (const id of ids) {
+      for (const d of descendants(id)) entries[d].removed = true;
+      entries[id].removed = true;
+    }
+    rollUp();
+    buildAdvice();
+    const freed = before - rolled[0].size;
+    return { operation: { freed, done: ids.length, partial: 0, skipped: 0, failed: 0, cancelled: false }, recycled: [], skipped: [] };
+  },
+};
+
 const handlers: Record<string, (a: Record<string, any>) => unknown> = {
+  ...adviceHandlers,
   ...cleanHandlers,
   ...browsersHandlers,
   ...devHandlers,
@@ -575,6 +755,7 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
       return { id, status: c.allowed ? "done" : "blocked", reason: c.reason, message: null, onDisk: c.onDisk };
     });
     rollUp();
+    buildAdvice();
     return out;
   },
   delete_entries: ({ ids, mode, kind }) => {

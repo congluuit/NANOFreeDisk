@@ -36,6 +36,12 @@ struct Cached {
 }
 
 impl CleanState {
+    /// Look at the last rule scan, if any (Analyze's "junk elsewhere").
+    pub(super) fn with_report<T>(&self, f: impl FnOnce(&MatchReport) -> T) -> Option<T> {
+        let guard = self.report.lock().ok()?;
+        guard.as_ref().map(|c| f(&c.report))
+    }
+
     /// 🟢 Safe bytes found by the last rule scan (for the Health Score).
     pub fn safe_bytes(&self) -> Option<u64> {
         let guard = self.report.lock().ok()?;
@@ -486,6 +492,8 @@ pub async fn delete_entries_impl(
         });
     }
     let _ = journal(app, state, &op);
+    // the advice's totals changed with the scan
+    super::advice::refresh(app);
     Ok(outcomes)
 }
 

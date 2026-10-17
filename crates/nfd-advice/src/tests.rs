@@ -324,7 +324,7 @@ fn rules_keep_rules_ages_and_stores() {
         .iter()
         .find(|g| g.source.as_deref() == Some("test.cache"))
         .expect("cache group");
-    let units = a.actionable_units(&f.tree, std::slice::from_ref(&g.key));
+    let units = a.actionable_units(&f.tree, &f.ends, std::slice::from_ref(&g.key));
     let p = a.prepare(&f.tree, &f.ends, &units, false, false);
     assert_eq!(p.rule_ids, ["test.cache"]);
     let ids = p.rule_ids.clone();
@@ -378,6 +378,7 @@ fn build_output_needs_its_project() {
     assert!(a.unit(f.id("Work/proj/src/main.rs")).is_none());
     let units = a.actionable_units(
         &f.tree,
+        &f.ends,
         &a.suggestions(&f.tree)
             .groups
             .iter()
@@ -472,7 +473,7 @@ fn claude_worktrees_wait_for_git_then_follow_it() {
     let p = done.prepare(
         &f.tree,
         &f.ends,
-        &done.actionable_units(&f.tree, &[g.key]),
+        &done.actionable_units(&f.tree, &f.ends, &[g.key]),
         false,
         false,
     );
@@ -594,6 +595,23 @@ fn totals_add_up_and_suggestions_are_ordered() {
     assert_eq!(d.parts[0].path, wt.join("target").to_string_lossy());
     assert!(d.parts.iter().any(|p| p.path == wt.to_string_lossy()));
     assert!(d.parts.windows(2).all(|w| w[0].bytes >= w[1].bytes));
+    // a single entry, or everything inside a folder
+    let one = a.actionable_units(
+        &f.tree,
+        &f.ends,
+        &[format!("entry|{}", f.id("Work/proj/target"))],
+    );
+    assert_eq!(one.len(), 1);
+    assert_eq!(a.units[one[0]].entry, f.id("Work/proj/target"));
+    let inside = a.actionable_units(&f.tree, &f.ends, &[format!("within|{}", f.id("Work"))]);
+    assert!(inside.len() >= 2);
+    assert!(inside.iter().all(|&u| a.units[u].actionable()));
+    assert!(
+        a.actionable_units(&f.tree, &f.ends, &[format!("entry|{}", f.id("Windows"))])
+            .is_empty(),
+        "kept units are never acted on"
+    );
+    assert_eq!(d.group, None);
     let codes = a.codes(&[f.id("Windows"), f.id("Work")]);
     assert_eq!(codes, [Verdict::Keep.code(), 255]);
 }

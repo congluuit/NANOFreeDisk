@@ -334,6 +334,29 @@ pub fn add_ai_leftovers(score: &mut HealthScore, bytes: u64) {
     }
 }
 
+/// Use the advice of the current scan (`nfd-advice`: what unblocked actions can
+/// free, 🟢 + 🟡) instead of its Old & Large total: the `old-large` finding becomes
+/// `reclaimable`, fixed in the Analyze view's suggestions (`fix` = `suggestions`).
+/// Same thresholds.
+pub fn add_advice(score: &mut HealthScore, root: &str, volume_total: u64, reclaim: u64) {
+    score.findings.retain(|f| f.kind != "old-large");
+    if volume_total > 0 {
+        let share = reclaim as f64 / volume_total as f64;
+        if let Some(&(_, penalty)) = RECLAIMABLE.iter().find(|row| share >= row.0) {
+            score.findings.push(Finding {
+                kind: "reclaimable",
+                severity: Severity::Warn,
+                penalty,
+                subject: root.to_owned(),
+                value: share * 100.0,
+                bytes: reclaim,
+                fix: "suggestions",
+            });
+        }
+    }
+    regrade(score);
+}
+
 /// Sort the findings and recompute score and grade after findings were added
 /// outside [`score_with`] (same bands: >= 85 good, >= 60 fair).
 pub fn regrade(score: &mut HealthScore) {
@@ -371,6 +394,28 @@ mod tests {
 
     fn kinds(h: &HealthScore) -> Vec<(&str, u32)> {
         h.findings.iter().map(|f| (f.kind, f.penalty)).collect()
+    }
+
+    #[test]
+    fn advice_replaces_old_and_large() {
+        let c = [vol(r"C:\", 500 * GB, 200 * GB, true)];
+        let scan = ScanFacts {
+            root: r"D:\".into(),
+            volume_total: 1000 * GB,
+            reclaimable: 200 * GB,
+        };
+        let mut h = score(&c, Some(&scan));
+        assert_eq!(kinds(&h), [("old-large", 10)]);
+        add_advice(&mut h, r"D:\", 1000 * GB, 50 * GB);
+        assert_eq!(kinds(&h), [("reclaimable", 5)]);
+        assert_eq!(h.findings[0].fix, "suggestions");
+        assert_eq!(h.score, 95);
+        add_advice(&mut h, r"D:\", 1000 * GB, GB);
+        assert!(h.findings.iter().all(|f| f.kind != "old-large"));
+        assert_eq!(
+            h.score, 95,
+            "a second call does not add the old finding back"
+        );
     }
 
     #[test]

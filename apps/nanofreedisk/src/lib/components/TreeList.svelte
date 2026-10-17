@@ -4,6 +4,8 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app } from "../state.svelte";
   import Icon from "./Icon.svelte";
+  import VerdictBadge from "./VerdictBadge.svelte";
+  import { badgeOf } from "../advice";
   import type { Node } from "../types";
 
   interface Props {
@@ -118,6 +120,8 @@
   <div class="head">
     <span>{t("col-name")}</span>
     <span class="num">{t("col-size")}</span>
+    <span>{t("advice-col-verdict")}</span>
+    <span class="num">{t("advice-col-reclaim")}</span>
     <span>{t("col-share")}</span>
     <span class="num">{t("col-files")}</span>
     <span class="num">{t("col-modified")}</span>
@@ -132,6 +136,7 @@
       {#each visible as r, k (r.node.id)}
         {@const n = r.node}
         {@const share = total ? n.onDisk / total : 0}
+        {@const badge = badgeOf(n.advice)}
         <div
           class="row"
           class:sel={selected.includes(n.id)}
@@ -166,6 +171,10 @@
             {#if n.attrs.includes("system")}<span class="badge" title={t("attr-system")}>S</span>{/if}
           </span>
           <span class="num">{formatSize(n.onDisk, loc)}</span>
+          <span class="verdict" data-row-verdict={badge.verdict ?? (badge.partly ? "partly" : "")}>
+            {#if badge.verdict}<VerdictBadge verdict={badge.verdict} />{:else if badge.partly}<span class="partly" title={t("advice-badge-partly", { size: formatSize(n.advice?.reclaim ?? 0, loc) })}>±</span>{/if}
+          </span>
+          <span class="num reclaim" class:zero={!n.advice?.reclaim}>{n.advice ? (n.advice.reclaim ? formatSize(n.advice.reclaim, loc) : "—") : ""}</span>
           <span class="share">
             <span class="bar"><span style="width: {Math.max(share * 100, share > 0 ? 0.5 : 0)}%"></span></span>
             <small class="muted">{formatPercent(share, loc)}</small>
@@ -190,7 +199,7 @@
   .head,
   .row {
     display: grid;
-    grid-template-columns: minmax(140px, 1fr) 84px 110px 64px 96px;
+    grid-template-columns: minmax(140px, 1fr) 76px 84px 76px 96px 60px 92px;
     align-items: center;
     gap: 8px;
     padding: 0 10px;
@@ -275,26 +284,55 @@
   .share .bar {
     flex: 1;
   }
-  /* narrow panel: drop "modified", then "files" */
-  @container (max-width: 600px) {
+  /* narrow panel: drop "modified", then "files", then the share bar; the verdict
+     and what can be freed stay */
+  @container (max-width: 760px) {
     .head,
     .row {
-      grid-template-columns: minmax(140px, 1fr) 84px 110px 64px;
+      grid-template-columns: minmax(140px, 1fr) 76px 84px 76px 96px 60px;
+    }
+    .head > :nth-child(7),
+    .row > :nth-child(7) {
+      display: none;
+    }
+  }
+  @container (max-width: 640px) {
+    .head,
+    .row {
+      grid-template-columns: minmax(140px, 1fr) 76px 84px 76px 96px;
+    }
+    .head > :nth-child(6),
+    .row > :nth-child(6) {
+      display: none;
+    }
+  }
+  @container (max-width: 520px) {
+    .head,
+    .row {
+      grid-template-columns: minmax(120px, 1fr) 72px 80px 72px;
     }
     .head > :nth-child(5),
     .row > :nth-child(5) {
       display: none;
     }
   }
-  @container (max-width: 480px) {
-    .head,
-    .row {
-      grid-template-columns: minmax(120px, 1fr) 80px 96px;
-    }
-    .head > :nth-child(4),
-    .row > :nth-child(4) {
-      display: none;
-    }
+  .verdict {
+    display: flex;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .partly {
+    font-size: 0.8em;
+    padding: 0 6px;
+    border-radius: 9px;
+    color: var(--risk-safe);
+    border: 1px dashed color-mix(in srgb, var(--risk-safe) 50%, transparent);
+  }
+  .reclaim {
+    color: var(--risk-safe);
+  }
+  .reclaim.zero {
+    color: var(--text-muted);
   }
   .share small {
     width: 38px;

@@ -4,6 +4,7 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, refreshVolumes, startScan } from "../state.svelte";
   import { clean, defaultPicks, scanJunk } from "../clean/state.svelte";
+  import { advice, listenAdvice, loadAdvice } from "../advice/state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
   import TempCard from "../components/TempCard.svelte";
   import AiCard from "../components/AiCard.svelte";
@@ -18,7 +19,28 @@
     if (!clean.scan && !clean.scanning && !clean.running) void scanJunk();
   });
 
+  // with a scan loaded, the free-space figure is the advice's: what the suggestions
+  // can free in it (plus the junk the rules found elsewhere)
+  $effect(() => {
+    void listenAdvice();
+  });
+  $effect(() => {
+    void app.summary;
+    void app.version;
+    if (app.summary) void loadAdvice();
+  });
+  const advised = $derived(
+    app.summary && advice.summary?.suggestions
+      ? advice.summary.suggestions.reclaim + advice.summary.elsewhere.filter((g) => g.verdict === "safe" && g.actionable).reduce((s, g) => s + g.bytes, 0)
+      : null,
+  );
+
   function freeSafely() {
+    if (advised != null) {
+      app.settings.analyzePanel = "suggest";
+      app.view = "analyze";
+      return;
+    }
     app.view = "clean";
     if (clean.scan) {
       const ids = defaultPicks(clean.scan);
@@ -67,16 +89,18 @@
   <AiCard />
 
   <div class="big">
-    <button class="action card free" onclick={freeSafely} disabled={!!clean.scan && !clean.scan.safe} data-effect title={t("home-free-hint")}>
+    <button class="action card free" data-home-free={advised != null ? "advice" : "rules"} onclick={freeSafely} disabled={advised == null && !!clean.scan && !clean.scan.safe} data-effect title={t("home-free-hint")}>
       <span class="ic safe"><Icon name="clean" size={26} /></span>
       <strong>
-        {#if clean.scan}
+        {#if advised != null}
+          {advised ? t("home-free-advice", { size: formatSize(advised, loc) }) : t("home-free-nothing")}
+        {:else if clean.scan}
           {clean.scan.safe ? t("home-free-safely", { size: formatSize(clean.scan.safe, loc) }) : t("home-free-nothing")}
         {:else}
           {t("home-free-checking")}
         {/if}
       </strong>
-      <span class="muted">{t("home-free-sub")}</span>
+      <span class="muted">{advised != null ? t("home-free-advice-sub") : t("home-free-sub")}</span>
     </button>
     <button class="action card" onclick={analyzeSystem} disabled={!system && !app.summary} data-effect title={t("hint-scan")}>
       <span class="ic"><Icon name="analyze" size={26} /></span>

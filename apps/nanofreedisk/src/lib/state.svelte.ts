@@ -7,6 +7,8 @@ import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, 
 
 export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "settings";
 export type Viz = "treemap" | "sunburst";
+/** Analyze's right side: the suggestions (default) or the map (`viz`). */
+export type AnalyzePanel = "suggest" | "map";
 /** G2: Simple hides advanced filters, raw attributes and technical exports; Expert
  * shows everything plus the equivalent `nfd` command for actions that have one. */
 export type Mode = "simple" | "expert";
@@ -16,6 +18,10 @@ export interface Settings {
   theme: ThemeSettings;
   fontScale: number;
   viz: Viz;
+  /** Analyze shows the suggestions or the map on the right. */
+  analyzePanel: AnalyzePanel;
+  /** Treemap / sunburst colors: by file type or by verdict. */
+  mapColor: "type" | "verdict";
   mode: Mode;
   /** Old & Large thresholds (A2). */
   largeGb: number;
@@ -55,6 +61,8 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: DEFAULT_THEME,
   fontScale: 1,
   viz: "treemap",
+  analyzePanel: "suggest",
+  mapColor: "type",
   mode: "simple",
   largeGb: 1,
   staleYears: 1,

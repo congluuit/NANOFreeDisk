@@ -3,6 +3,9 @@
 // native build.
 
 import type {
+  AdviceOutcome,
+  AdviceSummary,
+  EntryAdvice,
   UpdateInfo,
   AppInfo,
   AgeMatrix,
@@ -114,6 +117,12 @@ export const api = {
   readTextFile: (path: string) => call<string>("read_text_file", { path }),
   writeTextFile: (path: string, contents: string) =>
     call<void>("write_text_file", { path, contents }),
+  adviceSummary: () => call<AdviceSummary>("advice_summary"),
+  adviceDetail: (id: number) => call<EntryAdvice | null>("advice_detail", { id }),
+  adviceRefresh: (rulesDir: string | null = null) => call<void>("advice_refresh", { rulesDir }),
+  adviceClean: (keys: string[], caution: boolean, expert: boolean) =>
+    call<AdviceOutcome>("advice_clean", { keys, caution, expert }),
+  adviceCancel: () => call<void>("advice_cancel"),
 };
 
 export type ProgressEvent = Progress;

@@ -4,6 +4,7 @@
   import { i18n, intlLocale, t } from "../i18n.svelte";
   import { renderArticle } from "../md";
   import { app, askDelete, expert, fail, navigate, toast } from "../state.svelte";
+  import AdviceCard from "./AdviceCard.svelte";
   import Icon from "./Icon.svelte";
   import type { Article, Detail } from "../types";
 
@@ -49,6 +50,10 @@
   const loc = $derived(intlLocale());
   const rootId = $derived(app.summary?.rootId ?? 0);
   const targets = $derived(app.selected.length ? app.selected : detail && detail.id !== rootId ? [detail.id] : []);
+  // what must stay (or only a system tool may shrink) gets no Recycle Bin button
+  const kept = $derived(
+    !!detail && targets.length === 1 && targets[0] === detail.id && (detail.advice?.verdict === "keep" || detail.advice?.verdict === "guide"),
+  );
 
   $effect(() => {
     const id = app.focus;
@@ -105,6 +110,7 @@
         {#if detail.hardlinkDup}<span class="chip">{t("attr-hardlink")}</span>{/if}
       </div>
     {/if}
+    <AdviceCard {detail} />
     {#if owner}
       <p class="owner muted small" title={t("details-owner-hint")}>{t("details-owner")}: <span class="mono">{owner}</span></p>
     {/if}
@@ -135,16 +141,18 @@
         <button class="btn" onclick={() => api.openItem(detail!.id).catch(fail)}><Icon name="open" size={16} />{t("action-open")}</button>
       {/if}
       <span class="grow"></span>
-      <button
-        class="btn danger-outline"
-        data-effect
-        disabled={!targets.length}
-        title={t("action-recycle-hint")}
-        onclick={() => askDelete(targets)}
-      >
-        <Icon name="trash" size={16} />
-        {targets.length > 1 ? t("action-recycle-n", { count: targets.length }) : t("action-recycle")}
-      </button>
+      {#if !kept}
+        <button
+          class="btn danger-outline"
+          data-effect
+          disabled={!targets.length}
+          title={t("action-recycle-hint")}
+          onclick={() => askDelete(targets)}
+        >
+          <Icon name="trash" size={16} />
+          {targets.length > 1 ? t("action-recycle-n", { count: targets.length }) : t("action-recycle")}
+        </button>
+      {/if}
     </div>
     {#if app.selected.length < 2}
       <p class="hint muted">{t("action-select-hint")}</p>
@@ -160,6 +168,11 @@
     flex-direction: column;
     gap: 8px;
     min-height: 150px;
+    max-height: 50%;
+    overflow: auto;
+  }
+  .details > :global(*) {
+    flex-shrink: 0;
   }
   .title {
     display: flex;

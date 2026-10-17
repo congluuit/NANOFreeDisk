@@ -69,6 +69,28 @@ impl DupeState {
         })
     }
 
+    /// Every copy of the last search but the first of its group, with that first
+    /// one: `(copy, kept copy)` — Analyze marks the extra copies.
+    pub(super) fn copies(&self) -> Vec<(PathBuf, PathBuf)> {
+        let Ok(guard) = self.report.lock() else {
+            return Vec::new();
+        };
+        guard.as_ref().map_or_else(Vec::new, |r| {
+            r.groups
+                .iter()
+                .filter_map(|g| {
+                    let (keeper, rest) = g.copies.split_first()?;
+                    Some(
+                        rest.iter()
+                            .map(|c| (c.path.clone(), keeper.path.clone()))
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .flatten()
+                .collect()
+        })
+    }
+
     /// `true` when `path` is a copy (or a link of one) or a duplicate folder in the
     /// last search.
     fn knows(&self, path: &Path) -> CmdResult<bool> {

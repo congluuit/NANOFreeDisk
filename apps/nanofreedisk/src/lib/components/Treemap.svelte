@@ -7,6 +7,8 @@
   import { bestText } from "../theme";
   import { hitTest, layoutTreemap, minBytesFor, type Layout } from "../treemap";
   import { REST_ID, type Slice } from "../types";
+  import { VERDICTS, VERDICT_TOKEN, verdictOfCode } from "../advice";
+  import VerdictBadge from "./VerdictBadge.svelte";
 
   interface Props {
     rootId: number;
@@ -16,8 +18,10 @@
     onselect: (id: number, additive: boolean) => void;
     onopen: (id: number) => void;
     oncontext: (id: number, x: number, y: number) => void;
+    /** Tile colors: by file type, or by verdict (what can go / must stay). */
+    colorBy?: "type" | "verdict";
   }
-  let { rootId, total, version, selected, onselect, onopen, oncontext }: Props = $props();
+  let { rootId, total, version, selected, onselect, onopen, oncontext, colorBy = "type" }: Props = $props();
 
   let host: HTMLDivElement;
   let base: HTMLCanvasElement;
@@ -38,12 +42,17 @@
   const REST = BUCKETS.length;
   const LINK = BUCKETS.length + 1;
   const DIR = 255;
+  // by verdict: bucket = verdict code (unclaimed tiles count as "unknown")
+  const byVerdict = $derived(colorBy === "verdict" && !!slice?.verdicts?.length);
   const paint = $derived.by(() => {
     const p = new Uint8Array(slice?.ids.length ?? 0);
     if (!slice) return p;
+    const codes = slice.verdicts ?? [];
     for (let i = 0; i < p.length; i++) {
       const k = slice.kinds[i];
-      p[i] = k === 1 ? DIR : k === 3 ? REST : k === 2 ? LINK : BUCKETS.indexOf(categoryOf(slice.names[i]));
+      if (k === 1) p[i] = DIR;
+      else if (byVerdict) p[i] = k === 2 ? LINK : Math.min(codes[i] ?? 4, 4);
+      else p[i] = k === 3 ? REST : k === 2 ? LINK : BUCKETS.indexOf(categoryOf(slice.names[i]));
     }
     return p;
   });
@@ -79,6 +88,7 @@
 
   $effect(() => {
     void themeTick;
+    void paint;
     if (slice && width && height) draw(slice, width, height);
   });
 
@@ -117,7 +127,10 @@
     // Paint in buckets of one color (fewer fillStyle switches: ~15 ms for 50k tiles).
     // Directories first, in paint order, so nested frames land on their parents;
     // leaves never overlap each other, so their order does not matter.
-    const fills = [...BUCKETS.map((c) => pal[c]), pal.rest, pal.link];
+    const css = getComputedStyle(document.documentElement);
+    const fills = byVerdict
+      ? [...VERDICTS.map((v) => css.getPropertyValue(VERDICT_TOKEN[v]).trim() || pal.other), ...Array(BUCKETS.length - VERDICTS.length).fill(pal.other), pal.rest, pal.link]
+      : [...BUCKETS.map((c) => pal[c]), pal.rest, pal.link];
     const tile = (i: number) => {
       const rw = l.w[i];
       const rh = l.h[i];
@@ -130,7 +143,8 @@
       ctx.fillStyle = fills[b];
       for (let k = 0; k < l.count; k++) if (paint[l.order[k]] === b) tile(l.order[k]);
     }
-    // labels on tiles large enough to read
+    // labels only where they can be read: the first two folder levels and big tiles
+    // (hover shows the rest)
     ctx.font = `${12 * app.settings.fontScale}px "Segoe UI", sans-serif`;
     ctx.textBaseline = "middle";
     for (let k = 1; k < l.count; k++) {
@@ -140,15 +154,15 @@
       const rw = l.w[i];
       const rh = l.h[i];
       if (paint[i] === DIR) {
-        if (rw > 60 && rh > 40) {
+        if (s.depths[i] <= 2 && rw > 110 && rh > 56) {
           ctx.fillStyle = pal.text;
           label(ctx, `${s.names[i]}  ${formatSize(s.sizes[i], loc)}`, x + 5, y + 9, rw - 10);
         }
-      } else if (rw > 54 && rh > 18) {
+      } else if (rw > 96 && rh > 30) {
         ctx.fillStyle = textFor(fills[paint[i]]);
         const name = s.kinds[i] === 3 ? t("analyze-small-items") : s.names[i];
         label(ctx, name, x + 5, y + 10, rw - 10);
-        if (rh > 34) label(ctx, formatSize(s.sizes[i], loc), x + 5, y + 25, rw - 10);
+        if (rh > 46) label(ctx, formatSize(s.sizes[i], loc), x + 5, y + 25, rw - 10);
       }
     }
     stats = { nodes: s.ids.length, layoutMs: t1 - t0, drawMs: performance.now() - t1 };
@@ -229,6 +243,7 @@
           size: slice.sizes[hover],
           share: slice.sizes[0] ? slice.sizes[hover] / slice.sizes[0] : 0,
           kind: slice.kinds[hover],
+          verdict: verdictOfCode(slice.verdicts?.[hover]),
         }
       : null,
   );
@@ -261,6 +276,7 @@
     >
       <strong class="ellipsis">{hovered.name}</strong>
       <span>{formatSize(hovered.size, loc)} · {formatPercent(hovered.share, loc)}</span>
+      {#if hovered.verdict}<span><VerdictBadge verdict={hovered.verdict} long /></span>{/if}
     </div>
   {/if}
   {#if slice?.truncated}

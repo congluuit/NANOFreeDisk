@@ -103,7 +103,7 @@ pub(crate) fn build_output(kind: &str) -> Arc<Text> {
 pub(crate) fn build_output_untouched() -> Arc<Text> {
     arc(
         "The project's source code, settings and git history stay; only this build folder goes, into the quarantine (restorable for 7 days).",
-        "Mã nguồn, thiết lập và lịch sử git của dự án được giữ nguyên; chỉ thư mục build này bị dọn, vào quarantine (khôi phục được trong 7 ngày).",
+        "Mã nguồn, thiết lập và lịch sử git của dự án được giữ nguyên; chỉ thư mục build này bị dọn, vào khu cách ly (khôi phục được trong 7 ngày).",
     )
 }
 
@@ -114,21 +114,21 @@ pub(crate) fn rule_untouched(min_age_days: u32) -> Arc<Text> {
                 "Only what this rule covers goes, into the quarantine (restorable for 7 days). Files written in the last {min_age_days} day(s) and 🔒 kept paths stay."
             ),
             format!(
-                "Chỉ những gì quy tắc này bao phủ bị dọn, vào quarantine (khôi phục được trong 7 ngày). Tệp ghi trong {min_age_days} ngày gần đây và các đường dẫn 🔒 Giữ lại không bị đụng tới."
+                "Chỉ những gì quy tắc này bao phủ bị dọn, vào khu cách ly (khôi phục được trong 7 ngày). Tệp ghi trong {min_age_days} ngày gần đây và các đường dẫn 🔒 Giữ lại không bị đụng tới."
             ),
         ))
     } else {
         arc(
             "Only what this rule covers goes, into the quarantine (restorable for 7 days). 🔒 Kept paths stay.",
-            "Chỉ những gì quy tắc này bao phủ bị dọn, vào quarantine (khôi phục được trong 7 ngày). Các đường dẫn 🔒 Giữ lại không bị đụng tới.",
+            "Chỉ những gì quy tắc này bao phủ bị dọn, vào khu cách ly (khôi phục được trong 7 ngày). Các đường dẫn 🔒 Giữ lại không bị đụng tới.",
         )
     }
 }
 
 pub(crate) fn store_untouched() -> Arc<Text> {
     arc(
-        "The package manager's own command does it (DevCache → Stores): it knows what installed projects still need.",
-        "Lệnh của chính trình quản lý gói làm việc này (DevCache → Kho gói): nó biết dự án đã cài còn cần gì.",
+        "The package manager's own command does it (Dev caches → Stores): it knows what installed projects still need.",
+        "Lệnh của chính trình quản lý gói làm việc này (Cache lập trình → Package store): nó biết dự án đã cài còn cần gì.",
     )
 }
 

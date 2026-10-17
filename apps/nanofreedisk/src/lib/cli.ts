@@ -13,6 +13,11 @@ export function nfdScan(root: string, ...flags: string[]): string {
   return ["nfd", "scan", cliArg(root), ...flags].join(" ");
 }
 
+/** `nfd advise <root> …flags`. */
+export function nfdAdvise(root: string, ...flags: string[]): string {
+  return ["nfd", "advise", cliArg(root), ...flags].join(" ");
+}
+
 /** CLI size flag value: whole GiB as `2GB`, else MiB. */
 export function sizeFlag(bytes: number): string {
   const gib = bytes / 2 ** 30;

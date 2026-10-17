@@ -82,6 +82,8 @@ export interface Node {
   attrs: string[];
   hasChildren: boolean;
   hardlinkDup: boolean;
+  /** Verdict and reclaimable bytes, once the advice of the scan is computed. */
+  advice?: NodeAdvice;
 }
 
 export interface Located extends Node {
@@ -107,6 +109,8 @@ export interface Slice {
   names: string[];
   depths: number[];
   truncated: boolean;
+  /** Verdict code per node (0 safe … 4 unknown, 255 none); empty before the advice. */
+  verdicts?: number[];
 }
 
 export const REST_ID = 4294967295;
@@ -230,7 +234,7 @@ export interface HistoryInfo {
   path: string;
 }
 
-export type FindingKind = "low-space" | "filling-fast" | "old-large" | "no-scan" | "no-trend" | "ai-leftovers";
+export type FindingKind = "low-space" | "filling-fast" | "old-large" | "reclaimable" | "no-scan" | "no-trend" | "ai-leftovers";
 
 export interface Finding {
   kind: FindingKind;
@@ -239,7 +243,7 @@ export interface Finding {
   subject: string;
   value: number;
   bytes: number;
-  fix: "oldlarge" | "analyze" | "home" | "devcache";
+  fix: "oldlarge" | "analyze" | "suggestions" | "home" | "devcache";
 }
 
 export interface HealthScore {
@@ -354,4 +358,151 @@ export interface UpdateInfo {
   /** installer = NSIS/MSI (updates in place); setup / portable = release page. */
   kind: "installer" | "setup" | "portable";
   releases: string;
+}
+
+// ── Advice (Analyze → Suggestions, nfd-advice) ─────────────────────────────────
+
+/** Can it go? `safe` → one click, `caution` → explicit tick, `guide` → only the proper
+ * tool, `keep` → never, `unknown` → nothing known (the user decides). */
+export type Verdict = "safe" | "caution" | "guide" | "keep" | "unknown";
+
+export type AdviceReason =
+  | "rule"
+  | "keep-rule"
+  | "build-output"
+  | "agent-worktree"
+  | "agent-leftover"
+  | "agent-history"
+  | "system"
+  | "programs"
+  | "protected"
+  | "personal"
+  | "explained"
+  | "old-large"
+  | "old-installer"
+  | "duplicate";
+
+export type AdviceAction = "clean" | "quarantine" | "ai-leftovers" | "recycle-bin" | "store" | "duplicates" | "guide" | "none";
+
+export type RiskLevel = "safe" | "caution" | "advanced" | "protected";
+
+/** Bytes on disk by verdict. */
+export interface ByVerdict {
+  safe: number;
+  caution: number;
+  guide: number;
+  keep: number;
+  unknown: number;
+}
+
+export interface BiText {
+  en: string;
+  vi: string;
+}
+
+export interface NodeAdvice {
+  /** The verdict of the unit the entry belongs to (none: mixed or unknown). */
+  verdict: Verdict | null;
+  reason: AdviceReason | null;
+  /** The entry starts its unit. */
+  root: boolean;
+  inside: ByVerdict;
+  /** 🟢 + 🟡 bytes an unblocked action can free. */
+  reclaim: number;
+}
+
+export interface AdviceUnit {
+  entry: number;
+  verdict: Verdict;
+  reason: AdviceReason;
+  level: RiskLevel | null;
+  source: string | null;
+  app: string | null;
+  title: BiText | null;
+  impact: BiText;
+  untouched: BiText | null;
+  action: AdviceAction;
+  blocked: string | null;
+  selected: boolean;
+  store: string | null;
+  requiresClosed: string[];
+  cutoff: number | null;
+}
+
+export interface AdvicePart {
+  id: number;
+  path: string;
+  verdict: Verdict;
+  reason: AdviceReason;
+  source: string | null;
+  app: string | null;
+  title: BiText | null;
+  blocked: string | null;
+  bytes: number;
+}
+
+export interface EntryAdvice {
+  id: number;
+  node: NodeAdvice;
+  unit: AdviceUnit | null;
+  /** Its suggestion group key. */
+  group: string | null;
+  /** Where the unit starts, when not at this entry (relative to the scan). */
+  unitPath: string | null;
+  parts: AdvicePart[];
+  enriched: boolean;
+}
+
+export interface AdviceGroupItem {
+  id: number | null;
+  path: string;
+  bytes: number;
+  files: number;
+  blocked: string | null;
+}
+
+export interface AdviceGroup {
+  key: string;
+  verdict: Verdict;
+  reason: AdviceReason;
+  level: RiskLevel | null;
+  source: string | null;
+  app: string | null;
+  title: BiText | null;
+  impact: BiText;
+  untouched: BiText | null;
+  action: AdviceAction;
+  blocked: string | null;
+  store: string | null;
+  requiresClosed: string[];
+  bytes: number;
+  recent: number;
+  files: number;
+  count: number;
+  selected: boolean;
+  actionable: boolean;
+  location: string | null;
+  elsewhere: boolean;
+  items: AdviceGroupItem[];
+}
+
+export interface Suggestions {
+  totals: ByVerdict;
+  reclaim: number;
+  groups: AdviceGroup[];
+  enriched: boolean;
+}
+
+export interface AdviceSummary {
+  computing: boolean;
+  seq: number;
+  root: string;
+  suggestions: Suggestions | null;
+  elsewhere: AdviceGroup[];
+}
+
+export interface AdviceOutcome {
+  operation: { freed: number; done: number; partial: number; skipped: number; failed: number; cancelled: boolean } | null;
+  recycled: RecycleOutcome[];
+  skipped: [number, string][];
 }

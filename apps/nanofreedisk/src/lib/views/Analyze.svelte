@@ -1,8 +1,12 @@
 <script lang="ts">
   import { api, inTauri, pickSaveFile } from "../api";
   import { exportHtmlReport, itemMenu } from "../actions";
-  import { nfdScan } from "../cli";
+  import { nfdAdvise, nfdScan } from "../cli";
   import { CATEGORIES, categoryOf, tokenOf } from "../colors";
+  import { VERDICTS, VERDICT_TOKEN } from "../advice";
+  import { advice, listenAdvice, loadAdvice } from "../advice/state.svelte";
+  import AdviceDialog from "../components/AdviceDialog.svelte";
+  import Suggestions from "../components/Suggestions.svelte";
   import { formatCount, formatDuration, formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, askDelete, expert, fail, navigate, select, startScan, toast } from "../state.svelte";
@@ -19,7 +23,7 @@
   import Sunburst from "../components/Sunburst.svelte";
   import Treemap from "../components/Treemap.svelte";
   import TreeList from "../components/TreeList.svelte";
-  import type { Detail, ExtRow, Located, Node, ScanIssue } from "../types";
+  import type { Detail, ExtRow, Located, Node, NodeAdvice, ScanIssue } from "../types";
 
   type Tab = "top" | "ext" | "age" | "changes" | "search" | "issues";
   let tab = $state<Tab>("top");
@@ -48,7 +52,7 @@
 
   // what the selection bar counts: the selected entries, whatever list they came from
   const listed = $derived.by(() => {
-    const m = new Map<number, { onDisk: number; files: number; kind: string }>();
+    const m = new Map<number, { onDisk: number; files: number; kind: string; advice?: NodeAdvice }>();
     for (const n of [...children, ...top, ...(app.search?.result.rows ?? [])]) m.set(n.id, n);
     return m;
   });
@@ -62,7 +66,9 @@
   const sizeItem = (id: number): SelItem => {
     const n = listed.get(id);
     const k = n ?? known[id];
-    return { id: String(id), bytes: k?.onDisk ?? 0, files: n && n.kind !== "dir" ? 1 : (k?.files ?? 0), locked: id === rootId };
+    // what must stay (or only a system tool may shrink) is never ticked for the Recycle Bin
+    const kept = n?.advice?.verdict === "keep" || n?.advice?.verdict === "guide";
+    return { id: String(id), bytes: k?.onDisk ?? 0, files: n && n.kind !== "dir" ? 1 : (k?.files ?? 0), locked: id === rootId || kept };
   };
   /** Select all = the entries of the folder shown. */
   const childItems = $derived(children.map((n) => sizeItem(n.id)));
@@ -77,6 +83,18 @@
   $effect(() => {
     if (tab === "issues" && app.summary) api.issues(1000).then((r) => (issues = r)).catch(fail);
   });
+
+  // the advice of this scan (computed in the background; `advice-ready` reloads it)
+  $effect(() => {
+    void listenAdvice();
+  });
+  $effect(() => {
+    void app.summary;
+    void app.version;
+    void loadAdvice();
+  });
+  const panel = $derived(app.settings.analyzePanel);
+  const verdictColors = $derived(app.settings.mapColor === "verdict");
 
   function up() {
     const anc = current?.ancestors;
@@ -144,14 +162,6 @@
           </button>
         {/each}
       </nav>
-      <div class="seg" role="group">
-        <button class:on={app.settings.viz === "treemap"} onclick={() => (app.settings.viz = "treemap")} title={t("analyze-view-treemap")}>
-          <Icon name="treemap" size={16} />
-        </button>
-        <button class:on={app.settings.viz === "sunburst"} onclick={() => (app.settings.viz = "sunburst")} title={t("analyze-view-sunburst")}>
-          <Icon name="sunburst" size={16} />
-        </button>
-      </div>
       <button class="btn ghost" onclick={() => startScan(s.root)} data-effect title={t("hint-rescan")}>
         <Icon name="refresh" size={16} />{t("analyze-rescan")}
       </button>
@@ -178,7 +188,7 @@
         </button>
       {/if}
       <span class="grow"></span>
-      <CliHint command={nfdScan(s.root, "--top", "50")} />
+      <CliHint command={panel === "suggest" ? nfdAdvise(s.root) : nfdScan(s.root, "--top", "50")} />
     </div>
 
     <FilterBar onresults={() => (tab = "search")} />
@@ -200,21 +210,50 @@
         <Details />
       </div>
       <div class="col right">
-        <div class="viz card">
-          {#if app.settings.viz === "treemap"}
-            <Treemap rootId={app.current} {total} version={app.version} selected={app.selected} onselect={select} onopen={open} oncontext={contextFor} />
+        <div class="panelbar" role="tablist" aria-label={t("advice-tab")}>
+          <button role="tab" data-panel="suggest" aria-selected={panel === "suggest"} class:on={panel === "suggest"} onclick={() => (app.settings.analyzePanel = "suggest")}>
+            <Icon name="clean" size={15} />{t("advice-tab")}
+            {#if advice.summary?.suggestions?.reclaim}<span class="count">{formatSize(advice.summary.suggestions.reclaim, loc)}</span>{/if}
+          </button>
+          <button role="tab" data-panel="treemap" aria-selected={panel === "map" && app.settings.viz === "treemap"} class:on={panel === "map" && app.settings.viz === "treemap"} onclick={() => { app.settings.analyzePanel = "map"; app.settings.viz = "treemap"; }}>
+            <Icon name="treemap" size={15} />{t("analyze-view-treemap")}
+          </button>
+          <button role="tab" data-panel="sunburst" aria-selected={panel === "map" && app.settings.viz === "sunburst"} class:on={panel === "map" && app.settings.viz === "sunburst"} onclick={() => { app.settings.analyzePanel = "map"; app.settings.viz = "sunburst"; }}>
+            <Icon name="sunburst" size={15} />{t("analyze-view-sunburst")}
+          </button>
+          {#if panel === "map"}
+            <span class="grow"></span>
+            <div class="seg" role="group">
+              <button class:on={!verdictColors} onclick={() => (app.settings.mapColor = "type")} data-map-color="type">{t("advice-color-type")}</button>
+              <button class:on={verdictColors} onclick={() => (app.settings.mapColor = "verdict")} data-map-color="verdict">{t("advice-color-verdict")}</button>
+            </div>
+          {/if}
+        </div>
+        <div class="viz card" class:suggest={panel === "suggest"}>
+          {#if panel === "suggest"}
+            <Suggestions />
+          {:else if app.settings.viz === "treemap"}
+            <Treemap rootId={app.current} {total} version={app.version} selected={app.selected} onselect={select} onopen={open} oncontext={contextFor} colorBy={app.settings.mapColor} />
           {:else}
             <Sunburst rootId={app.current} {total} version={app.version} selected={app.selected} onselect={select} onopen={open} oncontext={contextFor} />
           {/if}
         </div>
-        <div class="legend">
-          <span><i style="background: var(--tm-dir); border: 1px solid var(--border)"></i>{t("analyze-legend-folder")}</span>
-          {#each CATEGORIES as c (c)}
-            <span><i style="background: var({tokenOf(c)})"></i>{t(`cat-${c}`)}</span>
-          {/each}
-          <span><i style="background: var(--tm-other)"></i>{t("cat-other")}</span>
-        </div>
-        <div class="tabs card">
+        {#if panel === "map"}
+          <div class="legend">
+            {#if verdictColors && app.settings.viz === "treemap"}
+              {#each VERDICTS as v (v)}
+                <span><i style="background: var({VERDICT_TOKEN[v]})"></i>{t(`advice-verdict-${v}`)}</span>
+              {/each}
+            {:else}
+              <span><i style="background: var(--tm-dir); border: 1px solid var(--border)"></i>{t("analyze-legend-folder")}</span>
+              {#each CATEGORIES as c (c)}
+                <span><i style="background: var({tokenOf(c)})"></i>{t(`cat-${c}`)}</span>
+              {/each}
+              <span><i style="background: var(--tm-other)"></i>{t("cat-other")}</span>
+            {/if}
+          </div>
+        {/if}
+        <div class="tabs card" class:low={panel === "suggest"}>
           <div class="tabbar" role="tablist">
             <button role="tab" aria-selected={tab === "top"} class:on={tab === "top"} onclick={() => (tab = "top")}>{t("analyze-tab-top")}</button>
             <button role="tab" aria-selected={tab === "ext"} class:on={tab === "ext"} onclick={() => (tab = "ext")}>{t("analyze-tab-ext")}</button>
@@ -289,10 +328,14 @@
   <ContextMenu x={menu.x} y={menu.y} items={menu.items} onclose={() => (menu = null)} />
 {/if}
 
+{#if advice.confirm}
+  <AdviceDialog req={advice.confirm} />
+{/if}
+
 <svelte:window
   onkeydown={(e) => {
     const typing = (e.target as HTMLElement)?.closest("input, select, textarea");
-    if (typing || app.deleting || !app.summary) return;
+    if (typing || app.deleting || advice.confirm || !app.summary) return;
     if (e.key === "Backspace" || (e.altKey && e.key === "ArrowUp")) {
       e.preventDefault();
       up();
@@ -422,6 +465,36 @@
     padding: 4px;
     overflow: hidden;
   }
+  .viz.suggest {
+    flex: 2.2;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+  }
+  .panelbar {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    flex-wrap: wrap;
+  }
+  .panelbar > button {
+    border: none;
+    background: none;
+    padding: 6px 12px;
+    color: var(--text-muted);
+    border-bottom: 2px solid transparent;
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .panelbar > button.on {
+    color: var(--text);
+    border-bottom-color: var(--accent);
+  }
+  .seg button {
+    font-size: 0.82em;
+    padding: 4px 10px;
+  }
   .legend {
     display: flex;
     flex-wrap: wrap;
@@ -440,6 +513,9 @@
     width: 10px;
     height: 10px;
     border-radius: 2px;
+  }
+  .tabs.low {
+    flex: 0.75;
   }
   .tabs {
     flex: 1;

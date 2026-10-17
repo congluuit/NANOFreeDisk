@@ -5,6 +5,9 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
+
+use nfd_advice::{Advice, NodeAdvice};
 
 use nfd_core::insights::{self, OldLargeOptions};
 use nfd_core::model::{ChildIndex, Entry, EntryId, EntryKind, subtree_ends};
@@ -27,6 +30,11 @@ pub struct Session {
     /// Size of the volume the scan lives on (0 when unknown), for size sanity checks.
     pub volume_total: u64,
     pub volume_free: u64,
+    /// The scan this session came from (advice computed in the background checks it
+    /// before storing its result).
+    pub seq: u32,
+    /// What can go and what must stay ([`nfd_advice`]), once computed.
+    pub advice: Option<Arc<Advice>>,
 }
 
 /// One entry as the UI sees it.
@@ -43,6 +51,9 @@ pub struct Node {
     pub attrs: Vec<&'static str>,
     pub has_children: bool,
     pub hardlink_dup: bool,
+    /// Verdict and reclaimable bytes, once the advice is computed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub advice: Option<NodeAdvice>,
 }
 
 /// A node with its full path (search results, top files).
@@ -83,6 +94,9 @@ pub struct Slice {
     pub depths: Vec<u8>,
     /// `true` when `max_nodes` cut the slice short.
     pub truncated: bool,
+    /// Verdict code per node ([`nfd_advice::Verdict::code`], 255 = none / mixed);
+    /// empty before the advice is computed.
+    pub verdicts: Vec<u8>,
 }
 
 /// Per-extension totals under one directory.
@@ -228,6 +242,8 @@ impl Session {
             ends,
             volume_total,
             volume_free,
+            seq: 0,
+            advice: None,
         }
     }
 
@@ -265,6 +281,7 @@ impl Session {
             attrs: e.attrs.names(),
             has_children: e.kind == EntryKind::Dir && self.live_children(e.id).next().is_some(),
             hardlink_dup: e.hardlink_dup,
+            advice: self.advice.as_ref().map(|a| a.node(&self.tree, e.id.0)),
         }
     }
 
@@ -382,6 +399,9 @@ impl Session {
             if rest > 0 {
                 push(&mut s, REST_ID, index as i32, rest, 3, "", depth + 1);
             }
+        }
+        if let Some(a) = &self.advice {
+            s.verdicts = a.codes(&s.ids);
         }
         s
     }
