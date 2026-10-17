@@ -34,36 +34,29 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
+  # NANOFreeDisk ships for Windows only: lint and test there (macOS / Linux are not
+  # targets, so they are not built in CI).
   clippy:
-    name: clippy (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
+    name: clippy (windows)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      # The desktop app links WebKitGTK on Linux; it is linted and tested on Windows.
-      - run: cargo clippy --workspace --all-targets --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }} -- -D warnings
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
 
   test:
-    name: test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
+    name: test (windows)
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@nextest
-      - run: cargo nextest run --no-fail-fast --workspace --all-features ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
-      - run: cargo test --workspace --doc ${{ matrix.os != 'windows-latest' && '--exclude nanofreedisk' || '' }}
+      - run: cargo nextest run --no-fail-fast --workspace --all-features
+      - run: cargo test --workspace --doc
 
   rules:
     name: validate rule packs

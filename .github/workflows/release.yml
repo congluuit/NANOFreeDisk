@@ -36,7 +36,11 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   release-check:
     name: release-check
-    runs-on: ubuntu-latest
+    # Windows only, like CI: NANOFreeDisk is not built for macOS / Linux.
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     outputs:
       version: ${{ steps.ver.outputs.version }}
       prerelease: ${{ steps.ver.outputs.prerelease }}
@@ -101,9 +105,8 @@ jobs:
       - name: fmt / clippy / tests
         run: |
           cargo fmt --all --check
-          # The desktop app links WebKitGTK on Linux; it is built and checked on Windows.
-          cargo clippy --workspace --all-targets --all-features --exclude nanofreedisk -- -D warnings
-          cargo nextest run --workspace --all-features --exclude nanofreedisk
+          cargo clippy --workspace --all-targets --all-features -- -D warnings
+          cargo nextest run --workspace --all-features
 
       - name: Rule packs validate
         run: cargo run -p nfd-cli -- rules validate ./rules
