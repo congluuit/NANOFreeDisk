@@ -405,6 +405,7 @@ impl History {
                 journal::SCHEMA
             ))?;
         }
+        journal::add_message_column(&conn)?;
         conn.execute_batch(hashes::SCHEMA)?;
         conn.execute_batch(monitor::SCHEMA)?;
         Ok(Self { conn })

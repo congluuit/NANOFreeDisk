@@ -102,7 +102,7 @@
       {#each d.rows as o (o.id)}
         <li class="card op {o.state}">
           <div class="line">
-            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : "trash"} size={18} /></span>
+            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : o.kind === "ai-leftovers" || o.kind === "worktree" ? "agent" : "trash"} size={18} /></span>
             <div class="what">
               <strong>{t(`activity-kind-${o.kind}`)}</strong>
               <span class="muted small">
@@ -139,6 +139,9 @@
                     </button>
                   {:else}
                     <span></span>
+                  {/if}
+                  {#if i.message && i.mode === "permanent"}
+                    <code class="mono msg muted" data-activity-message>{i.message}</code>
                   {/if}
                 </li>
               {/each}
@@ -225,6 +228,12 @@
     border-radius: var(--radius-sm);
     max-height: 280px;
     overflow: auto;
+  }
+  .items .msg {
+    grid-column: 2 / -1;
+    font-size: 0.92em;
+    white-space: normal;
+    word-break: break-all;
   }
   .items li {
     display: grid;

@@ -109,7 +109,7 @@ function record(kind: string, items: OperationItem[]): OperationRow {
 export function mockDeleted(kind: string, items: { path: string; bytes: number; isDir: boolean }[], mode: OperationItem["mode"]): void {
   record(
     kind,
-    items.map((x, n) => ({ n, path: x.path, ruleId: null, mode, isDir: x.isDir, bytes: x.bytes, files: 1, freed: x.bytes, status: "done", reason: null, stored: null, restored: false })),
+    items.map((x, n) => ({ n, path: x.path, ruleId: null, mode, isDir: x.isDir, bytes: x.bytes, files: 1, freed: x.bytes, status: "done", reason: null, stored: null, restored: false, message: null })),
   );
 }
 
@@ -142,6 +142,7 @@ export const cleanHandlers: Record<string, (a: Record<string, any>) => unknown> 
       reason: r.running.length ? "in-use" : null,
       stored: `quarantine\\${n}`,
       restored: false,
+      message: null,
     }));
     const row = record("clean", items);
     for (const r of picked) {

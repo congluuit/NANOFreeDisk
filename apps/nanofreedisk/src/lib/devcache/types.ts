@@ -138,4 +138,87 @@ export interface StoreRun {
   journalError: string | null;
 }
 
-export type DevTab = "cache" | "toolchains" | "repos" | "stores" | "unknown";
+export type DevTab = "cache" | "ai" | "toolchains" | "repos" | "stores" | "unknown";
+
+// ── AI leftovers (`nfd_devtools::ai_leftovers`, docs/AI_LEFTOVERS.md) ──
+
+export interface SessionRef {
+  id: string;
+  tool: string;
+  title: string | null;
+  lastActive: number;
+  /** Still open (not archived) in the Claude app. */
+  open: boolean;
+  /** Active within the keep window. */
+  recent: boolean;
+}
+
+export interface IgnoredEntry extends Totals {
+  rel: string;
+  isDir: boolean;
+  mtime: number;
+}
+
+export interface WorktreeInfo {
+  repo: string;
+  branch: string | null;
+  head: string | null;
+  defaultBranch: string | null;
+  merged: boolean;
+  pushed: boolean;
+  changes: number;
+  locked: boolean;
+  registered: boolean;
+  prunable: boolean;
+  ignored: IgnoredEntry[];
+  removable: boolean;
+  artifacts: Artifact[];
+  command: string | null;
+}
+
+export type AiKind = "worktree" | "session-temp" | "folder" | "browser-revision";
+export type AiKeep = "session-open" | "session-recent" | "recent-write";
+
+export interface AiItem extends Totals {
+  path: string;
+  entry: string;
+  tool: string;
+  kind: AiKind;
+  scope: "project" | "temp" | "global";
+  project: string | null;
+  rel: string;
+  level: Level;
+  mtime: number;
+  session: SessionRef | null;
+  keep: AiKeep | null;
+  selected: boolean;
+  blocked: string | null;
+  impact: string;
+  impactVi: string;
+  worktree: WorktreeInfo | null;
+}
+
+export interface AiKept {
+  path: string;
+  tool: string;
+  project: string | null;
+  what: string;
+}
+
+export interface AiReport {
+  items: AiItem[];
+  kept: AiKept[];
+  projects: string[];
+  sessions: number;
+  git: boolean;
+  keepRecentDays: number;
+  selectedBytes: number;
+  totalBytes: number;
+  cancelled: boolean;
+}
+
+export interface AiPlan {
+  folders: number;
+  bytes: number;
+  commands: string[];
+}

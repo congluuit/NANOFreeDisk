@@ -6,8 +6,9 @@ import type { CleanProgress, OperationResult } from "../clean/types";
 import { formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
 import { app, fail, toast } from "../state.svelte";
+import { aiPreselected } from "./ai";
 import { devApi } from "./api";
-import type { DevCacheReport, DevRule, DevTab, RepoScan, StoreInfo, StoreRun, Toolchain, UnknownFolder } from "./types";
+import type { AiPlan, AiReport, DevCacheReport, DevRule, DevTab, RepoScan, StoreInfo, StoreRun, Toolchain, UnknownFolder } from "./types";
 
 export const dev = $state({
   tab: "cache" as DevTab,
@@ -33,6 +34,12 @@ export const dev = $state({
   storeConfirm: null as StoreInfo | null,
   storeRunning: null as string | null,
   storeLast: null as StoreRun | null,
+  ai: null as AiReport | null,
+  aiLoading: false,
+  /** Item / build-output paths ticked on the AI leftovers tab. */
+  aiPicked: [] as string[],
+  /** Confirmation dialog: what cleaning the ticked paths runs. */
+  aiConfirm: null as AiPlan | null,
 });
 
 /** Every rule of the report, in vendor order. */
@@ -235,5 +242,63 @@ export async function copyText(text: string): Promise<void> {
     toast(t("copied"), "ok");
   } catch (e) {
     fail(e);
+  }
+}
+
+// ── AI leftovers ──
+
+const aiFixture = (): string | undefined => (globalThis as { __nfdAiFixture?: string }).__nfdAiFixture;
+
+let aiScanning: Promise<void> | null = null;
+
+/** Scan for AI leftovers (read-only). Concurrent calls share one scan; `quiet`
+ *  (the background check behind Home and the Health Score) shows no errors. */
+export function loadAi(quiet = false): Promise<void> {
+  if (aiScanning) return aiScanning;
+  dev.aiLoading = true;
+  const s = app.settings;
+  aiScanning = devApi
+    .aiScan(s.repoRoot ? [s.repoRoot] : [], s.keepRecentDays, aiFixture())
+    .then((r) => {
+      dev.ai = r;
+      dev.aiPicked = aiPreselected(r);
+    })
+    .catch((e) => {
+      if (!quiet) fail(e);
+    })
+    .finally(() => {
+      dev.aiLoading = false;
+      aiScanning = null;
+    });
+  return aiScanning;
+}
+
+/** Open the confirmation for `paths` (what git will run is shown there). */
+export async function confirmAi(paths: string[]): Promise<void> {
+  if (!paths.length) return;
+  try {
+    dev.aiConfirm = await devApi.aiPlan(paths);
+    dev.aiPicked = paths;
+  } catch (e) {
+    fail(e);
+  }
+}
+
+/** Clean the ticked leftovers (already confirmed). */
+export async function cleanAi(paths: string[]): Promise<void> {
+  if (dev.running || !paths.length) return;
+  dev.running = { done: 0, total: 0, freed: 0, path: "" };
+  dev.last = null;
+  dev.aiConfirm = null;
+  try {
+    await listenProgress();
+    reportResult(await devApi.aiClean(paths));
+  } catch (e) {
+    fail(e);
+  } finally {
+    dev.running = null;
+    dev.ai = null;
+    app.version++;
+    void loadAi();
   }
 }

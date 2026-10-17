@@ -99,6 +99,8 @@ export interface OperationItem {
   reason: string | null;
   stored: string | null;
   restored: boolean;
+  /** What a command ran and how to undo it (package stores, git worktrees). */
+  message: string | null;
 }
 
 export interface ActivityDetail {

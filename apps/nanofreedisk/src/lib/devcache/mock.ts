@@ -3,7 +3,7 @@
 // toolchains. Cleaning "frees" the bytes; nothing touches a real disk.
 
 import type { OperationResult, RuleSummary } from "../clean/types";
-import type { DevCacheReport, DevRule, RepoScan, StoreInfo, Toolchain, UnknownFolder, VendorGroup } from "./types";
+import type { AiItem, AiReport, DevCacheReport, DevRule, RepoScan, StoreInfo, Toolchain, UnknownFolder, VendorGroup } from "./types";
 
 const MB = 2 ** 20;
 const GB = 2 ** 30;
@@ -181,6 +181,109 @@ const UNKNOWN: UnknownFolder[] = [
   { path: `${HOME}\\.zcode`, name: ".zcode", root: "home", template: "${HOME}/.zcode", level: "caution", signals: ["dot-folder", "v2/cache"], proposeUrl: "https://github.com/congluuit/NANOFreeDisk/issues/new?template=rule_proposal.yml&title=%5Brule%5D%20.zcode", ...tot(902 * MB, 7382, 1) },
 ];
 
+// ── AI leftovers ──
+const win = (...parts: string[]): string => parts.join("\\");
+const PROJ = win("D:", "Work", "shop-app");
+const IMPACT: Record<string, [string, string]> = {
+  wt: [
+    "A git worktree a Claude Code session worked in. Removed with `git worktree remove` only when clean and merged or pushed; its ignored files go to the quarantine first. The branch stays.",
+    "Git worktree mà một phiên Claude Code đã làm việc. Chỉ gỡ bằng `git worktree remove` khi sạch và đã merge hoặc push; tệp bị git bỏ qua vào quarantine trước. Nhánh được giữ nguyên.",
+  ],
+  temp: [
+    "Scratchpad and background-task output of one session. The conversation itself is kept.",
+    "Scratchpad và output tác vụ nền của một phiên. Bản thân cuộc hội thoại vẫn được giữ.",
+  ],
+  mcp: [
+    "Console logs, page snapshots and screenshots the Playwright MCP server wrote.",
+    "Log console, snapshot trang và ảnh chụp mà Playwright MCP ghi.",
+  ],
+  pw: [
+    "An older revision of a browser Playwright downloaded; the newest stays.",
+    "Bản cũ của trình duyệt Playwright đã tải; bản mới nhất được giữ.",
+  ],
+};
+function aiItem(rel: string, kind: AiItem["kind"], impact: string, bytes: number, extra: Partial<AiItem> = {}): AiItem {
+  const project = kind === "browser-revision" ? null : PROJ;
+  return {
+    path: kind === "browser-revision" ? win(HOME, "AppData", "Local", "ms-playwright", rel) : win(PROJ, ...rel.split("/")),
+    entry: kind,
+    tool: kind === "browser-revision" ? "Playwright" : kind === "folder" ? "Playwright MCP" : "Claude Code",
+    kind,
+    scope: kind === "browser-revision" ? "global" : kind === "session-temp" ? "temp" : "project",
+    project,
+    rel,
+    level: "safe",
+    mtime: now() - 20 * DAY,
+    session: null,
+    keep: null,
+    selected: true,
+    blocked: null,
+    impact: IMPACT[impact][0],
+    impactVi: IMPACT[impact][1],
+    worktree: null,
+    ...tot(bytes, Math.round(bytes / 40_000), 20),
+    ...extra,
+  };
+}
+const session = (title: string, daysAgo: number, open = false) => ({ id: `s-${title}`, tool: "Claude Code", title, lastActive: now() - daysAgo * DAY, open, recent: daysAgo < 7 });
+const wt = (branch: string, extra: Partial<import("./types").WorktreeInfo> = {}) => ({
+  repo: PROJ,
+  branch,
+  head: "772e940",
+  defaultBranch: "main",
+  merged: true,
+  pushed: true,
+  changes: 0,
+  locked: false,
+  registered: true,
+  prunable: false,
+  ignored: [{ rel: "target", isDir: true, mtime: now() - 20 * DAY, ...tot(11.2 * GB, 41_000, 20) }],
+  removable: true,
+  artifacts: [],
+  command: `git -C "${PROJ}" worktree remove "${win(PROJ, ".claude", "worktrees", branch)}" && git -C "${PROJ}" worktree prune`,
+  ...extra,
+});
+let aiReport: AiReport | null = null;
+function ai(): AiReport {
+  aiReport ??= {
+    items: [
+      aiItem(".claude/worktrees/brave-fox", "worktree", "wt", 11.7 * GB, { session: session("Add checkout flow", 12), worktree: wt("brave-fox") }),
+      aiItem(".claude/worktrees/calm-owl", "worktree", "wt", 2.1 * GB, {
+        level: "caution",
+        selected: false,
+        blocked: "dirty",
+        session: session("Refactor cart", 9),
+        worktree: wt("calm-owl", {
+          merged: false,
+          pushed: false,
+          changes: 3,
+          removable: false,
+          command: null,
+          artifacts: [{ path: win(PROJ, ".claude", "worktrees", "calm-owl", "target"), rel: "target", kind: "rust", level: "safe", mtime: now() - 9 * DAY, selected: true, blocked: null, ...tot(1.9 * GB, 9000, 9) }],
+        }),
+      }),
+      aiItem(".claude/worktrees/quick-elk", "worktree", "wt", 640 * MB, { selected: false, keep: "session-open", session: session("Fix login bug", 1, true), worktree: wt("quick-elk") }),
+      aiItem(".playwright-mcp", "folder", "mcp", 42 * MB, { session: session("Add checkout flow", 12) }),
+      aiItem("claude/D--Work-shop-app/0a1b2c3d", "session-temp", "temp", 380 * MB, { session: session("Add checkout flow", 12) }),
+      aiItem("chromium-1223", "browser-revision", "pw", 412 * MB),
+      aiItem("chromium_headless_shell-1223", "browser-revision", "pw", 267 * MB),
+    ],
+    kept: [{ path: win(PROJ, ".specstory"), tool: "SpecStory", project: PROJ, what: ".specstory" }],
+    projects: [PROJ],
+    sessions: 14,
+    git: true,
+    keepRecentDays: 7,
+    selectedBytes: 0,
+    totalBytes: 0,
+    cancelled: false,
+  };
+  const r = aiReport;
+  const arts = r.items.flatMap((i) => i.worktree?.artifacts ?? []).filter((a) => !a.blocked);
+  r.totalBytes = r.items.filter((i) => !i.blocked).reduce((s, i) => s + i.bytes, 0) + arts.reduce((s, a) => s + a.bytes, 0);
+  r.selectedBytes = r.items.filter((i) => i.selected).reduce((s, i) => s + i.bytes, 0) + arts.filter((a) => a.selected).reduce((s, a) => s + a.bytes, 0);
+  return r;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const devHandlers: Record<string, (a: Record<string, any>) => unknown> = {
   devcache_scan: () => report(),
@@ -231,4 +334,31 @@ export const devHandlers: Record<string, (a: Record<string, any>) => unknown> = 
   devcache_reveal: () => undefined,
   devcache_propose: () => undefined,
   devcache_notify: () => undefined,
+  ai_leftovers_scan: () => ai(),
+  ai_leftovers_plan: ({ paths }) => {
+    const items = ai().items.filter((i) => paths.includes(i.path));
+    const arts = ai().items.flatMap((i) => i.worktree?.artifacts ?? []).filter((a) => paths.includes(a.path));
+    return {
+      folders: items.length + arts.length,
+      bytes: items.reduce((s, i) => s + i.bytes, 0) + arts.reduce((s, a) => s + a.bytes, 0),
+      commands: items.map((i) => i.worktree?.command).filter((c): c is string => !!c),
+    };
+  },
+  ai_leftovers_clean: ({ paths }) => {
+    const r = ai();
+    const gone = r.items.filter((i) => paths.includes(i.path));
+    let freed = gone.reduce((s, i) => s + i.bytes, 0);
+    let done = gone.length;
+    r.items = r.items.filter((i) => !paths.includes(i.path));
+    for (const i of r.items) {
+      const w = i.worktree;
+      if (!w) continue;
+      for (const a of w.artifacts.filter((x) => paths.includes(x.path))) {
+        freed += a.bytes;
+        done++;
+      }
+      w.artifacts = w.artifacts.filter((a) => !paths.includes(a.path));
+    }
+    return opResult(freed, done);
+  },
 };

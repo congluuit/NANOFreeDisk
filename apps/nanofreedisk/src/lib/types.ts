@@ -230,7 +230,7 @@ export interface HistoryInfo {
   path: string;
 }
 
-export type FindingKind = "low-space" | "filling-fast" | "old-large" | "no-scan" | "no-trend";
+export type FindingKind = "low-space" | "filling-fast" | "old-large" | "no-scan" | "no-trend" | "ai-leftovers";
 
 export interface Finding {
   kind: FindingKind;
@@ -239,7 +239,7 @@ export interface Finding {
   subject: string;
   value: number;
   bytes: number;
-  fix: "oldlarge" | "analyze" | "home";
+  fix: "oldlarge" | "analyze" | "home" | "devcache";
 }
 
 export interface HealthScore {

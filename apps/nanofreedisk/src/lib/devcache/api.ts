@@ -2,7 +2,7 @@
 
 import { call } from "../api";
 import type { Candidate, OperationResult } from "../clean/types";
-import type { DevCacheReport, RepoScan, StoreInfo, StoreRun, Toolchain, UnknownFolder } from "./types";
+import type { AiPlan, AiReport, DevCacheReport, RepoScan, StoreInfo, StoreRun, Toolchain, UnknownFolder } from "./types";
 
 export const devApi = {
   scan: (thresholds: Record<string, number>, rulesDir?: string) =>
@@ -21,4 +21,8 @@ export const devApi = {
   reveal: (path: string) => call<void>("devcache_reveal", { path }),
   propose: (url: string) => call<void>("devcache_propose", { url }),
   notify: (title: string, body: string) => call<void>("devcache_notify", { title, body }),
+  aiScan: (roots: string[], keepRecentDays: number, fixture?: string) =>
+    call<AiReport>("ai_leftovers_scan", { roots, keepRecentDays, fixture: fixture ?? null }),
+  aiPlan: (paths: string[]) => call<AiPlan>("ai_leftovers_plan", { paths }),
+  aiClean: (paths: string[]) => call<OperationResult>("ai_leftovers_clean", { paths }),
 };

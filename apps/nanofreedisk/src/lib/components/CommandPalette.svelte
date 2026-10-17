@@ -7,6 +7,7 @@
   import { LOCALES, intlLocale, t } from "../i18n.svelte";
   import { rank } from "../palette";
   import { app, fail, navigate, startScan, type View } from "../state.svelte";
+  import { dev } from "../devcache/state.svelte";
   import type { ThemeMode } from "../theme";
   import Icon from "./Icon.svelte";
 
@@ -49,6 +50,17 @@
     for (const [view, id, icon] of nav) {
       items.push({ key: `go-${view}`, group: "go", label: t(id), keywords: words(id), icon, run: go(view) });
     }
+    items.push({
+      key: "go-ai-leftovers",
+      group: "go",
+      label: t("dev-tab-ai"),
+      keywords: "ai leftovers agent claude codex worktree scratchpad playwright",
+      icon: "agent",
+      run: () => {
+        dev.tab = "ai";
+        app.view = "devcache";
+      },
+    });
     items.push({
       key: "scan-folder",
       group: "action",

@@ -172,3 +172,66 @@ fn clearing_scan_history_keeps_the_journal() {
     h.clear().expect("clear");
     assert_eq!(h.operations(5).expect("list").len(), 1);
 }
+
+/// Commands (package stores, `git worktree remove`) keep their command line and undo
+/// hint; a database written before the column existed gets it added in place.
+#[test]
+fn command_messages_are_kept() {
+    use nfd_core::exec::{ItemResult, ItemStatus, Operation};
+    let dir = tempfile::tempdir().expect("tmp");
+    let path = dir.path().join("history.db");
+    {
+        // an older layout of the items table, without `message`
+        let h = History::open(&path).expect("db");
+        h.conn
+            .execute_batch(
+                "DROP TABLE operation_items;
+                 CREATE TABLE operation_items (
+                    op_id TEXT NOT NULL, n INTEGER NOT NULL, path TEXT NOT NULL, rule_id TEXT,
+                    mode TEXT NOT NULL, is_dir INTEGER NOT NULL, bytes INTEGER NOT NULL,
+                    files INTEGER NOT NULL, freed INTEGER NOT NULL, status TEXT NOT NULL,
+                    reason TEXT, stored TEXT, restored INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (op_id, n)) WITHOUT ROWID;",
+            )
+            .expect("old layout");
+    }
+    let mut h = History::open(&path).expect("reopen");
+    let item = |n: usize, mode: DeleteMode, message: &str| ItemResult {
+        n,
+        path: dir.path().join(format!("wt{n}")),
+        rule_id: Some("command:git-worktree-remove".into()),
+        mode,
+        is_dir: true,
+        bytes: 10,
+        files: 1,
+        freed: 10,
+        status: ItemStatus::Done,
+        reason: None,
+        message: Some(message.into()),
+        stored: None,
+        warnings: Vec::new(),
+    };
+    let op = Operation {
+        id: "20261017-000001-0001".into(),
+        kind: "worktree".into(),
+        started_at: 1,
+        finished_at: 2,
+        items: vec![
+            item(
+                0,
+                DeleteMode::Permanent,
+                "git worktree remove · undo: git worktree add",
+            ),
+            item(1, DeleteMode::Quarantine, "not a command"),
+        ],
+        cancelled: false,
+    };
+    h.record_operation(&op).expect("record");
+    let (row, items) = h.operation(&op.id).expect("read");
+    assert_eq!(row.kind, "worktree");
+    assert_eq!(
+        items[0].message.as_deref(),
+        Some("git worktree remove · undo: git worktree add")
+    );
+    assert_eq!(items[1].message, None);
+}

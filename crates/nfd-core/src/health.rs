@@ -314,6 +314,26 @@ pub fn add_drive_findings(score: &mut HealthScore, drives: &[DriveFacts], dirty:
     regrade(score);
 }
 
+/// (bytes at least, penalty) for the leftovers of finished AI sessions.
+const AI_LEFTOVERS: [(u64, u32); 3] = [(10 << 30, 6), (2 << 30, 3), (500 << 20, 1)];
+
+/// Add what AI coding agents left behind in finished sessions (`bytes` the AI
+/// leftovers scan pre-selected), fixed in the DevCache view's AI leftovers tab.
+pub fn add_ai_leftovers(score: &mut HealthScore, bytes: u64) {
+    if let Some(&(_, penalty)) = AI_LEFTOVERS.iter().find(|(min, _)| bytes >= *min) {
+        score.findings.push(Finding {
+            kind: "ai-leftovers",
+            severity: Severity::Warn,
+            penalty,
+            subject: String::new(),
+            value: 0.0,
+            bytes,
+            fix: "devcache",
+        });
+        regrade(score);
+    }
+}
+
 /// Sort the findings and recompute score and grade after findings were added
 /// outside [`score_with`] (same bands: >= 85 good, >= 60 fair).
 pub fn regrade(score: &mut HealthScore) {
@@ -351,6 +371,23 @@ mod tests {
 
     fn kinds(h: &HealthScore) -> Vec<(&str, u32)> {
         h.findings.iter().map(|f| (f.kind, f.penalty)).collect()
+    }
+
+    #[test]
+    fn ai_leftovers_cost_points_by_size() {
+        let c = [vol(r"C:\", 500 * GB, 200 * GB, true)];
+        let mut h = score(&c, None);
+        let before = h.score;
+        add_ai_leftovers(&mut h, 100 << 20);
+        assert_eq!(h.score, before, "small leftovers are free");
+        add_ai_leftovers(&mut h, 12 * GB);
+        assert_eq!(h.score, before - 6);
+        let f = h
+            .findings
+            .iter()
+            .find(|f| f.kind == "ai-leftovers")
+            .expect("finding");
+        assert_eq!(f.fix, "devcache");
     }
 
     #[test]

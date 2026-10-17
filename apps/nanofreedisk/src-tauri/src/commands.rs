@@ -7,6 +7,7 @@ use std::sync::mpsc;
 use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration;
 
+pub mod ai_leftovers;
 pub mod clean;
 pub mod devcache;
 pub mod diskhealth;
@@ -727,6 +728,10 @@ pub async fn health(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Hea
     let mut score = health::score_with(&facts, scan.as_ref(), junk.as_ref());
     hwmon::add_heat_findings(&app, &mut score);
     diskhealth::add_findings(&app, &mut score);
+    // AI leftovers of finished sessions (the last scan of the DevCache tab)
+    if let Some(bytes) = app.state::<ai_leftovers::AiState>().selected_bytes() {
+        health::add_ai_leftovers(&mut score, bytes);
+    }
     // information only: what the last duplicate search found
     if let Some((bytes, groups, root)) = app.state::<dupes::DupeState>().summary() {
         if bytes > 0 {

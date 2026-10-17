@@ -48,6 +48,21 @@ CREATE TABLE operation_items (
 ) WITHOUT ROWID;
 ";
 
+/// Add `operation_items.message` (what a command ran, how to undo it) when missing.
+/// Additive: older versions select and insert their columns by name and keep
+/// working with the same database, so the schema version stays.
+pub(crate) fn add_message_column(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    let has: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('operation_items') WHERE name = 'message'",
+        [],
+        |r| r.get(0),
+    )?;
+    if has == 0 {
+        conn.execute_batch("ALTER TABLE operation_items ADD COLUMN message TEXT;")?;
+    }
+    Ok(())
+}
+
 /// One operation as the Activity log shows it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -85,6 +100,8 @@ pub struct ItemRow {
     pub reason: Option<String>,
     pub stored: Option<String>,
     pub restored: bool,
+    /// What a command ran and how to undo it (`git worktree add …`).
+    pub message: Option<String>,
 }
 
 impl ItemRow {
@@ -174,8 +191,9 @@ impl History {
         {
             let mut stmt = tx.prepare(
                 "INSERT OR REPLACE INTO operation_items
-                 (op_id, n, path, rule_id, mode, is_dir, bytes, files, freed, status, reason, stored)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+                 (op_id, n, path, rule_id, mode, is_dir, bytes, files, freed, status, reason, stored,
+                  message)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
             )?;
             for i in attempted {
                 stmt.execute(params![
@@ -191,6 +209,10 @@ impl History {
                     i.status.as_str(),
                     i.reason,
                     i.stored.as_ref().map(|s| s.to_string_lossy().into_owned()),
+                    // only commands carry a message worth keeping
+                    i.message
+                        .as_ref()
+                        .filter(|_| i.mode == DeleteMode::Permanent),
                 ])?;
             }
         }
@@ -225,7 +247,8 @@ impl History {
             .optional()?
             .ok_or_else(|| HistoryError::UnknownOperation(id.to_owned()))?;
         let mut stmt = self.conn.prepare(
-            "SELECT n, path, rule_id, mode, is_dir, bytes, files, freed, status, reason, stored, restored
+            "SELECT n, path, rule_id, mode, is_dir, bytes, files, freed, status, reason, stored, restored,
+                    message
              FROM operation_items WHERE op_id = ?1 ORDER BY n",
         )?;
         let items = stmt
@@ -243,6 +266,7 @@ impl History {
                     reason: r.get(9)?,
                     stored: r.get(10)?,
                     restored: r.get::<_, i64>(11)? != 0,
+                    message: r.get(12)?,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;

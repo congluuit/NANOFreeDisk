@@ -370,13 +370,13 @@ pub fn remove(git: &Path, job: &WorktreeJob, n: usize, cancel: Option<&AtomicBoo
     result(job, n, ItemStatus::Done, None)
 }
 
-/// The git commands of one clean as an Activity-log operation (kind `command`, not
+/// The git commands of one clean as an Activity-log operation (kind `worktree`, not
 /// restorable: the message says how to add the worktree back).
 #[must_use]
 pub fn operation(items: Vec<ItemResult>, op_id: String, started: i64, finished: i64) -> Operation {
     Operation {
         id: op_id,
-        kind: "command".into(),
+        kind: "worktree".into(),
         started_at: started,
         finished_at: finished,
         cancelled: items.iter().any(|i| i.status == ItemStatus::Cancelled),

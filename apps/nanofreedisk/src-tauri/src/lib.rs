@@ -90,6 +90,7 @@ pub fn run() {
         .manage(state)
         .manage(commands::clean::CleanState::default())
         .manage(commands::devcache::DevState::default())
+        .manage(commands::ai_leftovers::AiState::default())
         .manage(commands::dupes::DupeState::default())
         .manage(commands::hwmon::HwState::default())
         .manage(commands::monitor::MonitorState::default())
@@ -165,6 +166,9 @@ pub fn run() {
             commands::devcache::devcache_reveal,
             commands::devcache::devcache_propose,
             commands::devcache::devcache_notify,
+            commands::ai_leftovers::ai_leftovers_scan,
+            commands::ai_leftovers::ai_leftovers_plan,
+            commands::ai_leftovers::ai_leftovers_clean,
             commands::dupes::dupes_find,
             commands::dupes::dupes_cancel,
             commands::dupes::dupes_report,

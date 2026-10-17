@@ -11,6 +11,7 @@
   import { dev } from "../devcache/state.svelte";
   import type { DevTab } from "../devcache/types";
   import Icon from "../components/Icon.svelte";
+  import AiTab from "../components/devcache/AiTab.svelte";
   import CacheTab from "../components/devcache/CacheTab.svelte";
   import ToolchainsTab from "../components/devcache/ToolchainsTab.svelte";
   import ReposTab from "../components/devcache/ReposTab.svelte";
@@ -20,6 +21,7 @@
   const loc = $derived(intlLocale());
   const TABS: { id: DevTab; icon: string }[] = [
     { id: "cache", icon: "devcache" },
+    { id: "ai", icon: "agent" },
     { id: "toolchains", icon: "cpu" },
     { id: "repos", icon: "folder" },
     { id: "stores", icon: "clean" },
@@ -85,6 +87,8 @@
 
   {#if dev.tab === "cache"}
     <CacheTab />
+  {:else if dev.tab === "ai"}
+    <AiTab />
   {:else if dev.tab === "toolchains"}
     <ToolchainsTab />
   {:else if dev.tab === "repos"}

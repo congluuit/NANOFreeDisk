@@ -6,6 +6,7 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, startScan } from "../state.svelte";
   import { clean } from "../clean/state.svelte";
+  import { dev } from "../devcache/state.svelte";
   import Icon from "./Icon.svelte";
   import type { Finding, HealthScore } from "../types";
 
@@ -21,8 +22,9 @@
     void app.version;
     void app.volumes.length;
     void app.summary;
-    // the rule scan adds the "junk" finding
+    // the rule scan adds the "junk" finding, the AI leftovers scan "ai-leftovers"
     void clean.scan;
+    void dev.ai;
     let cancelled = false;
     api
       .health()
@@ -53,6 +55,7 @@
     } else if (f.fix === "oldlarge" && !app.summary) {
       void startScan(f.subject || system?.root || "");
     } else {
+      if (f.kind === "ai-leftovers") dev.tab = "ai";
       app.view = f.fix;
     }
   }

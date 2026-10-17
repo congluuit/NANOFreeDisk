@@ -234,7 +234,7 @@ pub struct OperationDto {
     cancelled: bool,
     /// First problems (skipped, partial, failed), for the result message.
     problems: Vec<ProblemDto>,
-    journal_error: Option<String>,
+    pub(super) journal_error: Option<String>,
 }
 
 pub(super) fn op_dto(op: &Operation, journal_error: Option<String>) -> OperationDto {

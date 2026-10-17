@@ -1006,7 +1006,15 @@ pub fn scan(
         .iter()
         .filter(|i| i.blocked.is_none())
         .map(|i| i.totals.bytes)
-        .sum();
+        .sum::<u64>()
+        + report
+            .items
+            .iter()
+            .filter_map(|i| i.worktree.as_ref())
+            .flat_map(|w| &w.artifacts)
+            .filter(|a| a.blocked.is_none())
+            .map(|a| a.totals.bytes)
+            .sum::<u64>();
     report.selected_bytes = report
         .items
         .iter()

@@ -1,6 +1,6 @@
 # AI Leftovers — dọn "rác theo phiên" của AI coding agent: kế hoạch chi tiết
 
-> Trạng thái: **đang làm** (2026-10-17) — lát 1 (catalog + bảo vệ lịch sử hội thoại mở rộng), lát 2 (nhận diện phiên), lát 3 (worktree qua `git worktree`), lát 4 (tab "AI leftovers", Health Score, gợi ý Home, CLI `nfd ai-leftovers`). Mục **C10** ở `docs/PLAN.md` §13.2 (nhóm C, ①). Mọi thao tác xóa đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`); lệnh git ghi vào Activity log như lệnh C4. **Lịch sử hội thoại của AI agent không bao giờ là ứng viên** (PLAN §5.1).
+> Trạng thái: **đang làm** (2026-10-17) — lát 1 (catalog + bảo vệ lịch sử hội thoại mở rộng), lát 2 (nhận diện phiên), lát 3 (worktree qua `git worktree`), lát 4 (tab "AI leftovers", Health Score, gợi ý Home, CLI `nfd ai-leftovers`). Mục **C10** ở `docs/PLAN.md` §13.2 (nhóm C, ①). Mọi thao tác xóa đi qua đường Phase 3: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`); lệnh git ghi vào Activity log (kind `worktree`) như lệnh C4. **Lịch sử hội thoại của AI agent không bao giờ là ứng viên** (PLAN §5.1).
 
 ## 1. Mục tiêu & DoD
 
@@ -59,7 +59,7 @@ Dự án được xét = `cwd` của mọi phiên (worktree quy về repo cha) +
 2. `git -C <wt> status --porcelain --untracked-files=all` không rỗng → 🟡 "có thay đổi chưa commit" + đề xuất **chỉ build output** của nó (C9, `repos::find`).
 3. Nhánh mặc định = `refs/remotes/origin/HEAD` (fallback `main` / `master`); **đã merge** = `merge-base --is-ancestor HEAD <mặc định>` (local hoặc `origin/`); **đã push** = `for-each-ref --contains HEAD refs/remotes` có kết quả. Không merge, không push → 🟡 (squash-merge cũng rơi vào đây — an toàn).
 4. `git ls-files --others --ignored --exclude-standard --directory` → các mục bị git bỏ qua (build output, `.env`…): mỗi mục qua SafetyGate + kiểm tra con cháu; bất kỳ mục nào bị chặn → 🟡.
-5. **Gỡ** (mục 🟢 được chọn): (a) các mục bị bỏ qua vào **Quarantine** qua Executor (khôi phục 7 ngày); (b) kiểm tra lại ngay trước khi gỡ — vẫn sạch, vẫn merge/push, không còn mục bị bỏ qua (mục nào chuyển lỗi → **không** chạy `git worktree remove`, tránh git xóa vĩnh viễn); (c) `git worktree remove <path>` (không `--force`) rồi `git worktree prune`; (d) ghi Activity kind `command` + audit log, kèm cách dựng lại: `git worktree add "<path>" <branch>` rồi Khôi phục thao tác quarantine. **Không bao giờ xóa nhánh.** Tệp được theo dõi bị git xóa nằm nguyên trong nhánh.
+5. **Gỡ** (mục 🟢 được chọn): (a) các mục bị bỏ qua vào **Quarantine** qua Executor (khôi phục 7 ngày); (b) kiểm tra lại ngay trước khi gỡ — vẫn sạch, vẫn merge/push, không còn mục bị bỏ qua (mục nào chuyển lỗi → **không** chạy `git worktree remove`, tránh git xóa vĩnh viễn); (c) `git worktree remove <path>` (không `--force`) rồi `git worktree prune`; (d) ghi Activity kind `worktree` (như lệnh C4: không khôi phục tự động) + audit log, kèm cách dựng lại: `git worktree add "<path>" <branch>` rồi Khôi phục thao tác quarantine. **Không bao giờ xóa nhánh.** Tệp được theo dõi bị git xóa nằm nguyên trong nhánh.
 
 ### 2.5 CLI
 

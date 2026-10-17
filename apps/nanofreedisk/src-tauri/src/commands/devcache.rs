@@ -52,19 +52,19 @@ fn key(path: &Path) -> String {
 }
 
 impl DevState {
-    fn show<'a>(&self, paths: impl IntoIterator<Item = &'a Path>) {
+    pub(super) fn show<'a>(&self, paths: impl IntoIterator<Item = &'a Path>) {
         if let Ok(mut s) = self.shown.lock() {
             s.extend(paths.into_iter().map(key));
         }
     }
 
-    fn start(&self) -> CmdResult<Arc<AtomicBool>> {
+    pub(super) fn start(&self) -> CmdResult<Arc<AtomicBool>> {
         let cancel = Arc::new(AtomicBool::new(false));
         *self.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
         Ok(cancel)
     }
 
-    fn stop(&self) {
+    pub(super) fn stop(&self) {
         if let Ok(mut c) = self.cancel.lock() {
             *c = None;
         }

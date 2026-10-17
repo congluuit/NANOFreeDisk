@@ -18,7 +18,8 @@
 // matches its own fixture (clean + restore, the 🔒 Keep list), the Repo tab's build
 // output (quarantine + restore), toolchains, package stores (listed, never run — a
 // command line that was not confirmed is refused), unknown folders and the guarded
-// reveal / propose commands; Phase 5: duplicates in their own fixture (groups, keeper,
+// reveal / propose commands, AI leftovers on their own fixture (sessions, kept chat
+// history, a git worktree removed by git, quarantine + restore); Phase 5: duplicates in their own fixture (groups, keeper,
 // refusal of a selection that keeps nothing, quarantine + restore, a keeper changed
 // after the search, preview / reveal / export guards, the view and its confirmation,
 // the Explorer verb); Phase 6: the disk activity monitor with I/O counters (this
@@ -184,6 +185,58 @@ writeFileSync(join(dupeFixture, "node_modules", "pkg", "video.mp4"), dupeA);
 writeFileSync(join(dupeFixture, "small-a.txt"), "same small text\n");
 writeFileSync(join(dupeFixture, "small-b.txt"), "same small text\n");
 for (const p of ["Photos/2019/video.mp4", "Photos/pic.png"]) utimesSync(join(dupeFixture, p), yearAgo, yearAgo);
+// AI leftovers: a fake home with Claude Code sessions, a project with agent output
+// (a git worktree when git is installed), %TEMP%\claude and a Playwright store — the
+// scan reads only this folder (`window.__nfdAiFixture`), never the real sessions.
+const aiFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-ai-"));
+const aiProject = join(aiFixture, "proj");
+const SID_DONE = "0a0a0a0a-0000-4000-8000-00000000000a";
+const SID_OPEN = "0b0b0b0b-0000-4000-8000-00000000000b";
+mkdirSync(join(aiProject, ".playwright-mcp"), { recursive: true });
+writeFileSync(join(aiProject, "README.md"), "smoke\n");
+writeFileSync(join(aiProject, ".playwright-mcp", "console-1.log"), "log\n");
+writeFileSync(join(aiProject, ".aider.chat.history.md"), "# chat\n");
+for (const [sid, title] of [
+  [SID_DONE, "Smoke finished session"],
+  [SID_OPEN, "Smoke open session"],
+]) {
+  const transcript = join(aiFixture, "home", ".claude", "projects", "smoke", `${sid}.jsonl`);
+  mkdirSync(dirname(transcript), { recursive: true });
+  writeFileSync(
+    transcript,
+    `${JSON.stringify({ type: "user", cwd: aiProject, timestamp: "2020-01-01T00:00:00Z" })}\n${JSON.stringify({ type: "custom-title", customTitle: title })}\n`,
+  );
+  utimesSync(transcript, monthAgo, monthAgo);
+  const scratch = join(aiFixture, "temp", "claude", "smoke-proj", sid, "scratchpad");
+  mkdirSync(scratch, { recursive: true });
+  writeFileSync(join(scratch, "build.log"), Buffer.alloc(8 * 1024, 3));
+  for (const p of [join(scratch, "build.log"), scratch, dirname(scratch)]) utimesSync(p, monthAgo, monthAgo);
+}
+mkdirSync(join(aiFixture, "desk", "acc", "org"), { recursive: true });
+writeFileSync(
+  join(aiFixture, "desk", "acc", "org", `local_${SID_OPEN}.json`),
+  JSON.stringify({ sessionId: `local_${SID_OPEN}`, cliSessionId: SID_OPEN, cwd: aiProject, title: "Smoke open session", lastActivityAt: monthAgo.getTime(), isArchived: false }),
+);
+for (const rev of ["chromium-1000", "chromium-1001", "mcp-chrome-smoke"]) {
+  mkdirSync(join(aiFixture, "ms-playwright", rev), { recursive: true });
+  writeFileSync(join(aiFixture, "ms-playwright", rev, "chrome.bin"), Buffer.alloc(4096, 5));
+}
+for (const p of [join(aiProject, ".playwright-mcp", "console-1.log"), join(aiProject, ".playwright-mcp")]) utimesSync(p, monthAgo, monthAgo);
+let aiGit = false;
+const aiWorktree = join(aiProject, ".claude", "worktrees", "smoke-done");
+try {
+  const git = (...a) => execFileSync("git", ["-c", "user.name=smoke", "-c", "user.email=smoke@example.com", "-c", "commit.gpgsign=false", "-C", aiProject, ...a], { stdio: "ignore" });
+  writeFileSync(join(aiProject, ".gitignore"), ".claude/worktrees/\ntarget/\n.playwright-mcp/\n");
+  git("init", "-q", "-b", "main");
+  git("add", "README.md", ".gitignore");
+  git("commit", "-q", "-m", "init");
+  git("worktree", "add", "-q", "-b", "smoke/done", aiWorktree);
+  mkdirSync(join(aiWorktree, "target"), { recursive: true });
+  writeFileSync(join(aiWorktree, "target", "app.bin"), Buffer.alloc(16 * 1024, 9));
+  aiGit = true;
+} catch {
+  /* no git: the worktree part is skipped */
+}
 const operations = [];
 
 let pinger = null;
@@ -571,6 +624,57 @@ try {
     await sleep(400);
   }
   check("DevCache tabs render", await evaluate("!!document.querySelector('[data-devtab=unknown][aria-selected=true]')"));
+
+  // AI leftovers (C10): the tab and the commands, on the AI fixture only
+  await evaluate("document.querySelector('[data-devtab=ai]').click()");
+  // let a background scan of Home / the tab finish before pointing it at the fixture
+  for (let i = 0; i < 300 && (await evaluate("!!document.querySelector('.devcache .dc-loading')")); i++) await sleep(100);
+  await evaluate(`window.__nfdAiFixture = ${JSON.stringify(aiFixture)}`);
+  await evaluate("[...document.querySelectorAll('.devcache button')].find((b) => /Scan again|Quét lại/.test(b.innerText))?.click()");
+  for (let i = 0; i < 100 && !(await evaluate("!!document.querySelector('[data-ai-item=\".playwright-mcp\"]')")); i++) await sleep(150);
+  check("AI leftovers tab lists the fixture's agent output", await evaluate("!!document.querySelector('[data-ai-item=\".playwright-mcp\"]')"));
+  check("AI leftovers tab shows conversation history as kept", await evaluate("!!document.querySelector('[data-ai-kept=\".aider.chat.history.md\"]')"));
+  await shot("13b-ai-leftovers");
+  const ai = await invoke("ai_leftovers_scan", { roots: [], keepRecentDays: 7, fixture: aiFixture });
+  const aiItem = (rel) => ai.items?.find((i) => i.rel === rel);
+  const doneScratch = aiItem(`claude/smoke-proj/${SID_DONE}`);
+  const openScratch = aiItem(`claude/smoke-proj/${SID_OPEN}`);
+  check(
+    "AI leftovers: finished session pre-selected, open session kept",
+    doneScratch?.selected === true && doneScratch.session?.title === "Smoke finished session" && openScratch?.selected === false && openScratch.keep === "session-open",
+    JSON.stringify(ai.items?.map((i) => [i.rel, i.selected, i.keep])),
+  );
+  check(
+    "AI leftovers: newest Playwright browser and its MCP profile stay",
+    aiItem("chromium-1000")?.selected === true && !aiItem("chromium-1001") && !aiItem("mcp-chrome-smoke"),
+  );
+  check("AI leftovers: chat history is never an item", !ai.items?.some((i) => /aider\.chat|\.claude[\\/]projects/i.test(i.path)) && ai.kept?.some((k) => k.what === ".aider.chat.history.md"));
+  const wtItem = aiItem(".claude/worktrees/smoke-done");
+  if (aiGit) check("AI leftovers: clean merged worktree can be removed by git", wtItem?.worktree?.removable === true && !wtItem.blocked, JSON.stringify(wtItem));
+  const aiPaths = [doneScratch?.path, aiItem(".playwright-mcp")?.path, aiItem("chromium-1000")?.path, aiGit ? wtItem?.path : null].filter(Boolean);
+  const aiPlan = await invoke("ai_leftovers_plan", { paths: aiPaths });
+  check("AI leftovers plan shows the git command", !aiGit || aiPlan.commands?.some((c) => c.includes("worktree remove")), JSON.stringify(aiPlan));
+  const aiDone = await invoke("ai_leftovers_clean", { paths: aiPaths });
+  const aiOps = (await invoke("activity_list", { limit: 6 })).filter?.((o) => o.kind === "ai-leftovers" || o.kind === "worktree") ?? [];
+  for (const o of aiOps) operations.push(o.id);
+  check(
+    "AI leftovers clean: folders to the quarantine, history and the open session untouched",
+    aiDone.failed === 0 && !existsSync(join(aiProject, ".playwright-mcp")) && existsSync(join(aiProject, ".aider.chat.history.md")) && existsSync(openScratch?.path ?? "") && !existsSync(doneScratch?.path ?? ""),
+    JSON.stringify(aiDone),
+  );
+  if (aiGit) {
+    const branch = execFileSync("git", ["-C", aiProject, "branch", "--list", "smoke/done"], { encoding: "utf8" });
+    check("AI leftovers: git removed the worktree, the branch stays", !existsSync(aiWorktree) && branch.includes("smoke/done"));
+    const wtOp = aiOps.find((o) => o.kind === "worktree");
+    const wtDetail = wtOp ? await invoke("activity_items", { id: wtOp.id }) : null;
+    check("Activity keeps how to add the worktree back", !!wtDetail?.items?.[0]?.message?.includes("worktree add"), JSON.stringify(wtDetail?.items?.[0]));
+  }
+  const aiQ = aiOps.find((o) => o.kind === "ai-leftovers");
+  if (aiQ) {
+    const back = await invoke("activity_restore", { id: aiQ.id });
+    check("AI leftovers restore brings the folders back", Array.isArray(back) && existsSync(join(aiProject, ".playwright-mcp", "console-1.log")) && existsSync(doneScratch?.path ?? ""), JSON.stringify(back).slice(0, 300));
+  }
+  await evaluate("delete window.__nfdAiFixture");
   await evaluate("document.querySelector('[data-devtab=cache]').click()");
 
   // Phase 5: Duplicates (own fixture, hash cache off so nothing reaches the real DB)
@@ -910,6 +1014,7 @@ try {
   rmSync(devFixture, { recursive: true, force: true });
   rmSync(devRulesDir, { recursive: true, force: true });
   rmSync(dupeFixture, { recursive: true, force: true });
+  rmSync(aiFixture, { recursive: true, force: true });
 }
 
 if (failures.length) {

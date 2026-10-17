@@ -6,6 +6,7 @@
   import { clean, defaultPicks, scanJunk } from "../clean/state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
   import TempCard from "../components/TempCard.svelte";
+  import AiCard from "../components/AiCard.svelte";
   import Icon from "../components/Icon.svelte";
   import type { Volume } from "../types";
 
@@ -63,6 +64,7 @@
 
   <HealthCard />
   <TempCard />
+  <AiCard />
 
   <div class="big">
     <button class="action card free" onclick={freeSafely} disabled={!!clean.scan && !clean.scan.safe} data-effect title={t("home-free-hint")}>
