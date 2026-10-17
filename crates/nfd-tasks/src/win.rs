@@ -734,7 +734,15 @@ fn end_one(pid: u32, ct: u64, mode: EndMode, confirmed: bool) -> EndResult {
     }
     // SAFETY: handle opened with PROCESS_TERMINATE for the verified process.
     if unsafe { TerminateProcess(h.0, 1) } == 0 {
-        return done(Outcome::Failed(std::io::Error::last_os_error().to_string()));
+        let err = std::io::Error::last_os_error();
+        // A process that ends on its own between the check above and here (a shell
+        // whose child was just ended) refuses termination with "access denied"
+        // while it exits: it is gone, which is what the user asked for.
+        // SAFETY: SYNCHRONIZE access requested.
+        if unsafe { WaitForSingleObject(h.0, 1000) } == WAIT_OBJECT_0 {
+            return done(Outcome::Ended);
+        }
+        return done(Outcome::Failed(err.to_string()));
     }
     // SAFETY: SYNCHRONIZE access requested.
     let waited = unsafe { WaitForSingleObject(h.0, 3000) };
