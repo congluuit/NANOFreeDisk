@@ -515,7 +515,8 @@
     border-radius: 2px;
   }
   .tabs.low {
-    flex: 0.75;
+    flex: 0.6;
+    min-height: 130px;
   }
   .tabs {
     flex: 1;

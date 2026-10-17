@@ -92,6 +92,7 @@ pub fn run(args: AdviseArgs) -> anyhow::Result<ExitCode> {
         let s = advice.suggestions(&tree);
         let out = json!({
             "schema": SCHEMA,
+            "version": env!("CARGO_PKG_VERSION"),
             "root": tree.root,
             "scannedAt": tree.started_at,
             "totals": s.totals,

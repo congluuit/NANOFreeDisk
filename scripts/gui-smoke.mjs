@@ -32,6 +32,9 @@
 // confirmation per level) and the per-website browser cache panel on a synthetic
 // Chrome / Firefox profile (Simple-format Code Cache, CacheStorage, a blockfile web
 // cache that is only listed, cache2; a running browser refused; quarantine + restore).
+// Analyze → Suggestions on its own fixture (verdicts in the tree and the details,
+// the panel and its confirmation, kept and 🟡-without-acknowledgement groups refused,
+// clean into the quarantine + restore, the Health Score using the advice).
 // Nothing outside the fixture is ever deleted and the only process ever ended is a
 // `ping` the script starts itself; the fixture's history snapshots and journal
 // entries are forgotten at the end.
@@ -357,6 +360,46 @@ try {
 } catch {
   /* no git: the worktree part is skipped */
 }
+// Analyze → Suggestions (nfd-advice): a project with Rust build output, an Aider chat
+// log and its .git, a junk folder a test rule pack covers, an old installer in
+// Downloads and a Pictures folder — scanned without being recorded in the history
+const advFixture = mkdtempSync(join(tmpdir(), "nfd-smoke-advice-"));
+const advRulesDir = mkdtempSync(join(tmpdir(), "nfd-smoke-advice-rules-"));
+for (const [rel, size] of [
+  ["proj/Cargo.toml", 40],
+  ["proj/src/main.rs", 30],
+  ["proj/target/debug/app.bin", 256 * 1024],
+  ["proj/.aider.chat.history.md", 1100 * 1024],
+  ["proj/.git/HEAD", 30],
+  ["junk/cache/a.bin", 64 * 1024],
+  ["Downloads/setup.msi", 2048],
+  ["Pictures/p.jpg", 1200 * 1024],
+]) {
+  const p = join(advFixture, ...rel.split("/"));
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, Buffer.alloc(size, 7));
+}
+utimesSync(join(advFixture, "Downloads", "setup.msi"), monthAgo, monthAgo);
+writeFileSync(
+  join(advRulesDir, "advice.toml"),
+  `[pack]
+id = "smoke-advice"
+name = "Smoke advice"
+version = "0.0.1"
+
+[[rule]]
+id = "smoke.advice"
+vendor = "NANO"
+app = "Smoke advice fixture"
+category = "test"
+paths = ["\${TEMP}/${basename(advFixture)}/junk/**"]
+level = "safe"
+regenerates = true
+impact = "Junk of the GUI smoke test's advice fixture."
+impact_vi = "Rác của fixture gợi ý trong kiểm thử GUI."
+verified_on = 2026-10-17
+`,
+);
 const operations = [];
 
 let pinger = null;
@@ -797,6 +840,86 @@ try {
   for (let i = 0; i < 50 && !(await evaluate("!!document.querySelector('.temps [data-temp=gpu]')")); i++) await sleep(100);
   check("Home shows the temperature card", await evaluate("document.querySelectorAll('.temps [data-temp]').length === 3"));
   await shot("8-home-health");
+
+  // Analyze → Suggestions: verdicts, the panel, the details card, cleaning by
+  // suggestion (quarantine + restore), what must stay never offered
+  await scan(advFixture, false);
+  await sleep(600);
+  await invoke("advice_refresh", { rulesDir: advRulesDir });
+  let advice = null;
+  for (let i = 0; i < 100; i++) {
+    await sleep(150);
+    const a = await invoke("advice_summary");
+    if (a?.suggestions?.groups?.some((g) => g.source === "smoke.advice")) {
+      advice = a;
+      break;
+    }
+  }
+  const groups = advice?.suggestions?.groups ?? [];
+  const groupOf = (pred) => groups.find(pred);
+  const rust = groupOf((g) => g.reason === "build-output" && g.source === "rust");
+  const junk = groupOf((g) => g.source === "smoke.advice");
+  const installer = groupOf((g) => g.reason === "old-installer");
+  const history = groupOf((g) => g.reason === "agent-history");
+  check("advice: Rust build output is safe and ticked", rust?.verdict === "safe" && rust.selected && rust.actionable && rust.action === "quarantine", JSON.stringify(rust?.key));
+  check("advice: the rule's junk is safe", junk?.verdict === "safe" && junk.action === "clean" && junk.impact.vi.length > 5);
+  check("advice: an old installer needs care, by hand", installer?.verdict === "caution" && !installer.selected && installer.action === "recycle-bin");
+  check("advice: conversation history must stay", history?.verdict === "keep" && !history.actionable && !history.selected, JSON.stringify(history?.key));
+  check("advice: totals add up to the scan", advice && Object.values(advice.suggestions.totals).reduce((a, b) => a + b, 0) === (await invoke("summary")).stats.on_disk);
+  const advKids = await invoke("children", { id: 0 });
+  const projNode = advKids.find((k) => k.name === "proj");
+  check("advice: tree rows carry verdicts", projNode?.advice?.reclaim > 0 && advKids.find((k) => k.name === "Pictures")?.advice?.verdict === "unknown", JSON.stringify(projNode?.advice));
+  const chatId = await invoke("find_path", { path: "proj\\.aider.chat.history.md" });
+  const chat = await invoke("advice_detail", { id: chatId });
+  check("advice: details explain the kept chat log", chat?.unit?.reason === "agent-history" && chat.unit.verdict === "keep" && chat.unit.action === "none");
+  const targetId = await invoke("find_path", { path: "proj\\target" });
+  const targetAdvice = await invoke("advice_detail", { id: targetId });
+  check("advice: details offer the right action", targetAdvice?.unit?.action === "quarantine" && targetAdvice.node.root && !!targetAdvice.unit.untouched?.en);
+  const advSlice = await invoke("slice", { id: 0, maxDepth: 8, minBytes: 0, maxNodes: 1000 });
+  check("advice: the treemap gets a verdict per tile", advSlice.verdicts?.length === advSlice.ids.length);
+  // the view
+  await nav("analyze");
+  await evaluate("document.querySelector('[data-panel=suggest]')?.click()");
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-suggestions] [data-advice-headline]')")); i++) await sleep(150);
+  check("Analyze opens on the suggestions", await evaluate("!!document.querySelector('[data-suggestions] [data-section=safe]') && !!document.querySelector('[data-suggestions] [data-section=keep]')"));
+  check("Suggestions tick the safe groups only", await evaluate(`document.querySelector('[data-pick=${JSON.stringify(rust?.key ?? "")}]')?.checked === true && document.querySelector('[data-pick=${JSON.stringify(installer?.key ?? "")}]')?.checked === false`));
+  check("the tree shows verdict badges", await evaluate("document.querySelectorAll('.tree [data-row-verdict]').length >= 3"));
+  await shot("2b-analyze-suggestions");
+  await evaluate("document.querySelector('main [data-sel-action=advice]')?.click()");
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('[data-advice-confirm]')")); i++) await sleep(100);
+  check("the clean asks first, listing each suggestion", await evaluate(`!!document.querySelector('[data-advice-confirm] [data-confirm-row=${JSON.stringify(rust?.key ?? "")}]')`));
+  await shot("2c-advice-confirm");
+  await evaluate("document.querySelector('[data-advice-confirm] .cancel')?.click()");
+  await sleep(200);
+  // what must stay, and 🟡 without the acknowledgement, are never cleaned
+  const keptOnly = await invoke("advice_clean", { keys: [history?.key ?? "x"], caution: true, expert: true });
+  check("advice: kept groups are refused", keptOnly?.__error?.code === "nothing-to-clean" && existsSync(join(advFixture, "proj", ".aider.chat.history.md")), JSON.stringify(keptOnly));
+  const noAck = await invoke("advice_clean", { keys: [installer?.key ?? "x"], caution: false, expert: false });
+  check("advice: caution needs the acknowledgement", noAck?.__error?.code === "nothing-to-clean" && existsSync(join(advFixture, "Downloads", "setup.msi")), JSON.stringify(noAck));
+  const advCleaned = await invoke("advice_clean", { keys: [rust?.key, junk?.key, history?.key].filter(Boolean), caution: false, expert: false });
+  check(
+    "advice: clean moves the safe groups into the quarantine",
+    advCleaned?.operation?.done >= 2 && !existsSync(join(advFixture, "proj", "target")) && !existsSync(join(advFixture, "junk", "cache", "a.bin")),
+    JSON.stringify(advCleaned?.operation ?? advCleaned),
+  );
+  check(
+    "advice: what is not touched stays",
+    existsSync(join(advFixture, "proj", ".aider.chat.history.md")) && existsSync(join(advFixture, "proj", "src", "main.rs")) && existsSync(join(advFixture, "proj", ".git", "HEAD")) && existsSync(join(advFixture, "junk")),
+  );
+  const advOp = (await invoke("activity_list", { limit: 5 })).find?.((o) => o.kind === "advice");
+  if (advOp) operations.push(advOp.id);
+  check("activity lists the suggestions clean", advOp?.restorable >= 2, JSON.stringify(advOp));
+  if (advOp) {
+    const back = await invoke("activity_restore", { id: advOp.id });
+    check("advice: restore brings the build output back", back.every?.((r) => r.status === "restored") && existsSync(join(advFixture, "proj", "target", "debug", "app.bin")), JSON.stringify(back));
+  }
+  const healthAdv = await invoke("health");
+  check("health uses the advice instead of Old & large", !healthAdv.findings?.some((f) => f.kind === "old-large"), JSON.stringify(healthAdv.findings?.map((f) => f.kind)));
+  await invoke("advice_refresh", { rulesDir: null });
+  await scan(fixture, false);
+  // the window opens Analyze when it hears the scan finish: let it, before moving on
+  for (let i = 0; i < 40 && !(await evaluate("document.querySelector('.side .nav[data-view=analyze]')?.classList.contains('active') && !!document.querySelector('section.analyze')")); i++) await sleep(100);
+  await sleep(500);
 
   // Phase 4: DevCache with a pack that only matches its own fixture
   const devNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Dev caches|Cache lập trình/.test(b.innerText))");
@@ -1273,6 +1396,8 @@ try {
   rmSync(dupeFixture, { recursive: true, force: true });
   rmSync(aiFixture, { recursive: true, force: true });
   rmSync(brFixture, { recursive: true, force: true });
+  rmSync(advFixture, { recursive: true, force: true });
+  rmSync(advRulesDir, { recursive: true, force: true });
 }
 
 if (failures.length) {

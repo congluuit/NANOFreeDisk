@@ -57,6 +57,8 @@ export async function listenAdvice(): Promise<void> {
 }
 
 let seq = 0;
+/** Group keys already shown for the current scan (a new one gets its default tick). */
+let seen = new Set<string>();
 export async function loadAdvice(): Promise<void> {
   if (!app.summary) {
     advice.summary = null;
@@ -72,9 +74,14 @@ export async function loadAdvice(): Promise<void> {
     if (s.suggestions && s.seq !== advice.picksSeq) {
       advice.picks = defaultPicks(groups);
       advice.picksSeq = s.seq;
-    } else {
+      seen = new Set(groups.map((g) => g.key));
+    } else if (s.suggestions) {
+      // the same scan judged again (git checked the agent worktrees, a clean, other
+      // rules): keep the user's ticks, tick the safe groups seen for the first time
       const keys = new Set(groups.filter((g) => g.actionable).map((g) => g.key));
-      advice.picks = advice.picks.filter((k) => keys.has(k));
+      const fresh = defaultPicks(groups).filter((k) => !seen.has(k));
+      advice.picks = [...advice.picks.filter((k) => keys.has(k)), ...fresh];
+      for (const g of groups) seen.add(g.key);
     }
   } catch {
     if (mine === seq) advice.summary = null;
