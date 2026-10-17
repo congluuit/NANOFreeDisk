@@ -603,6 +603,8 @@ try {
   }
   // per-website browser caches on their own fixture (never the real profiles)
   await evaluate(`window.__nfdBrowserFixture = ${JSON.stringify(brFixture)}`);
+  await nav("clean");
+  for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-br-toggle]')")); i++) await sleep(150);
   await evaluate("document.querySelector('[data-br-toggle]')?.click()");
   const siteBox = (b, s) => `document.querySelector('[data-br-browser="${b}"] [data-br-site="${s}"] input')`;
   for (let i = 0; i < 60 && !(await evaluate(`!!${siteBox("chrome", "youtube.com")}`)); i++) await sleep(150);
@@ -1034,13 +1036,14 @@ try {
   check("Duplicates view lists the groups", await evaluate("document.querySelectorAll('.group').length >= 1 && document.querySelector('[data-dupes-summary]').innerText.length > 10"));
   await evaluate("document.querySelector('main [data-selection-bar] [data-sel=\"all\"]')?.click()");
   await sleep(200);
-  await evaluate("document.querySelector('[data-group] .head')?.click()");
+  await evaluate("(() => { const h = document.querySelector('[data-group] .head'); if (h && h.getAttribute('aria-expanded') !== 'true') h.click(); })()");
   await sleep(300);
   check(
     "Duplicates: select all keeps one copy of every group",
     await evaluate(
       "(() => { const g = document.querySelector('[data-group]'); const rows = [...g.querySelectorAll('.copies li')]; return rows.length >= 2 && rows.filter((li) => li.querySelector('.rmbox input').checked).length === rows.length - 1 && rows.some((li) => li.querySelector('.keepbox input').checked && li.querySelector('.rmbox input').disabled); })()",
     ),
+    await evaluate("[...document.querySelectorAll('[data-group] .copies li')].map((li) => `${li.querySelector('.keepbox input').checked}/${li.querySelector('.rmbox input').checked}/${li.querySelector('.rmbox input').disabled}`).join(' ')"),
   );
   await shot("14-duplicates");
   await evaluate("document.querySelector('[data-recycle]')?.click()");
