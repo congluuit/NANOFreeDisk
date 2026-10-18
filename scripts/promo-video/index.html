@@ -873,10 +873,11 @@ U.push((t) => {
   const C2 = "nfd health";
   const OUT2 = [`  Disk 0  Samsung SSD 980 PRO 1TB   <span class="ok">Good</span>   41 °C   wear 6 %`];
   const PS = `<span class="pr">PS C:\\&gt;</span> `;
+  const cps = 30, t1 = 1.0, e1 = t1 + C1.length / cps, o1 = e1 + .35;
+  const t2 = o1 + OUT1.length * .22 + .5, e2 = t2 + C2.length / cps, o2 = e2 + .35;
+  window.TYPING = { cps, t1, e1, o1, t2, e2, o2, n1: C1.length, n2: C2.length, lines: OUT1.length };
   U.push((t) => {
-    const l = lt("cli", t), cps = 30;
-    const t1 = 1.0, e1 = t1 + C1.length / cps, o1 = e1 + .35;
-    const t2 = o1 + OUT1.length * .22 + .5, e2 = t2 + C2.length / cps, o2 = e2 + .35;
+    const l = lt("cli", t);
     const caret = Math.floor(l * 2.2) % 2 === 0 ? `<span class="caret"></span>` : "";
     let h = PS + esc(C1.slice(0, clamp(Math.floor((l - t1) * cps), 0, C1.length)));
     if (l < e1 + .2) h += caret;
@@ -889,6 +890,47 @@ U.push((t) => {
     $("#term").innerHTML = h;
   });
 }
+
+// ── sound cues ─────────────────────────────────────────────────────────────────
+// Every moment that deserves a sound effect, in seconds: entrance animations come
+// from their Web Animations timings, counters / typing / clicks are listed here with
+// the timings their updaters use. render.mjs --cues writes them as JSON for music.py.
+function cues() {
+  const out = [];
+  const add = (t, type, v = 1, extra = {}) => out.push({ t: +t.toFixed(3), type, v, ...extra });
+  const NAME = { pop: "pop", fu: "swish", sl: "swish", sr: "swish", zi: "impact", draw: "draw", press: "click", sIn: "whoosh", paint: "paint", cur: "move" };
+  for (const a of document.getAnimations()) {
+    const type = NAME[a.animationName];
+    const t = a.effect.getTiming().delay / 1000;
+    if (type && t > 0.05) add(t, type);
+  }
+  // counters roll with the same ease-out the updaters use: one tick per step
+  const counter = (id, at, dur, steps, end = "ding", v = 1) => {
+    const s = S[id].s + at;
+    for (let k = 1; k <= steps; k++) add(s + (1 - Math.cbrt(1 - k / steps)) * dur, "tick", v);
+    if (end) add(s + dur, end, v);
+  };
+  counter("problem", 1.0, 2.6, 30, null);
+  add(S.problem.s + 1.0, "rise", 1, { dur: 2.6 });
+  add(S.problem.s + 3.6, "alarm");
+  counter("home", .6, 2.2, 22);
+  counter("suggest", .8, 2, 22, "success");
+  [.7, 1.5, 2.3, 3.1].forEach((at, i) => counter("dupes", at, 1.1, 12, i === 3 ? "success" : "ding", .8));
+  counter("health", .8, 1.4, 10, null, .5);
+  add(S.analyze.s + 2.3, "scan", 1, { dur: 1.5 });
+  add(S.safety.s + 2.0, "zap", 1, { dur: 1.6 });
+  add(S.lastword.s + 3.8, "success");
+  const T = window.TYPING, c = S.cli.s;
+  for (let i = 0; i < T.n1; i++) add(c + T.t1 + (i + 1) / T.cps, "key");
+  add(c + T.e1 + .15, "enter");
+  for (let j = 0; j < T.lines; j++) add(c + T.o1 + j * .22, "line", .7);
+  for (let i = 0; i < T.n2; i++) add(c + T.t2 + (i + 1) / T.cps, "key");
+  add(c + T.e2 + .15, "enter");
+  add(c + T.o2, "line", .7);
+  out.sort((x, y) => x.t - y.t);
+  return { total: TOTAL, scenes: S, cues: out };
+}
+window.cues = cues;
 
 // ── seeking & playback ─────────────────────────────────────────────────────────
 function seekNow(t) {

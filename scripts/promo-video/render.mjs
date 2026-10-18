@@ -5,6 +5,7 @@
 //
 //   node scripts/promo-video/render.mjs [--fps 30] [--out target/promo/x.mp4] [--audio music.wav]
 //   node scripts/promo-video/render.mjs --stills 3,12.5,40   # PNG stills for review
+//   node scripts/promo-video/render.mjs --cues target/promo/cues.json   # sound cues for music.py
 //
 // ffmpeg: $FFMPEG, ffmpeg on PATH, or the binary of the imageio-ffmpeg Python package.
 
@@ -22,6 +23,7 @@ const fps = +opt("fps", 30);
 const out = resolve(opt("out", join(root, "target", "promo", "NANOFreeDisk-promo-EN-VI.mp4")));
 const audio = opt("audio", null);
 const stills = opt("stills", null);
+const cuesOut = opt("cues", null);
 const from = +opt("from", 0);
 const to = opt("to", null);
 
@@ -100,7 +102,11 @@ const shot = async (t, format = "jpeg") => {
 };
 
 try {
-  if (stills) {
+  if (cuesOut) {
+    mkdirSync(dirname(resolve(cuesOut)), { recursive: true });
+    writeFileSync(resolve(cuesOut), await ev("JSON.stringify(cues(), null, 1)"));
+    console.log(resolve(cuesOut));
+  } else if (stills) {
     const dir = join(root, "target", "promo", "stills");
     mkdirSync(dir, { recursive: true });
     for (const s of stills.split(",")) {
