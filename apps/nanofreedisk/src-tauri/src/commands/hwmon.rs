@@ -34,6 +34,7 @@ pub struct HwState {
     thermal_thread: std::sync::OnceLock<()>,
     /// The automatic start (setting "turn on when the app opens") was tried in
     /// this session: never ask Windows twice, even after a declined prompt.
+    #[cfg(windows)]
     auto_tried: AtomicBool,
     /// PawnIO's installer asked for a restart.
     restart_needed: Arc<AtomicBool>,
