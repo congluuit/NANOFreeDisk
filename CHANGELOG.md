@@ -6,6 +6,15 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+### Added
+- **Set up Advanced sensors in one click** (Hardware → Sensors): CPU temperatures need PawnIO and its official CPU module, which used to mean a manual download into a hidden folder. The app now downloads PawnIO's official installer and module from its author's GitHub releases, accepts them only when their SHA-256 matches the pinned values, installs PawnIO through Windows' administrator prompt and stores the module — then turns the sensors on.
+- **Turn on automatically when the app opens**: after Advanced sensors were turned on once, the next start turns them on again (one Windows prompt per start; untick to stop).
+
+### Fixed
+- Wrong CPU numbers right after opening a sensor view: load, power, effective clocks, network and GPU rates were computed over a few milliseconds on the first sample (e.g. 58 % CPU load at 20 %, inflated power maxima). Rate sources now wait 500 ms after discovery.
+- The Home card no longer shows an ACPI thermal zone (often a fixed firmware value) as the CPU temperature; it says why the CPU value is missing and links to the setup instead.
+- The estimated CPU clock is named "Average clock while busy" and is hidden once Advanced sensors report measured clocks.
+
 ## [0.1.1] - 2026-10-17
 
 ### Added

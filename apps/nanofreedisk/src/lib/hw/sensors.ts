@@ -3,7 +3,7 @@
 
 import type { Translate } from "./overview";
 import { tempLevel, type TempKind } from "./overview.ts";
-import type { DeviceKind, Sensor, SensorDevice, SensorKind, SensorNote, SensorSnapshot } from "./types";
+import type { AdvancedStatus, DeviceKind, Sensor, SensorDevice, SensorKind, SensorNote, SensorSnapshot } from "./types";
 
 /** LibreHardwareMonitor's group order. */
 export const KIND_ORDER: SensorKind[] = [
@@ -31,11 +31,16 @@ export interface DeviceNode {
   groups: Group[];
 }
 
-/** Devices → kind groups → sensors; Simple mode keeps primary sensors only. */
+/** Devices → kind groups → sensors; Simple mode keeps primary sensors only. An
+ * estimate is dropped once a measured sensor of the same device and kind exists
+ * (the estimated clock once Advanced sensors report real clocks). */
 export function tree(snap: SensorSnapshot, simple: boolean): DeviceNode[] {
+  const measured = new Set(snap.sensors.filter((s) => !s.estimated).map((s) => `${s.device}/${s.kind}`));
   return snap.devices
     .map((device) => {
-      const mine = snap.sensors.filter((s) => s.device === device.id && (!simple || s.primary));
+      const mine = snap.sensors.filter(
+        (s) => s.device === device.id && (!simple || s.primary) && !(s.estimated && measured.has(`${s.device}/${s.kind}`)),
+      );
       const notes = snap.notes.filter((n) => n.device === device.id);
       const groups = KIND_ORDER.map((kind) => ({
         kind,
@@ -128,8 +133,6 @@ export function sensorTempLevel(
 export interface HomeTemp {
   kind: "cpu" | "gpu" | "disk";
   value: number | null;
-  /** Where the value comes from when it is not a real sensor of that part. */
-  via?: "acpi";
   /** Device name. */
   name?: string;
   /** Explains a missing value (`needs-pawnio`, `gpu-asleep`). */
@@ -155,12 +158,11 @@ export function homeTemps(snap: SensorSnapshot): HomeTemp[] {
   const cpuLoad = snap.sensors.find((s) => s.id === "cpu/cpu-total")?.value ?? null;
   const pkg = snap.sensors.find((s) => s.label === "cpu-package" && s.value != null);
   const cpu = pkg ? { s: pkg, d: dev(pkg.device) } : hottest(snap, (s, d) => d?.kind === "cpu" && s.primary);
-  const acpi = hottest(snap, (_, d) => d?.kind === "board");
+  // an ACPI thermal zone is not the CPU (often a fixed firmware value): it stays
+  // under its board in Sensors and never stands in for the CPU here
   const cpuTemp: HomeTemp = cpu
     ? { kind: "cpu", value: cpu.s.value, name: cpu.d?.name, load: cpuLoad }
-    : acpi
-      ? { kind: "cpu", value: acpi.s.value, via: "acpi", load: cpuLoad }
-      : { kind: "cpu", value: null, reason: snap.notes.find((n) => n.device === "cpu" && n.kind === "temperature")?.reason, load: cpuLoad };
+    : { kind: "cpu", value: null, reason: snap.notes.find((n) => n.device === "cpu" && n.kind === "temperature")?.reason, load: cpuLoad };
   const gpu = hottest(snap, (_, d) => d?.kind === "gpu");
   const gpus = snap.devices.filter((d) => d.kind === "gpu");
   const asleep = snap.notes.find((n) => n.reason === "gpu-asleep");
@@ -179,4 +181,18 @@ export function homeTemps(snap: SensorSnapshot): HomeTemp[] {
     ? { kind: "disk", value: disk.s.value, name: disk.d?.name, hot: disk.hot }
     : { kind: "disk", value: null, reason: "not-reported" };
   return [cpuTemp, gpuTemp, diskTemp];
+}
+
+/** What Hardware → Sensors offers for the current Advanced sensors (PawnIO) state. */
+export type AdvancedStep = "on" | "setup" | "start" | "not-running" | "restart" | "none";
+
+export function advancedStep(s: AdvancedStatus | null): AdvancedStep {
+  if (!s?.pawnio) return "none";
+  if (s.active) return "on";
+  const p = s.pawnio;
+  if (s.restart && !p.running) return "restart";
+  if (!p.installed) return "setup";
+  if (!p.running) return "not-running";
+  if (!p.intel_module) return "setup";
+  return "start";
 }

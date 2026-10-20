@@ -32,6 +32,8 @@ export interface Settings {
   history: boolean;
   /** Hardware: notify when the CPU / GPU / a disk gets too hot (samples every 5 s). */
   tempAlerts: boolean;
+  /** Start Advanced sensors (PawnIO helper, one UAC prompt) when the app opens. */
+  advancedAuto: boolean;
   /** DevCache: remind when a vendor's caches pass this many GB (0 = never). */
   devThresholds: Record<string, number>;
   /** DevCache: system notification when a vendor is over its threshold. */
@@ -70,6 +72,7 @@ export const DEFAULT_SETTINGS: Settings = {
   installerDays: 30,
   history: true,
   tempAlerts: false,
+  advancedAuto: false,
   devThresholds: { Ollama: 50, "Hugging Face": 30, JetBrains: 10 },
   devAlerts: false,
   repoRoot: "",

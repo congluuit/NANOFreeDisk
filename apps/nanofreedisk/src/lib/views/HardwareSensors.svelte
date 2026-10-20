@@ -2,10 +2,11 @@
   import { onMount } from "svelte";
   import { errorText } from "../api";
   import { intlLocale, t } from "../i18n.svelte";
-  import { app, expert, fail, toast } from "../state.svelte";
+  import { app, expert, fail } from "../state.svelte";
   import { hwApi } from "../hw/api";
+  import { advanced, advancedStep, autoStartAdvanced, refreshAdvanced, setAdvancedAuto, setupAdvanced, startAdvanced } from "../hw/advanced.svelte";
   import { formatValue, ownHot, sensorLabel, sensorTempLevel, tree } from "../hw/sensors";
-  import type { AdvancedStatus, DeviceKind, Sensor, SensorSnapshot } from "../hw/types";
+  import type { DeviceKind, Sensor, SensorSnapshot } from "../hw/types";
   import Icon from "../components/Icon.svelte";
   import Thermal24h from "../components/Thermal24h.svelte";
 
@@ -14,12 +15,11 @@
   let collapsed = $state<Record<string, boolean>>({});
   let hover = $state<string | null>(null);
   let spark = $state<number[]>([]);
-  let adv = $state<AdvancedStatus | null>(null);
-  let starting = $state(false);
 
   const loc = $derived(intlLocale());
   const nodes = $derived(snap ? tree(snap, app.settings.mode === "simple") : []);
   const needsPawn = $derived(!!snap?.notes.some((n) => n.reason === "needs-pawnio"));
+  const step = $derived(advancedStep(advanced.status));
 
   const DEVICE_ICON: Record<DeviceKind, string> = {
     cpu: "cpu",
@@ -55,30 +55,18 @@
     }
   }
 
-  async function refreshAdvanced() {
-    try {
-      adv = await hwApi.advancedStatus();
-    } catch {
-      adv = null;
-    }
+  async function setup() {
+    await setupAdvanced();
+    await tick();
   }
 
-  async function startAdvanced() {
-    starting = true;
-    try {
-      adv = await hwApi.advancedStart();
-      if (adv.unavailable) toast(t("hw-adv-unavailable", { reason: adv.unavailable }), "error");
-      await tick();
-    } catch (e) {
-      const code = e && typeof e === "object" && "code" in e ? String((e as { code: unknown }).code) : "";
-      toast(code === "uac-declined" ? t("hw-adv-declined") : t("hw-adv-failed", { message: errorText(e) }), "error");
-    } finally {
-      starting = false;
-    }
+  async function start() {
+    await startAdvanced();
+    await tick();
   }
 
   onMount(() => {
-    void refreshAdvanced();
+    void refreshAdvanced().then(autoStartAdvanced).then(tick);
     void tick();
     const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
@@ -119,13 +107,19 @@
 </script>
 
 <div class="toolbar">
-  {#if adv?.active}
+  {#if step === "on"}
     <span class="adv on small" data-adv="on"><Icon name="check" size={14} />{t("hw-adv-on")}</span>
-  {:else if needsPawn && adv?.pawnio}
-    {@const p = adv.pawnio}
+    <label class="auto small" title={t("hw-adv-auto-hint")}>
+      <input type="checkbox" data-adv-auto checked={app.settings.advancedAuto} onchange={(e) => setAdvancedAuto(e.currentTarget.checked)} />
+      {t("hw-adv-auto")}
+    </label>
+  {:else if needsPawn && advanced.status?.pawnio}
+    {@const p = advanced.status.pawnio}
     <span class="hint small" data-adv="off">
       <Icon name="lock" size={14} />
-      {#if !p.installed}
+      {#if step === "restart"}
+        {t("hw-adv-restart")}
+      {:else if !p.installed}
         {t("hw-adv-not-installed")}
       {:else if !p.running}
         {t("hw-adv-not-running")}
@@ -135,11 +129,14 @@
         {t("hw-sensors-pawn-hint")}
       {/if}
     </span>
-    {#if !p.installed}
-      <button class="btn" onclick={() => hwApi.pawnioSite().catch(fail)}><Icon name="open" />{t("hw-adv-get")}</button>
-    {:else if p.running && p.intel_module}
-      <button class="btn primary" onclick={startAdvanced} disabled={starting} title={t("hw-adv-start-hint")}>
-        <Icon name="shield" />{starting ? t("hw-adv-starting") : t("hw-adv-start")}
+    {#if step === "setup"}
+      <button class="btn primary" data-adv-setup onclick={setup} disabled={!!advanced.busy} title={p.installed ? t("hw-adv-setup-module-hint") : t("hw-adv-setup-hint")}>
+        <Icon name="shield" />{advanced.busy ? t("hw-adv-setting-up") : t("hw-adv-setup")}
+      </button>
+      <button class="btn" onclick={() => hwApi.pawnioSite().catch(fail)} title={t("hw-adv-about-hint")}><Icon name="open" />{t("hw-adv-about")}</button>
+    {:else if step === "start"}
+      <button class="btn primary" onclick={start} disabled={!!advanced.busy} title={t("hw-adv-start-hint")}>
+        <Icon name="shield" />{advanced.busy ? t("hw-adv-starting") : t("hw-adv-start")}
       </button>
     {/if}
   {:else if needsPawn}
@@ -243,6 +240,13 @@
     align-items: center;
     gap: 6px;
     color: var(--text-muted);
+  }
+  .auto {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-muted);
+    cursor: pointer;
   }
   .adv.on {
     display: inline-flex;

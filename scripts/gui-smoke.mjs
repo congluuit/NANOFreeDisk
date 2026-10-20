@@ -411,7 +411,8 @@ const check = (name, ok, detail = "") => {
 
 // ── launch ───────────────────────────────────────────────────────────────────
 const child = spawn(exe, [], {
-  env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}` },
+  // NFD_NO_AUTO_ELEVATE: "turn on Advanced sensors automatically" must not raise a UAC prompt here
+  env: { ...process.env, WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${PORT}`, NFD_NO_AUTO_ELEVATE: "1" },
   stdio: "ignore",
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -1356,6 +1357,8 @@ try {
   check("health score includes heat findings when any", Number.isInteger(healthNow.score) && healthNow.findings.every((f) => !f.kind.startsWith("hot-") || f.fix === "hardware"));
   const adv = await invoke("pawnio_status");
   check("Advanced sensors status needs no admin", typeof adv.active === "boolean" && !adv.__error, JSON.stringify(adv.pawnio ?? adv));
+  const auto = await invoke("advanced_sensors_start", { auto: true });
+  check("automatic Advanced sensors never prompt in the smoke test", auto.active === adv.active && !auto.__error, JSON.stringify(auto));
   await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
   check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));
