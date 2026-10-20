@@ -104,3 +104,16 @@ stat-in-groups = { $count ->
 }
 stat-compared = Tệp đã so sánh
 stat-compared-unit = trong { $seconds } giây
+
+## Drive health
+
+stat-drives-good = đều khỏe
+stat-drives-attention = { $count ->
+   *[other] { $count } ổ cần chú ý
+}
+stat-hottest = Ổ nóng nhất
+stat-volumes-checked = đã kiểm tra: dung lượng trống, hệ thống tệp, TRIM
+
+## Settings
+
+settings-sub = Ngôn ngữ, giao diện và cách NANOFreeDisk hoạt động. Thay đổi có hiệu lực ngay.

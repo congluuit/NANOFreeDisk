@@ -111,3 +111,17 @@ stat-in-groups = { $count ->
 }
 stat-compared = Files compared
 stat-compared-unit = in { $seconds } s
+
+## Drive health
+
+stat-drives-good = all look healthy
+stat-drives-attention = { $count ->
+    [one] 1 needs attention
+   *[other] { $count } need attention
+}
+stat-hottest = Hottest drive
+stat-volumes-checked = checked: free space, file system, TRIM
+
+## Settings
+
+settings-sub = Language, look and how NANOFreeDisk behaves. Changes apply right away.

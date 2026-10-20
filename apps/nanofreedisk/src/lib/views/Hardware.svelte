@@ -13,13 +13,13 @@
   ];
 </script>
 
-<section class="page">
-  <header>
+<section class="page hardware">
+  <header class="page-head">
     <div>
       <h1>{t("hw-title")}</h1>
-      <p class="muted">{t("hw-subtitle")}</p>
+      <p>{t("hw-subtitle")}</p>
     </div>
-    <div class="seg" role="tablist" aria-label={t("hw-title")}>
+    <div class="segmented" role="tablist" aria-label={t("hw-title")}>
       {#each TABS as tab (tab.id)}
         <button
           role="tab"
@@ -46,56 +46,18 @@
 </section>
 
 <style>
-  .page {
+  .hardware {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: 24px 28px 0;
-    gap: 16px;
+    padding-bottom: 0;
     min-height: 0;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 70ch;
-  }
-  .seg {
-    display: flex;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
     overflow: hidden;
-    background: var(--surface);
+  }
+  .hardware > .page-head {
+    margin-bottom: 14px;
   }
   .hwtab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-  }
-  .hwtab + .hwtab {
-    border-left: 1px solid var(--border);
-  }
-  .hwtab:hover:not(.on) {
-    background: var(--hover);
-    color: var(--text);
-  }
-  .hwtab.on {
-    background: var(--accent-soft);
-    color: var(--text);
-    font-weight: 600;
+    padding: 5px 12px;
   }
   .body {
     flex: 1;
