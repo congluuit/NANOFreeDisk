@@ -31,6 +31,9 @@ codesign -dv "$APP" 2>&1 | grep -E "Signature|Identifier|flags" || true
 min=$(/usr/libexec/PlistBuddy -c "Print :LSMinimumSystemVersion" "$APP/Contents/Info.plist")
 echo "LSMinimumSystemVersion: $min"
 [[ "$min" == "11.0" ]] || { echo "::error::unexpected LSMinimumSystemVersion $min"; exit 1; }
+# src-tauri/Info.plist was merged: the folder-access prompts explain themselves
+/usr/libexec/PlistBuddy -c "Print :NSDocumentsFolderUsageDescription" "$APP/Contents/Info.plist" >/dev/null ||
+  { echo "::error::Info.plist usage descriptions are missing"; exit 1; }
 
 mkdir -p "$OUT"
 dmg=$(ls "$BUNDLE"/dmg/*.dmg | head -1)
