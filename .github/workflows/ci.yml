@@ -134,7 +134,14 @@ jobs:
         working-directory: apps/nanofreedisk
       - run: pnpm tauri build --no-bundle
         working-directory: apps/nanofreedisk
+      - name: WebView2 runtime
+        shell: pwsh
+        run: |
+          $k = Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}' -ErrorAction SilentlyContinue
+          if ($k) { "WebView2 $($k.pv)" } else { "::warning::WebView2 runtime not found in the registry" }
       - run: node scripts/gui-smoke.mjs --shots gui-shots
+        env:
+          NFD_SMOKE_START_S: "120"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
