@@ -44,18 +44,28 @@
     align-items: center;
     gap: 14px;
     width: 100%;
-    padding: 12px 18px;
+    padding: 14px 18px;
     margin-bottom: 22px;
     text-align: left;
     color: inherit;
+    font: inherit;
     transition: border-color 0.12s;
   }
   .ai:hover {
-    border-color: var(--accent);
+    border-color: var(--text-muted);
   }
   .ic {
-    color: var(--accent);
-    display: flex;
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    background: var(--risk-safe-soft);
+    color: var(--risk-safe-ink);
+  }
+  .txt .muted {
+    font-size: 0.88em;
   }
   .txt {
     display: flex;
@@ -67,7 +77,8 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    color: var(--accent);
+    color: var(--text-muted);
+    font-size: 0.9em;
     white-space: nowrap;
   }
 </style>

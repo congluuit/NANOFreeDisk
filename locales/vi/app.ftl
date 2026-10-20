@@ -20,8 +20,8 @@ nav-soon = Có trong { $phase }
 
 ## Home
 
-home-title = Ổ đĩa của bạn
-home-subtitle = Chọn ổ đĩa hoặc thư mục để xem cái gì chiếm dung lượng. Không có gì bị xóa nếu bạn chưa xác nhận.
+home-title = Tổng quan
+home-subtitle = Máy tính này trong một cái nhìn. Chọn một ổ hoặc thư mục để xem cái gì chiếm chỗ; không gì bị xóa khi chưa có xác nhận của bạn.
 home-scan-folder = Quét một thư mục…
 home-pick-folder = Chọn thư mục cần phân tích
 home-action-analyze = Xem cái gì chiếm ổ đĩa

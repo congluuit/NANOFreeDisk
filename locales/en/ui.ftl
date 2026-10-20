@@ -16,6 +16,24 @@ stat-outside = Not in this scan
 stat-outside-unit = system & other folders
 stat-outside-hint = Used space of the drive that this scan does not cover: Windows' own files it cannot read, and folders outside the one scanned.
 
+stat-free-on = Free on { $drive }
+stat-safe-scan = from the last scan
+stat-safe-junk = caches & temp files
+stat-last-scan = Last scan
+stat-no-scan = no scan yet
+stat-drives = Drives
+stat-drives-low = { $count ->
+    [one] 1 is low on space
+   *[other] { $count } are low on space
+}
+stat-drives-ok = all have room
+
+## Home
+
+home-free-btn = Free { $size } safely
+home-drives-title = Drives
+home-drives-sub = Pick one to see what fills it.
+
 ## Analyze
 
 analyze-title = Disk map · { $name }

@@ -20,8 +20,8 @@ nav-soon = Coming in { $phase }
 
 ## Home
 
-home-title = Your drives
-home-subtitle = Pick a drive or folder to see what uses the space. Nothing is deleted without your confirmation.
+home-title = Overview
+home-subtitle = This PC at a glance. Pick a drive or folder to see what uses the space; nothing is deleted without your confirmation.
 home-scan-folder = Scan a folder…
 home-pick-folder = Choose a folder to analyze
 home-action-analyze = See what fills the disk

@@ -15,6 +15,23 @@ stat-outside = Ngoài lần quét này
 stat-outside-unit = hệ thống & thư mục khác
 stat-outside-hint = Dung lượng đã dùng của ổ mà lần quét này không bao gồm: tệp riêng của Windows không đọc được, và các thư mục nằm ngoài thư mục đã quét.
 
+stat-free-on = Còn trống trên { $drive }
+stat-safe-scan = từ lần quét gần nhất
+stat-safe-junk = cache & tệp tạm
+stat-last-scan = Lần quét gần nhất
+stat-no-scan = chưa quét lần nào
+stat-drives = Ổ đĩa
+stat-drives-low = { $count ->
+   *[other] { $count } ổ sắp đầy
+}
+stat-drives-ok = đều còn chỗ
+
+## Home
+
+home-free-btn = Giải phóng { $size } an toàn
+home-drives-title = Ổ đĩa
+home-drives-sub = Chọn một ổ để xem cái gì chiếm chỗ.
+
 ## Analyze
 
 analyze-title = Bản đồ ổ đĩa · { $name }
