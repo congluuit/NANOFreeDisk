@@ -37,7 +37,6 @@
 
   function freeSafely() {
     if (advised != null) {
-      app.settings.analyzePanel = "suggest";
       app.view = "analyze";
       return;
     }

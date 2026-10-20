@@ -55,7 +55,6 @@
     } else if (f.fix === "oldlarge" && !app.summary) {
       void startScan(f.subject || system?.root || "");
     } else if (f.fix === "suggestions") {
-      app.settings.analyzePanel = "suggest";
       app.view = "analyze";
     } else {
       if (f.kind === "ai-leftovers") dev.tab = "ai";

@@ -38,12 +38,12 @@ export const PRESETS: Record<PresetId, { label: string; dark: boolean; colors: P
     label: "NANO Dark",
     dark: true,
     colors: {
-      bg: "#0b1220",
-      surface: "#111c33",
-      "surface-2": "#18264a",
-      border: "#253556",
-      text: "#e8eef8",
-      "text-muted": "#9aa8bf",
+      bg: "#0d1117",
+      surface: "#151b24",
+      "surface-2": "#1c2430",
+      border: "#29333f",
+      text: "#e8edf4",
+      "text-muted": "#9aa5b6",
       accent: "#22d3ee",
       "accent-contrast": "#04121a",
       danger: "#f87171",
@@ -60,19 +60,19 @@ export const PRESETS: Record<PresetId, { label: string; dark: boolean; colors: P
       "tm-7": "#facc15",
       "tm-8": "#2dd4bf",
       "tm-other": "#64748b",
-      "tm-dir": "#16223d",
+      "tm-dir": "#19212c",
     },
   },
   "nano-light": {
     label: "NANO Light",
     dark: false,
     colors: {
-      bg: "#f4f7fb",
+      bg: "#f4f5f7",
       surface: "#ffffff",
-      "surface-2": "#eaf0f7",
-      border: "#d3dce8",
-      text: "#0b1220",
-      "text-muted": "#4f5d73",
+      "surface-2": "#f0f2f5",
+      border: "#e2e5ea",
+      text: "#111827",
+      "text-muted": "#5b6474",
       accent: "#0e7490",
       "accent-contrast": "#ffffff",
       danger: "#dc2626",
@@ -89,7 +89,7 @@ export const PRESETS: Record<PresetId, { label: string; dark: boolean; colors: P
       "tm-7": "#eab308",
       "tm-8": "#14b8a6",
       "tm-other": "#94a3b8",
-      "tm-dir": "#dfe6f0",
+      "tm-dir": "#eef1f5",
     },
   },
   nord: {
@@ -229,6 +229,13 @@ export function paletteVars(colors: Palette, dark: boolean): Record<string, stri
   all["accent-soft"] = mix(colors.accent, colors.surface, 0.18);
   all["danger-soft"] = mix(colors.danger, colors.surface, 0.15);
   all["hover"] = mix(colors.text, colors.surface, 0.06);
+  // soft fills and readable text of the risk colors (pills, stat dots, hatching)
+  for (const r of ["risk-safe", "risk-caution", "risk-advanced", "risk-protected"] as const) {
+    const soft = mix(colors[r], colors.surface, dark ? 0.2 : 0.13);
+    all[`${r}-soft`] = soft;
+    all[`${r}-ink`] = ensureContrast(colors[r], soft, 4.5);
+  }
+  all["accent-ink"] = ensureContrast(colors.accent, all["accent-soft"], 4.5);
   all["tm-rest"] = mix(colors["tm-other"], colors.bg, 0.45);
   all["tm-link"] = mix(colors["text-muted"], colors.bg, 0.35);
   all["tm-border"] = dark ? mix("#000000", colors.bg, 0.35) : mix("#ffffff", colors.bg, 0.6);
@@ -243,6 +250,7 @@ export function paletteVars(colors: Palette, dark: boolean): Record<string, stri
   all["io-read"] = colors["tm-3"];
   all["io-write"] = colors["risk-advanced"];
   all["shadow"] = dark ? "0 8px 30px rgba(0,0,0,.45)" : "0 8px 30px rgba(15,23,42,.12)";
+  all["shadow-sm"] = dark ? "0 1px 2px rgba(0,0,0,.4)" : "0 1px 2px rgba(15,23,42,.06)";
   return all;
 }
 

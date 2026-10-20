@@ -471,6 +471,12 @@ const nav = (v) =>
       ? `document.querySelectorAll('.side .nav')[${v}].click()`
       : `document.querySelector('.side .nav[data-view="${v}"]').click()`,
   );
+// Analyze → Explorer opens on the map: the folder list (and its details) on demand
+async function showFolders(details = false) {
+  await evaluate("document.querySelector('[data-lens=folders]')?.click()");
+  for (let i = 0; i < 30 && !(await evaluate("!!document.querySelector('.tree')")); i++) await sleep(100);
+  if (details) await evaluate("(() => { const b = document.querySelector('[data-details-toggle]'); if (b && b.getAttribute('aria-expanded') !== 'true') b.click(); })()");
+}
 
 try {
   const page = await target();
@@ -789,6 +795,8 @@ try {
   const health = await invoke("health");
   const healthMs = Date.now() - healthStart;
   check("health score", Number.isInteger(health.score) && health.score >= 0 && health.score <= 100 && Array.isArray(health.findings), `${health.score} ${health.grade} ${health.findings?.map((f) => f.kind).join(",")} in ${healthMs} ms`);
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('section.analyze')")); i++) await sleep(150);
+  await showFolders();
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('.tree .row')")); i++) await sleep(150);
   check("UI shows the scan", await evaluate("!!document.querySelector('.tree .row')"));
   await sleep(500);
@@ -879,8 +887,8 @@ try {
   check("advice: the treemap gets a verdict per tile", advSlice.verdicts?.length === advSlice.ids.length);
   // the view
   await nav("analyze");
-  await evaluate("document.querySelector('[data-panel=suggest]')?.click()");
-  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-suggestions] [data-advice-headline]')")); i++) await sleep(150);
+  await showFolders();
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-suggestions] [data-section=safe]')")); i++) await sleep(150);
   check("Analyze opens on the suggestions", await evaluate("!!document.querySelector('[data-suggestions] [data-section=safe]') && !!document.querySelector('[data-suggestions] [data-section=keep]')"));
   check("Suggestions tick the safe groups only", await evaluate(`document.querySelector('[data-pick=${JSON.stringify(rust?.key ?? "")}]')?.checked === true && document.querySelector('[data-pick=${JSON.stringify(installer?.key ?? "")}]')?.checked === false`));
   check("the tree shows verdict badges", await evaluate("document.querySelectorAll('.tree [data-row-verdict]').length >= 3"));
@@ -927,6 +935,7 @@ try {
   check("delete anyway needs the acknowledgement", noAckOverride?.__error?.code === "not-confirmed" && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(noAckOverride));
   // the UI path: select .git, "Delete anyway…", tick, confirm
   await nav("analyze");
+  await showFolders(true);
   await evaluate(`(() => { const r = [...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('proj')); r?.querySelector('.chev')?.click(); })()`);
   for (let i = 0; i < 30 && !(await evaluate("[...document.querySelectorAll('.tree .row')].some((x) => x.innerText.trim().startsWith('.git'))")); i++) await sleep(100);
   await evaluate(`[...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('.git'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
@@ -948,6 +957,8 @@ try {
     const back = await invoke("activity_restore", { id: ovOp.id });
     check("delete anyway can be undone", back.every?.((r) => r.status === "restored") && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(back));
   }
+  // back to the default lens (the choice is remembered in the settings)
+  await evaluate("document.querySelector('[data-lens=map]')?.click()");
   const healthAdv = await invoke("health");
   check("health uses the advice instead of Old & large", !healthAdv.findings?.some((f) => f.kind === "old-large"), JSON.stringify(healthAdv.findings?.map((f) => f.kind)));
   await invoke("advice_refresh", { rulesDir: null });
