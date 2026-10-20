@@ -160,11 +160,21 @@ pub trait SensorProvider: Send {
     fn interval(&self) -> Duration {
         Duration::from_secs(1)
     }
+    /// How long after discovery the first sample may be taken. Sources that turn
+    /// two counter readings into a rate (load, power, throughput, effective clock)
+    /// need a real window: a sample a few milliseconds after discovery reports the
+    /// hub's own start-up instead of the machine (load 58 % at 20 %, power spikes).
+    fn warmup(&self) -> Duration {
+        Duration::ZERO
+    }
     /// Notes that change while running (a GPU going to sleep).
     fn live_notes(&self) -> Vec<Note> {
         Vec::new()
     }
 }
+
+/// [`SensorProvider::warmup`] of the rate sources.
+pub const RATE_WARMUP: Duration = Duration::from_millis(500);
 
 /// 10 minutes at one sample per second.
 pub const HISTORY: usize = 600;
@@ -205,6 +215,12 @@ struct Slot {
     /// Provider-local sensor index -> hub index (None: dropped duplicate).
     map: Vec<Option<usize>>,
     next: Option<Instant>,
+}
+
+/// When a freshly discovered provider may be sampled first (see [`SensorProvider::warmup`]).
+fn first_due(p: &dyn SensorProvider) -> Option<Instant> {
+    let w = p.warmup();
+    (!w.is_zero()).then(|| Instant::now() + w)
 }
 
 /// Owns the providers and the statistics.
@@ -270,10 +286,11 @@ impl SensorHub {
                 }
             }
             hub.notes.extend(d.notes);
+            let next = first_due(p.as_ref());
             hub.slots.push(Slot {
                 provider: p,
                 map,
-                next: None,
+                next,
             });
         }
         hub.stats = vec![Stat::default(); hub.sensors.len()];
@@ -375,10 +392,11 @@ impl SensorHub {
             }
         }
         self.notes.extend(d.notes);
+        let next = first_due(p.as_ref());
         self.slots.push(Slot {
             provider: p,
             map,
-            next: None,
+            next,
         });
     }
 
@@ -520,6 +538,55 @@ mod tests {
         assert_eq!(hub.snapshot().samples, 4);
     }
 
+    /// A rate source: what it reports right after discovery is not a reading.
+    struct Rate {
+        warm: Duration,
+    }
+
+    impl SensorProvider for Rate {
+        fn id(&self) -> &'static str {
+            "rate"
+        }
+        fn discover(&mut self) -> Discovery {
+            Discovery {
+                sensors: vec![SensorInfo::new("cpu", Kind::Load, "cpu-total", "test")],
+                ..Discovery::default()
+            }
+        }
+        fn sample(&mut self, out: &mut Vec<(usize, f64)>) {
+            out.push((0, 58.0));
+        }
+        fn interval(&self) -> Duration {
+            Duration::ZERO
+        }
+        fn warmup(&self) -> Duration {
+            self.warm
+        }
+    }
+
+    #[test]
+    fn rate_sources_skip_the_first_instant() {
+        let warm = Duration::from_millis(150);
+        let mut hub = SensorHub::new(vec![Box::new(Rate { warm })]);
+        hub.sample();
+        let s = &hub.snapshot().sensors[0];
+        assert_eq!((s.value, s.min, s.max), (None, None, None), "too early");
+        std::thread::sleep(warm + Duration::from_millis(20));
+        hub.sample();
+        assert_eq!(hub.snapshot().sensors[0].value, Some(58.0));
+        // added later (the elevated helper): same rule
+        let mut hub = SensorHub::new(Vec::new());
+        hub.add_provider(Box::new(Rate { warm }));
+        hub.sample();
+        assert_eq!(hub.snapshot().sensors[0].value, None);
+        // no warm-up: sampled at once
+        let mut hub = SensorHub::new(vec![Box::new(Rate {
+            warm: Duration::ZERO,
+        })]);
+        hub.sample();
+        assert_eq!(hub.snapshot().sensors[0].value, Some(58.0));
+    }
+
     #[test]
     fn slow_providers_keep_their_value_between_samples() {
         let mut hub = SensorHub::new(vec![Box::new(Fake { n: 0.0, slow: true })]);
@@ -547,7 +614,7 @@ mod tests {
     fn native_hub_samples_without_admin() {
         let mut hub = SensorHub::native();
         hub.sample();
-        std::thread::sleep(Duration::from_millis(300));
+        std::thread::sleep(RATE_WARMUP + Duration::from_millis(100));
         hub.sample();
         let snap = hub.snapshot();
         #[cfg(windows)]

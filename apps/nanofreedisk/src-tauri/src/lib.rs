@@ -203,6 +203,7 @@ pub fn run() {
             commands::hwmon::open_task_manager,
             commands::hwmon::pawnio_status,
             commands::hwmon::advanced_sensors_start,
+            commands::hwmon::pawnio_setup,
             commands::hwmon::pawnio_open_site,
             commands::hwmon::thermal_set,
             commands::hwmon::thermal_status,

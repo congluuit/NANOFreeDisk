@@ -58,7 +58,7 @@ test("temperature levels", () => {
 });
 
 import { readdirSync } from "node:fs";
-import { formatValue, homeTemps, sensorLabel, tree } from "./hw/sensors.ts";
+import { advancedStep, formatValue, homeTemps, sensorLabel, tree } from "./hw/sensors.ts";
 import type { SensorSnapshot } from "./hw/types.ts";
 
 /** Sensor labels and note reasons the Rust providers emit. */
@@ -131,6 +131,40 @@ test("home card picks GPU / hottest disk and explains a missing CPU temperature"
     notes: [...snap.notes, { device: "gpu1", kind: "temperature", reason: "gpu-asleep" }],
   };
   assert.equal(homeTemps(asleep)[1].reason, "gpu-asleep");
+  // an ACPI zone is not the CPU: the card says why the CPU value is missing instead
+  const acpi: SensorSnapshot = {
+    ...snap,
+    devices: [...snap.devices, { id: "acpi", kind: "board", name: "ACPI" }],
+    sensors: [
+      ...snap.sensors,
+      { id: "acpi/acpi-zone/tz00", device: "acpi", kind: "temperature", label: "acpi-zone", index: null, detail: "TZ00", primary: false, estimated: false, source: "test", value: 27.8, min: 27.8, max: 27.8 },
+    ],
+  };
+  assert.equal(homeTemps(acpi)[0].value, null);
+  assert.equal(homeTemps(acpi)[0].reason, "needs-pawnio");
+});
+
+test("the estimated clock gives way to measured clocks (Advanced sensors on)", () => {
+  const clocks = (s: SensorSnapshot) =>
+    tree(s, false)
+      .find((d) => d.device.id === "cpu")!
+      .groups.find((g) => g.kind === "clock")!
+      .sensors.map((x) => x.label);
+  assert.deepEqual(clocks(snap), ["cpu-clock-avg"], "only the estimate without PawnIO");
+  const eff = { ...snap.sensors.find((s) => s.label === "cpu-clock-avg")!, id: "cpu/cpu-clock-eff", label: "cpu-clock-eff", estimated: false, value: 900 };
+  assert.deepEqual(clocks({ ...snap, sensors: [...snap.sensors, eff] }), ["cpu-clock-eff"]);
+});
+
+test("Advanced sensors toolbar step per PawnIO state", () => {
+  const p = { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false };
+  const st = (o: object, extra: object = {}) => ({ pawnio: { ...p, ...o }, active: false, unavailable: null, ...extra });
+  assert.equal(advancedStep(null), "none");
+  assert.equal(advancedStep(st({}, { active: true })), "on");
+  assert.equal(advancedStep(st({})), "start");
+  assert.equal(advancedStep(st({ installed: false, running: false })), "setup");
+  assert.equal(advancedStep(st({ intel_module: false })), "setup", "module missing: setup downloads it");
+  assert.equal(advancedStep(st({ running: false })), "not-running");
+  assert.equal(advancedStep(st({ running: false }, { restart: true })), "restart");
 });
 
 import { filterTasks, groupTasks, sortTasks, treeRows } from "./hw/tasks.ts";
