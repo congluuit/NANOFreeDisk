@@ -76,6 +76,54 @@ jobs:
           $bad = @($d.items | Where-Object { $_.level -eq 'protected' })
           if ($bad.Count -gt 0) { $bad | Format-List; throw "protected items proposed" }
           "$($d.items.Count) item(s), none protected"
+      # docs/UNINSTALLER.md: the program list and the software junk dry run on a real
+      # machine, then a whole uninstall of a throw-away per-user program — its own
+      # uninstaller runs, the leftovers (install folder, data folder, registry key,
+      # Run entry) are removed, and the Activity log puts them all back
+      - name: programs, software junk, uninstall + leftovers + restore
+        shell: pwsh
+        run: |
+          cargo build -q -p nfd-cli
+          $nfd = "target/debug/nfd.exe"
+          $l = & $nfd programs --store --json | ConvertFrom-Json
+          if ($l.schema -ne 'nanofreedisk.programs.v1') { throw "unexpected schema $($l.schema)" }
+          $l.programs | Select-Object -First 12 name, size, scope, source, caution | Format-Table | Out-String -Width 200
+          if (@($l.programs).Count -lt 3) { throw "too few programs: $(@($l.programs).Count)" }
+          $j = & $nfd programs junk --caution --json | ConvertFrom-Json
+          $outside = @($j.plan.items | Where-Object { -not $_.path.StartsWith($env:USERPROFILE, 'OrdinalIgnoreCase') })
+          if ($outside.Count) { $outside | Format-List; throw "software junk outside the user profile" }
+          "$(@($j.plan.items).Count) software junk item(s), all in the user profile"
+          $app = "$env:LOCALAPPDATA\Programs\NfdCiApp"
+          $data = "$env:APPDATA\NfdCiApp"
+          New-Item -ItemType Directory -Force $app, $data | Out-Null
+          Set-Content "$app\NfdCiApp.exe" "x"
+          Set-Content "$app\settings.ini" "keep me"
+          Set-Content "$data\config.json" "{}"
+          Set-Content "$app\uninstall.cmd" "@echo off`r`ndel /q `"%~dp0NfdCiApp.exe`"`r`nreg delete `"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\NfdCiApp`" /f`r`n"
+          $arp = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\NfdCiApp'
+          New-Item -Force $arp | Out-Null
+          New-ItemProperty $arp DisplayName -Value 'NfdCiApp' | Out-Null
+          New-ItemProperty $arp Publisher -Value 'NFD CI' | Out-Null
+          New-ItemProperty $arp InstallLocation -Value $app | Out-Null
+          New-ItemProperty $arp UninstallString -Value "`"$app\uninstall.cmd`"" | Out-Null
+          New-Item -Force 'HKCU:\Software\NfdCiApp' | Out-Null
+          New-ItemProperty 'HKCU:\Software\NfdCiApp' Theme -Value 'dark' | Out-Null
+          $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          New-ItemProperty $run NfdCiApp -Value "`"$app\NfdCiApp.exe`" --tray" -Force | Out-Null
+          $u = & $nfd programs uninstall NfdCiApp --remove-leftovers -y --json | ConvertFrom-Json
+          $u.operation.items | Select-Object status, mode, reason, path | Format-Table -AutoSize | Out-String -Width 300
+          if (Test-Path $app) { throw "install folder left behind" }
+          if (Test-Path $data) { throw "data folder left behind" }
+          if (Test-Path 'HKCU:\Software\NfdCiApp') { throw "registry key left behind" }
+          if ((Get-ItemProperty $run).NfdCiApp) { throw "Run entry left behind" }
+          & $nfd quarantine restore $u.operation.id
+          if (-not (Test-Path "$app\settings.ini")) { throw "install folder not restored" }
+          if (-not (Test-Path "$data\config.json")) { throw "data folder not restored" }
+          if ((Get-ItemProperty 'HKCU:\Software\NfdCiApp').Theme -ne 'dark') { throw "registry key not restored" }
+          if (-not (Get-ItemProperty $run).NfdCiApp) { throw "Run entry not restored" }
+          Remove-Item -Recurse -Force $app, $data, 'HKCU:\Software\NfdCiApp'
+          Remove-ItemProperty $run NfdCiApp
+          "uninstall, leftovers and restore: OK"
 
   etw:
     name: ETW monitor session (elevated runner)

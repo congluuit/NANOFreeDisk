@@ -14,6 +14,7 @@ pub mod clean;
 pub mod devcache;
 pub mod diskhealth;
 pub mod dupes;
+pub mod programs;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
 use nfd_core::insights::OldLargeOptions;

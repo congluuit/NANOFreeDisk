@@ -3080,6 +3080,7 @@ name = "nanofreedisk"
 version = "0.1.1"
 dependencies = [
  "nfd-advice",
+ "nfd-apps",
  "nfd-browsers",
  "nfd-core",
  "nfd-devtools",
@@ -3213,6 +3214,7 @@ dependencies = [
  "clap",
  "indicatif",
  "nfd-advice",
+ "nfd-apps",
  "nfd-browsers",
  "nfd-core",
  "nfd-devtools",

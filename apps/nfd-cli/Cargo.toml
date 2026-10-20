@@ -15,6 +15,7 @@ path = "src/main.rs"
 
 [dependencies]
 nfd-advice = { workspace = true }
+nfd-apps = { workspace = true }
 nfd-browsers = { workspace = true }
 nfd-core = { workspace = true }
 nfd-devtools = { workspace = true }

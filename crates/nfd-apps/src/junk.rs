@@ -673,6 +673,20 @@ pub fn scan(programs: &[Program], roots: &JunkRoots, ctx: &JunkCtx<'_>) -> JunkR
     report
 }
 
+/// `true` when a rule pack already covers `path` — the path or a folder above it
+/// matches a rule, or a rule's folder lies inside it: the Clean view (or the
+/// DevCache view) shows it, the software junk does not count it twice. 🔴 Keep
+/// rules cover too, so what they protect is never offered here.
+pub fn covered_by(matcher: &nfd_rules::matcher::Matcher) -> impl Fn(&Path) -> bool + '_ {
+    let bases: Vec<PathBuf> = matcher.bases().into_iter().map(|(b, _)| b).collect();
+    move |path: &Path| {
+        path.ancestors()
+            .take(8)
+            .any(|a| !matcher.rules_matching(a).is_empty())
+            || bases.iter().any(|b| within(b, path))
+    }
+}
+
 /// The plan for the `picked` items of `report` (blocked ones left out): quarantine,
 /// with the program's exe names to close.
 #[must_use]

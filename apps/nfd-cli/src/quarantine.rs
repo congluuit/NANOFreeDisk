@@ -78,7 +78,7 @@ fn parse_age(text: &str) -> anyhow::Result<i64> {
     Ok(secs)
 }
 
-fn ask(prompt: &str) -> anyhow::Result<String> {
+pub fn ask(prompt: &str) -> anyhow::Result<String> {
     eprint!("{prompt}");
     std::io::stderr().flush()?;
     let mut line = String::new();

@@ -458,6 +458,33 @@ pub fn run_elevated_step(
     result
 }
 
+/// The registry's programs of this machine, without sizes (fast: leftover scans
+/// check what is still installed with it).
+#[must_use]
+pub fn registry_list(own_dir: Option<PathBuf>) -> Vec<inventory::Program> {
+    use nfd_platform::Platform;
+    let native = nfd_platform::Native;
+    let resolve = native.resolver();
+    let env = |k: &str| {
+        std::env::var(k)
+            .ok()
+            .or_else(|| resolve(&k.to_uppercase()).map(|v| v.replace('/', "\\")))
+    };
+    let ienv = inventory::Env {
+        env: &env,
+        exists: &|p: &Path| p.exists(),
+        system_root: system_root(),
+        own_dir,
+    };
+    inventory::registry_programs(&crate::registry::LiveRegistry, &ienv)
+}
+
+/// `%SystemRoot%`.
+#[must_use]
+pub fn system_root() -> PathBuf {
+    PathBuf::from(std::env::var("SystemRoot").unwrap_or_else(|_| r"C:\Windows".into()))
+}
+
 /// The installed programs of this machine: the registry's entries and the Store
 /// packages, sizes measured for entries that registered none.
 #[must_use]
