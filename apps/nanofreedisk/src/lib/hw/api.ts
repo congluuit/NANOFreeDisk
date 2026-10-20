@@ -18,8 +18,11 @@ export const hwApi = {
   reveal: (pid: number, createTime: string) => call<void>("task_reveal", { pid, createTime }),
   openTaskManager: () => call<void>("open_task_manager"),
   advancedStatus: () => call<AdvancedStatus>("pawnio_status"),
-  /** Shows UAC; adds PawnIO sensors from the elevated helper. */
-  advancedStart: () => call<AdvancedStatus>("advanced_sensors_start"),
+  /** Shows UAC; adds PawnIO sensors from the elevated helper. `auto`: the app
+   * opening with the setting on (once per session, only when PawnIO is ready). */
+  advancedStart: (auto = false) => call<AdvancedStatus>("advanced_sensors_start", { auto }),
+  /** Installs PawnIO (UAC) and/or fetches the official module, both hash-pinned. */
+  pawnioSetup: () => call<AdvancedStatus>("pawnio_setup"),
   pawnioSite: () => call<void>("pawnio_open_site"),
   thermalSet: (enabled: boolean, texts: { title: string; body: string }) =>
     call<ThermalStatus>("thermal_set", { enabled, texts }),

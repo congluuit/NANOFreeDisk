@@ -7,6 +7,7 @@
 //! older than ~0.9 s. Nothing samples while no view asks.
 
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -31,6 +32,11 @@ pub struct HwState {
     /// Temperature alerts and the 24-hour log.
     thermal: Arc<Mutex<Thermal>>,
     thermal_thread: std::sync::OnceLock<()>,
+    /// The automatic start (setting "turn on when the app opens") was tried in
+    /// this session: never ask Windows twice, even after a declined prompt.
+    auto_tried: AtomicBool,
+    /// PawnIO's installer asked for a restart.
+    restart_needed: Arc<AtomicBool>,
 }
 
 /// Alert texts in the UI language (`{device}`, `{value}`, `{limit}` are replaced).
@@ -336,6 +342,8 @@ pub struct AdvancedStatus {
     active: bool,
     /// Why the helper has no sensors (module missing / rejected…).
     unavailable: Option<String>,
+    /// PawnIO was just installed and Windows must restart before its driver loads.
+    restart: bool,
 }
 
 #[tauri::command]
@@ -360,7 +368,170 @@ pub async fn pawnio_status(state: State<'_, HwState>) -> CmdResult<AdvancedStatu
         pawnio,
         active,
         unavailable,
+        restart: state.restart_needed.load(Ordering::Relaxed),
     })
+}
+
+/// Set up Advanced sensors at the user's request: install PawnIO with its official
+/// installer when it is missing (Windows asks for administrator rights), and put
+/// the official module for this CPU where the helper looks for it. Both come from
+/// the author's GitHub releases and must match their pinned SHA-256 (ADR 0002).
+#[tauri::command]
+pub async fn pawnio_setup(state: State<'_, HwState>) -> CmdResult<AdvancedStatus> {
+    #[cfg(windows)]
+    {
+        let restart = state.restart_needed.clone();
+        tauri::async_runtime::spawn_blocking(move || setup::run(&restart))
+            .await
+            .map_err(|e| err("internal", e))??;
+        pawnio_status(state).await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = state;
+        unsupported()
+    }
+}
+
+#[cfg(windows)]
+mod setup {
+    use std::os::windows::process::CommandExt;
+    use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    use nfd_sensors::win::pawnio;
+
+    use super::super::{CmdResult, err};
+
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    /// `ERROR_SUCCESS_REBOOT_REQUIRED` from PawnIO's installer.
+    const REBOOT_REQUIRED: u32 = 3010;
+
+    pub fn run(restart: &AtomicBool) -> CmdResult<()> {
+        let st = pawnio::status();
+        if !st.installed {
+            install(restart)?;
+        }
+        let module = pawnio::cpu_module();
+        if pawnio::find_module(module).is_none() {
+            let (url, sha) = pawnio::MODULES_DOWNLOAD;
+            let zip = fetch(url, sha, pawnio::MODULES_MAX_BYTES)?;
+            let blob = pawnio::extract_module(&zip, module)
+                .ok_or_else(|| err("module-missing", format!("{module}.bin not in {url}")))?;
+            pawnio::save_module(module, &blob).map_err(|e| err("os", e))?;
+        }
+        Ok(())
+    }
+
+    fn install(restart: &AtomicBool) -> CmdResult<()> {
+        let (url, sha) = pawnio::SETUP_DOWNLOAD;
+        let exe = fetch(url, sha, pawnio::SETUP_MAX_BYTES)?;
+        let dir = std::env::var_os("LOCALAPPDATA")
+            .map(|l| PathBuf::from(l).join("NANOFreeDisk").join("pawnio"))
+            .ok_or_else(|| err("os", "LOCALAPPDATA is not set"))?;
+        std::fs::create_dir_all(&dir).map_err(|e| err("os", e))?;
+        let path = dir.join("PawnIO_setup.exe");
+        std::fs::write(&path, &exe).map_err(|e| err("os", e))?;
+        // the flags package managers use (tested: ADR 0002); it shows no UI of its own
+        let code = run_elevated(&path, "-install -silent");
+        let _ = std::fs::remove_file(&path);
+        match code? {
+            0 => Ok(()),
+            REBOOT_REQUIRED => {
+                restart.store(true, Ordering::Relaxed);
+                Ok(())
+            }
+            c => Err(err("install-failed", format!("PawnIO setup exit code {c}"))),
+        }
+    }
+
+    /// Download with Windows' own curl.exe: HTTPS only (redirects too), size-capped,
+    /// and only accepted when it matches the pinned SHA-256.
+    fn fetch(url: &str, sha: &str, max: usize) -> CmdResult<Vec<u8>> {
+        let curl = std::env::var_os("SystemRoot")
+            .map_or_else(|| PathBuf::from(r"C:\Windows"), PathBuf::from)
+            .join("System32")
+            .join("curl.exe");
+        let out = std::process::Command::new(curl)
+            .args([
+                "--fail",
+                "--location",
+                "--silent",
+                "--show-error",
+                "--proto",
+                "=https",
+                "--proto-redir",
+                "=https",
+                "--max-time",
+                "180",
+                "--max-filesize",
+                &max.to_string(),
+                url,
+            ])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .map_err(|e| err("download-failed", e))?;
+        if !out.status.success() {
+            let why = String::from_utf8_lossy(&out.stderr).trim().to_owned();
+            return Err(err("download-failed", why));
+        }
+        if out.stdout.len() > max || !pawnio::sha256_matches(&out.stdout, sha) {
+            return Err(err("download-mismatch", url));
+        }
+        Ok(out.stdout)
+    }
+
+    /// Start `exe` through UAC and wait for its exit code.
+    fn run_elevated(exe: &Path, args: &str) -> CmdResult<u32> {
+        use windows_sys::Win32::Foundation::{CloseHandle, ERROR_CANCELLED, GetLastError};
+        use windows_sys::Win32::System::Threading::{
+            GetExitCodeProcess, INFINITE, WaitForSingleObject,
+        };
+        use windows_sys::Win32::UI::Shell::{
+            SEE_MASK_NOASYNC, SEE_MASK_NOCLOSEPROCESS, SHELLEXECUTEINFOW, ShellExecuteExW,
+        };
+        use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
+        let wide = |s: &std::ffi::OsStr| -> Vec<u16> {
+            use std::os::windows::ffi::OsStrExt;
+            s.encode_wide().chain(std::iter::once(0)).collect()
+        };
+        let (verb, file, params) = (
+            wide("runas".as_ref()),
+            wide(exe.as_os_str()),
+            wide(args.as_ref()),
+        );
+        let mut info = SHELLEXECUTEINFOW {
+            cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
+            fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+            lpVerb: verb.as_ptr(),
+            lpFile: file.as_ptr(),
+            lpParameters: params.as_ptr(),
+            nShow: SW_HIDE,
+            ..Default::default()
+        };
+        // SAFETY: the strings outlive the call; the process handle is closed below.
+        unsafe {
+            if ShellExecuteExW(&mut info) == 0 {
+                return Err(if GetLastError() == ERROR_CANCELLED {
+                    err("uac-declined", "administrator rights were not granted")
+                } else {
+                    err("install-failed", std::io::Error::last_os_error())
+                });
+            }
+            if info.hProcess.is_null() {
+                return Err(err("install-failed", "no process"));
+            }
+            WaitForSingleObject(info.hProcess, INFINITE);
+            let mut code = 0u32;
+            let ok = GetExitCodeProcess(info.hProcess, &mut code) != 0;
+            CloseHandle(info.hProcess);
+            if ok {
+                Ok(code)
+            } else {
+                Err(err("install-failed", std::io::Error::last_os_error()))
+            }
+        }
+    }
 }
 
 /// The running elevated helper, or a new one (UAC prompt). Blocking.
@@ -390,8 +561,31 @@ pub fn helper_slot(state: &HwState) -> Arc<Mutex<Option<nfd_helper::Connection>>
 }
 
 /// Start the elevated helper (UAC prompt) and add its sensors to the hub.
+/// `auto`: the app opening with "turn on automatically" set — tried once per
+/// session, only when PawnIO and the module are ready, and never under
+/// `NFD_NO_AUTO_ELEVATE` (the GUI smoke test must not raise a UAC prompt).
 #[tauri::command]
-pub async fn advanced_sensors_start(state: State<'_, HwState>) -> CmdResult<AdvancedStatus> {
+pub async fn advanced_sensors_start(
+    state: State<'_, HwState>,
+    auto: Option<bool>,
+) -> CmdResult<AdvancedStatus> {
+    #[cfg(windows)]
+    if auto == Some(true) {
+        let ready = || {
+            let p = nfd_sensors::win::pawnio::status();
+            p.running && p.intel_module
+        };
+        if std::env::var_os("NFD_NO_AUTO_ELEVATE").is_some()
+            || state.auto_tried.swap(true, Ordering::Relaxed)
+            || !tauri::async_runtime::spawn_blocking(ready)
+                .await
+                .map_err(|e| err("internal", e))?
+        {
+            return pawnio_status(state).await;
+        }
+    }
+    #[cfg(not(windows))]
+    let _ = auto;
     #[cfg(windows)]
     {
         let hub = state.hub.clone();
@@ -448,6 +642,9 @@ impl nfd_sensors::SensorProvider for Rediscovered {
     }
     fn discover(&mut self) -> nfd_sensors::Discovery {
         self.first.take().unwrap_or_default()
+    }
+    fn warmup(&self) -> Duration {
+        nfd_sensors::SensorProvider::warmup(self.inner.as_ref())
     }
     fn sample(&mut self, out: &mut Vec<(usize, f64)>) {
         self.inner.sample(out);

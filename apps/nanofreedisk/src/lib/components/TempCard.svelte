@@ -5,6 +5,7 @@
   import { t } from "../i18n.svelte";
   import { app } from "../state.svelte";
   import { hwApi } from "../hw/api";
+  import { autoStartAdvanced, refreshAdvanced } from "../hw/advanced.svelte";
   import { homeTemps, levelFor, type HomeTemp } from "../hw/sensors";
   import { hw } from "../hw/state.svelte";
   import Icon from "./Icon.svelte";
@@ -21,6 +22,8 @@
   }
 
   onMount(() => {
+    // "turn on automatically": the first view showing temperatures starts the helper
+    void refreshAdvanced().then(autoStartAdvanced).then(tick);
     void tick();
     const timer = setInterval(tick, 3000);
     return () => clearInterval(timer);
@@ -42,9 +45,7 @@
       <span class="label muted"><Icon name={ICON[h.kind]} size={15} />{t(`home-temp-${h.kind}`)}</span>
       <b class="v {lvl ?? 'none'}">{h.value != null ? `${Math.round(h.value)} °C` : "—"}</b>
       <span class="sub muted ellipsis">
-        {#if h.via === "acpi"}
-          {t("home-temp-acpi")}
-        {:else if h.value == null}
+        {#if h.value == null}
           {t(`home-temp-why-${h.reason ?? "none"}`)}
         {:else}
           {h.name ?? ""}

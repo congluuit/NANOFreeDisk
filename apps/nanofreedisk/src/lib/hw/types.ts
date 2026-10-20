@@ -167,6 +167,8 @@ export interface AdvancedStatus {
   };
   active: boolean;
   unavailable: string | null;
+  /** PawnIO was just installed and needs a restart before its driver loads. */
+  restart?: boolean;
 }
 
 export interface ThermalMinute {

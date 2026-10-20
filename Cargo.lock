@@ -3342,6 +3342,7 @@ dependencies = [
 name = "nfd-sensors"
 version = "0.1.1"
 dependencies = [
+ "miniz_oxide 0.8.9",
  "nfd-hwinfo",
  "serde",
  "serde_json",
