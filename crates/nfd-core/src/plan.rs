@@ -33,6 +33,10 @@ pub enum DeleteMode {
     /// Drive): copy-on-write, the two files stay independent; the original goes to
     /// the quarantine.
     Clone,
+    /// A registry key or value (an uninstalled program's leftover): exported to a
+    /// `.reg` file (`stored`) and deleted; restored with `reg import`. Never part of a
+    /// file plan — the uninstaller runs it and journals the result.
+    Registry,
 }
 
 impl DeleteMode {
@@ -44,6 +48,7 @@ impl DeleteMode {
             Self::Permanent => "permanent",
             Self::Hardlink => "hardlink",
             Self::Clone => "clone",
+            Self::Registry => "registry",
         }
     }
 
@@ -105,7 +110,7 @@ impl PlanItem {
     #[must_use]
     pub const fn level(&self) -> RiskLevel {
         match self.origin {
-            Origin::Manual | Origin::Duplicate { .. } => RiskLevel::Safe,
+            Origin::Manual | Origin::Duplicate { .. } | Origin::Leftover => RiskLevel::Safe,
             Origin::Rule { level } => level,
         }
     }
@@ -177,7 +182,8 @@ pub struct PlanOptions {
 /// * 🟢 Safe and hand-picked items are pre-selected; 🟡 Caution only with
 ///   `include_caution`.
 /// * An item inside another item is merged into it (the outer one wins); duplicates
-///   collapse. Rule matches go to Quarantine, hand-picked items to the Recycle Bin.
+///   collapse. Rule matches and leftovers go to Quarantine, hand-picked items to the
+///   Recycle Bin.
 #[must_use]
 pub fn build(candidates: Vec<PlanItem>, opts: PlanOptions) -> CleanPlan {
     let mut items: Vec<(String, PlanItem)> = candidates
@@ -190,7 +196,7 @@ pub fn build(candidates: Vec<PlanItem>, opts: PlanOptions) -> CleanPlan {
         .filter_map(|mut c| {
             let key = comparable(&c.path)?;
             c.selected = match c.origin {
-                Origin::Manual | Origin::Duplicate { .. } => true,
+                Origin::Manual | Origin::Duplicate { .. } | Origin::Leftover => true,
                 Origin::Rule { level } => match level {
                     RiskLevel::Safe => true,
                     RiskLevel::Caution => opts.include_caution,
@@ -199,6 +205,7 @@ pub fn build(candidates: Vec<PlanItem>, opts: PlanOptions) -> CleanPlan {
             };
             c.mode = match c.origin {
                 Origin::Manual | Origin::Duplicate { .. } => DeleteMode::RecycleBin,
+                Origin::Leftover => DeleteMode::Quarantine,
                 Origin::Rule {
                     level: RiskLevel::Safe,
                 } if opts.permanent && opts.expert => DeleteMode::Permanent,

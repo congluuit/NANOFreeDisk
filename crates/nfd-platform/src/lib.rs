@@ -7,7 +7,8 @@
 //! [`volumes`] (drive overview), [`trash`] (Recycle Bin) and [`appearance`] (accent
 //! color); Phase 3 adds [`locks`] (Restart Manager: which process holds a file);
 //! Phase 5 adds [`io`] (low-priority sequential reads for the duplicate finder) and
-//! [`link`] (hard links and ReFS block clones that replace duplicates).
+//! [`link`] (hard links and ReFS block clones that replace duplicates); the
+//! uninstaller adds [`registry`] (program entries, leftover keys and their backups).
 
 pub mod appearance;
 pub mod fsinfo;
@@ -16,6 +17,7 @@ pub mod link;
 pub mod locks;
 pub mod owner;
 pub mod private_dir;
+pub mod registry;
 pub mod shell_menu;
 pub mod trash;
 pub mod volumes;

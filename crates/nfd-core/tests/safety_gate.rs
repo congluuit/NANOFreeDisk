@@ -1040,3 +1040,106 @@ fn real_machine_live_probe_on_a_temp_file() {
         std::fs::remove_dir(&junction).expect("remove junction");
     }
 }
+
+// ------------------------------------------- leftovers of an uninstalled program
+// (docs/UNINSTALLER.md §2.2): like a hand-picked item, plus folders strictly inside
+// Program Files / ProgramData / the all-users Start Menu — never what Windows keeps.
+const L: Origin = Origin::Leftover;
+
+cases! {
+    leftover_program_files_app: L, r"C:\Program Files\Acme Tool" => "ok";
+    leftover_program_files_app_deep: L, r"C:\Program Files\Acme\Tool\logs" => "ok";
+    leftover_program_files_x86_app: L, r"C:\Program Files (x86)\Acme" => "ok";
+    leftover_program_files_itself: L, r"C:\Program Files" => "protected";
+    leftover_program_files_x86_itself: L, r"C:\Program Files (x86)" => "protected";
+    leftover_common_files: L, r"C:\Program Files\Common Files" => "protected";
+    leftover_common_files_inside: L, r"C:\Program Files\Common Files\Acme" => "protected";
+    leftover_x86_common_files: L, r"C:\Program Files (x86)\Common Files\Acme" => "protected";
+    leftover_windowsapps: L, r"C:\Program Files\WindowsApps\Acme_1.0_x64__abc" => "protected";
+    leftover_windows_defender: L, r"C:\Program Files\Windows Defender" => "protected";
+    leftover_windows_nt: L, r"C:\Program Files (x86)\Windows NT\Accessories" => "protected";
+    leftover_windows_prefix: L, r"C:\Program Files\WindowsPowerShell\Modules" => "protected";
+    leftover_internet_explorer: L, r"C:\Program Files\Internet Explorer" => "protected";
+    leftover_dotnet: L, r"C:\Program Files\dotnet\shared" => "protected";
+    leftover_msbuild: L, r"C:\Program Files (x86)\MSBuild" => "protected";
+    leftover_reference_assemblies: L, r"C:\Program Files (x86)\Reference Assemblies" => "protected";
+    leftover_programdata_app: L, r"C:\ProgramData\Acme" => "ok";
+    leftover_programdata_itself: L, r"C:\ProgramData" => "contains-protected";
+    leftover_programdata_microsoft: L, r"C:\ProgramData\Microsoft\Crypto" => "protected";
+    leftover_programdata_package_cache: L, r"C:\ProgramData\Package Cache\{1234}" => "protected";
+    leftover_programdata_packages: L, r"C:\ProgramData\Packages\Acme_abc" => "protected";
+    leftover_programdata_ssh: L, r"C:\ProgramData\ssh\sshd_config" => "protected";
+    leftover_start_menu_folder: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Acme" => "ok";
+    leftover_start_menu_link: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Acme.lnk" => "ok";
+    leftover_start_menu_itself: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs" => "protected";
+    leftover_start_menu_startup: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\x.lnk" => "protected";
+    leftover_start_menu_admin_tools: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Administrative Tools" => "protected";
+    leftover_start_menu_accessories: L, r"C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Accessories\Paint.lnk" => "protected";
+    leftover_start_menu_parent: L, r"C:\ProgramData\Microsoft\Windows\Start Menu" => "protected";
+    leftover_windows: L, r"C:\Windows\Acme" => "system-dir";
+    leftover_windows_temp: L, r"C:\Windows\Temp\x" => "system-dir";
+    leftover_appdata_app: L, r"C:\Users\nano\AppData\Roaming\Acme" => "ok";
+    leftover_local_programs: L, r"C:\Users\nano\AppData\Local\Programs\Acme" => "ok";
+    leftover_appdata_itself: L, r"C:\Users\nano\AppData\Roaming" => "contains-protected";
+    leftover_home: L, r"C:\Users\nano" => "contains-protected";
+    leftover_documents: L, r"C:\Users\nano\Documents" => "contains-protected";
+    leftover_desktop_link: L, r"C:\Users\nano\Desktop\Acme.lnk" => "ok";
+    leftover_ssh: L, r"C:\Users\nano\.ssh" => "protected";
+    leftover_agent_history: L, r"C:\Users\nano\.claude\projects" => "protected";
+    leftover_claude_desktop_sessions: L, r"C:\Users\nano\AppData\Roaming\Claude\local-agent-mode-sessions" => "protected";
+    leftover_volume_root: L, r"C:\" => "volume-root";
+    #[cfg(windows)] win_leftover_other_drive_program_files_app: L, r"D:\Program Files\Game" => "ok";
+    #[cfg(windows)] win_leftover_other_drive_program_files: L, r"D:\Program Files" => "protected";
+    #[cfg(windows)] win_leftover_other_drive_common_files: L, r"D:\Program Files\Common Files\x" => "protected";
+    #[cfg(windows)] win_leftover_other_drive_windows: L, r"D:\Windows\x" => "protected";
+}
+
+#[test]
+fn leftovers_plan_into_the_quarantine_and_are_selected() {
+    let mut item = PlanItem::manual(p(r"C:\Users\nano\AppData\Roaming\Acme"), true, 10, 2, 0);
+    item.origin = L;
+    let plan = plan::build(vec![item], PlanOptions::default());
+    assert_eq!(plan.items.len(), 1);
+    assert!(plan.items[0].selected);
+    assert_eq!(plan.items[0].mode, DeleteMode::Quarantine);
+    assert_eq!(plan.items[0].level(), RiskLevel::Safe);
+}
+
+#[test]
+fn live_leftover_short_name_into_common_files() {
+    let path = r"C:\PROGRA~1\COMMON~1";
+    let fake = Fake::default()
+        .dir(path)
+        .real(path, r"C:\Program Files\Common Files");
+    assert_eq!(live_code(&fake, L, path), "protected");
+}
+
+#[test]
+fn live_leftover_junction_into_windows() {
+    let path = r"C:\Program Files\Acme\data";
+    let fake = Fake::default().dir(path).real(path, r"C:\Windows\System32");
+    assert_eq!(live_code(&fake, L, path), "system-dir");
+}
+
+#[test]
+fn live_leftover_program_folder_is_allowed() {
+    let path = r"C:\Program Files\Acme";
+    let fake = Fake::default().dir(path);
+    assert_eq!(live_code(&fake, L, path), "ok");
+}
+
+#[test]
+fn live_leftover_system_file_in_program_files_is_refused() {
+    let path = r"C:\Program Files\Acme\driver.sys";
+    let fake = Fake::default()
+        .file(path, 10, 1)
+        .with(path, |f| f.system = true);
+    assert_eq!(live_code(&fake, L, path), "system-file");
+}
+
+#[test]
+fn live_leftover_cloud_placeholder_is_refused() {
+    let path = r"C:\Users\nano\AppData\Roaming\Acme";
+    let fake = Fake::default().dir(path).with(path, |f| f.cloud = true);
+    assert_eq!(live_code(&fake, L, path), "cloud-file");
+}

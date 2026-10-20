@@ -396,6 +396,12 @@ fn act(
             }
         }
         DeleteMode::RecycleBin => recycle(item, result, opts),
+        DeleteMode::Registry => {
+            // registry leftovers are deleted (after their `.reg` backup) by the
+            // uninstaller, never through a file plan
+            result.status = ItemStatus::Failed;
+            result.reason = Some("registry".into());
+        }
         DeleteMode::Hardlink | DeleteMode::Clone => {
             let Some(keeper) = item.keeper.as_deref() else {
                 result.status = ItemStatus::Failed;
@@ -668,6 +674,9 @@ pub enum RestoreStatus {
     Missing,
     /// Permanent deletions cannot be undone.
     NotRestorable,
+    /// Putting it back needs administrator rights (an all-users leftover: a folder
+    /// of Program Files / ProgramData, an `HKEY_LOCAL_MACHINE` key).
+    NeedsAdmin,
     Failed,
 }
 
@@ -683,17 +692,26 @@ pub fn restore(
     match mode {
         DeleteMode::Permanent => (RestoreStatus::NotRestorable, None),
         DeleteMode::Hardlink | DeleteMode::Clone => restore_linked(original, stored),
+        DeleteMode::Registry => {
+            let Some(stored) = stored.filter(|s| s.is_file()) else {
+                return (RestoreStatus::Missing, None);
+            };
+            match nfd_platform::registry::import(stored) {
+                Ok(()) => (RestoreStatus::Restored, None),
+                Err(e) => failed(&e),
+            }
+        }
         DeleteMode::RecycleBin => {
             let found = match nfd_platform::trash::find_recycled(original) {
                 Ok(f) => f,
-                Err(e) => return (RestoreStatus::Failed, Some(e.to_string())),
+                Err(e) => return failed(&e),
             };
             let Some(item) = found.iter().find(|i| i.deleted_at >= deleted_after - 60) else {
                 return (RestoreStatus::Missing, None);
             };
             match nfd_platform::trash::restore_recycled(item) {
                 Ok(()) => (RestoreStatus::Restored, None),
-                Err(e) => (RestoreStatus::Failed, Some(e.to_string())),
+                Err(e) => failed(&e),
             }
         }
         DeleteMode::Quarantine => {
@@ -705,7 +723,7 @@ pub fn restore(
             }
             if let Some(parent) = original.parent() {
                 if let Err(e) = fs::create_dir_all(parent) {
-                    return (RestoreStatus::Failed, Some(e.to_string()));
+                    return failed(&e);
                 }
             }
             let result = if original.symlink_metadata().is_err() {
@@ -724,10 +742,21 @@ pub fn restore(
                     (RestoreStatus::Restored, None)
                 }
                 Ok(false) => (RestoreStatus::Conflicts, None),
-                Err(e) => (RestoreStatus::Failed, Some(e.to_string())),
+                Err(e) => failed(&e),
             }
         }
     }
+}
+
+/// A restore that failed: putting an all-users leftover back into Program Files /
+/// ProgramData / `HKEY_LOCAL_MACHINE` needs administrator rights.
+fn failed(e: &io::Error) -> (RestoreStatus, Option<String>) {
+    let status = if e.kind() == io::ErrorKind::PermissionDenied {
+        RestoreStatus::NeedsAdmin
+    } else {
+        RestoreStatus::Failed
+    };
+    (status, Some(e.to_string()))
 }
 
 /// Undo a replaced duplicate: the link steps aside, the original comes back from

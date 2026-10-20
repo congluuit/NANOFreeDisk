@@ -354,7 +354,9 @@ pub fn run(action: QuarantineAction) -> anyhow::Result<ExitCode> {
                 );
                 failed += usize::from(matches!(
                     r.status,
-                    exec::RestoreStatus::Failed | exec::RestoreStatus::Conflicts
+                    exec::RestoreStatus::Failed
+                        | exec::RestoreStatus::Conflicts
+                        | exec::RestoreStatus::NeedsAdmin
                 ));
             }
             if let Some(dir) = nfd_history::audit::default_dir() {

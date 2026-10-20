@@ -111,6 +111,7 @@ impl ItemRow {
             "permanent" => DeleteMode::Permanent,
             "hardlink" => DeleteMode::Hardlink,
             "clone" => DeleteMode::Clone,
+            "registry" => DeleteMode::Registry,
             _ => DeleteMode::RecycleBin,
         }
     }

@@ -252,6 +252,59 @@ pub(crate) const VOLUME_ROOT_PROTECTED: &[&str] = &[
     "programdata",
 ];
 
+/// Folders directly inside `Program Files` that belong to Windows: never the leftover
+/// of an uninstalled program ([`gate::Origin::Leftover`]). Names starting with
+/// `windows` are refused as well.
+pub(crate) const LEFTOVER_PROGRAM_FILES_DENY: &[&str] = &[
+    "common files",
+    "windowsapps",
+    "modifiablewindowsapps",
+    "internet explorer",
+    "microsoft update health tools",
+    "reference assemblies",
+    "msbuild",
+    "dotnet",
+    "uninstall information",
+    "packagemanagement",
+    "microsoft.net",
+];
+
+/// Folders directly inside `ProgramData` that are never a program's leftover
+/// (Windows, the installers' package cache, legacy junctions).
+pub(crate) const LEFTOVER_PROGRAM_DATA_DENY: &[&str] = &[
+    "microsoft",
+    "package cache",
+    "packages",
+    "regid.1991-06.com.microsoft",
+    "usoprivate",
+    "usoshared",
+    "ssh",
+    "softwaredistribution",
+    "windowsholographicdevices",
+    "application data",
+    "desktop",
+    "documents",
+    "favorites",
+    "start menu",
+    "templates",
+];
+
+/// Folders of the all-users Start Menu (`Programs\…`) that belong to Windows.
+pub(crate) const LEFTOVER_START_MENU_DENY: &[&str] = &[
+    "startup",
+    "administrative tools",
+    "accessibility",
+    "accessories",
+    "system tools",
+    "maintenance",
+    "windows powershell",
+    "windows tools",
+    "windows administrative tools",
+    "windows accessories",
+    "windows ease of access",
+    "windows system",
+];
+
 /// Why the Analyze view refuses to delete a path.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Blocked {
