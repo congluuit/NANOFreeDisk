@@ -296,6 +296,10 @@ impl SensorProvider for NetworkProvider {
         "network"
     }
 
+    fn warmup(&self) -> std::time::Duration {
+        crate::RATE_WARMUP
+    }
+
     fn discover(&mut self) -> Discovery {
         let mut d = Discovery::default();
         let mut pdh = Query::new();

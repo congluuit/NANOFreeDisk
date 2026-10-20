@@ -431,6 +431,11 @@ impl SensorProvider for RemoteProvider {
         "helper"
     }
 
+    /// The helper's sources are rates too (RAPL power, APERF clocks).
+    fn warmup(&self) -> Duration {
+        nfd_sensors::RATE_WARMUP
+    }
+
     fn discover(&mut self) -> Discovery {
         match self.ask(&Request::Discover { protocol: PROTOCOL }) {
             Some(Response::Discovery {

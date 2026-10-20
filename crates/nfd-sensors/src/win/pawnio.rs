@@ -54,6 +54,21 @@ pub const KNOWN_MODULES: &[(&str, &str, &str)] = &[
     ),
 ];
 
+/// The official downloads NANOFreeDisk may fetch when the user asks it to set up
+/// Advanced sensors: (url, SHA-256). Pinned — a new upstream release is adopted
+/// only by changing these after checking it (ADR 0002).
+pub const SETUP_DOWNLOAD: (&str, &str) = (
+    "https://github.com/namazso/PawnIO.Setup/releases/download/2.2.0/PawnIO_setup.exe",
+    "1f519a22e47187f70a1379a48ca604981c4fcf694f4e65b734aaa74a9fba3032",
+);
+pub const MODULES_DOWNLOAD: (&str, &str) = (
+    "https://github.com/namazso/PawnIO.Modules/releases/download/0.2.11/release_0_2_11.zip",
+    "43608cb89bc84247fef1368a139013f7d043e17db6d6c8dfc9b46bf0905a81f4",
+);
+/// Upper bounds for the two downloads (3.4 MB and 70 KB today).
+pub const SETUP_MAX_BYTES: usize = 16 << 20;
+pub const MODULES_MAX_BYTES: usize = 4 << 20;
+
 fn wide(s: &str) -> Vec<u16> {
     s.encode_utf16().chain(std::iter::once(0)).collect()
 }
@@ -196,6 +211,11 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
+/// Whether `data` hashes to the lowercase hex `sha`.
+pub fn sha256_matches(data: &[u8], sha: &str) -> bool {
+    sha256(data).is_some_and(|h| hex(&h) == sha)
+}
+
 /// Whether `blob` is a known official build of `module`.
 pub fn is_known_module(module: &str, blob: &[u8]) -> bool {
     let Some(h) = sha256(blob).map(|h| hex(&h)) else {
@@ -228,6 +248,81 @@ pub fn find_module(module: &str) -> Option<Vec<u8>> {
         let blob = std::fs::read(d.join(format!("{module}.bin"))).ok()?;
         is_known_module(module, &blob).then_some(blob)
     })
+}
+
+/// `<module>.bin` out of the official module archive (a plain zip), wherever it
+/// sits in the archive. Stored or deflated entries only; `None` for anything
+/// malformed, encrypted or larger than a module can be.
+pub fn extract_module(zip: &[u8], module: &str) -> Option<Vec<u8>> {
+    const MAX_MODULE: usize = 1 << 20;
+    let u16_at = |at: usize| -> Option<usize> {
+        Some(u16::from_le_bytes(zip.get(at..at + 2)?.try_into().ok()?) as usize)
+    };
+    let u32_at = |at: usize| -> Option<usize> {
+        Some(u32::from_le_bytes(zip.get(at..at + 4)?.try_into().ok()?) as usize)
+    };
+    // end of central directory: 22 bytes plus a comment of up to 64 KB
+    let lowest = zip.len().saturating_sub(22 + 0xFFFF);
+    let eocd = (lowest..=zip.len().checked_sub(22)?)
+        .rev()
+        .find(|&i| zip[i..i + 4] == [0x50, 0x4B, 0x05, 0x06])?;
+    let entries = u16_at(eocd + 10)?;
+    let mut at = u32_at(eocd + 16)?;
+    let want = format!("{module}.bin");
+    for _ in 0..entries {
+        if zip.get(at..at + 4)? != [0x50, 0x4B, 0x01, 0x02] {
+            return None;
+        }
+        let flags = u16_at(at + 8)?;
+        let method = u16_at(at + 10)?;
+        let packed = u32_at(at + 20)?;
+        let size = u32_at(at + 24)?;
+        let (name_len, extra_len, comment_len) =
+            (u16_at(at + 28)?, u16_at(at + 30)?, u16_at(at + 32)?);
+        let local = u32_at(at + 42)?;
+        let name = zip.get(at + 46..at + 46 + name_len)?;
+        at += 46 + name_len + extra_len + comment_len;
+        let base = name
+            .rsplit(|&c| c == b'/' || c == b'\\')
+            .next()
+            .unwrap_or(name);
+        if !base.eq_ignore_ascii_case(want.as_bytes()) {
+            continue;
+        }
+        if flags & 1 != 0 || size > MAX_MODULE || packed > MAX_MODULE {
+            return None; // encrypted, or not a module
+        }
+        if zip.get(local..local + 4)? != [0x50, 0x4B, 0x03, 0x04] {
+            return None;
+        }
+        let start = local + 30 + u16_at(local + 26)? + u16_at(local + 28)?;
+        let data = zip.get(start..start + packed)?;
+        let out = match method {
+            0 => data.to_vec(),
+            8 => miniz_oxide::inflate::decompress_to_vec_with_limit(data, MAX_MODULE).ok()?,
+            _ => return None,
+        };
+        return (out.len() == size).then_some(out);
+    }
+    None
+}
+
+/// Save a known official module where [`find_module`] looks for it
+/// (`%LOCALAPPDATA%\NANOFreeDisk\pawnio\`). Anything else is refused.
+pub fn save_module(module: &str, blob: &[u8]) -> std::io::Result<PathBuf> {
+    if !is_known_module(module, blob) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "not a known official module build",
+        ));
+    }
+    let dir = std::env::var_os("LOCALAPPDATA")
+        .map(|l| PathBuf::from(l).join("NANOFreeDisk").join("pawnio"))
+        .ok_or_else(|| std::io::Error::other("LOCALAPPDATA is not set"))?;
+    std::fs::create_dir_all(&dir)?;
+    let path = dir.join(format!("{module}.bin"));
+    std::fs::write(&path, blob)?;
+    Ok(path)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -374,6 +469,90 @@ mod tests {
         );
         assert!(!is_known_module("IntelMSR", b"not a module"));
         assert!(!is_known_module("Unknown", b""));
+    }
+
+    /// A minimal zip: (name, data, deflate?) entries, CRCs left at 0 (not checked).
+    fn zip_of(entries: &[(&str, &[u8], bool)]) -> Vec<u8> {
+        let mut out = Vec::new();
+        let mut central = Vec::new();
+        for (name, data, deflate) in entries {
+            let packed = if *deflate {
+                miniz_oxide::deflate::compress_to_vec(data, 6)
+            } else {
+                data.to_vec()
+            };
+            let method: u16 = if *deflate { 8 } else { 0 };
+            let offset = out.len() as u32;
+            out.extend_from_slice(&[0x50, 0x4B, 0x03, 0x04, 20, 0, 0, 0]);
+            out.extend_from_slice(&method.to_le_bytes());
+            out.extend_from_slice(&[0; 8]); // time, date, crc
+            out.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            out.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            out.extend_from_slice(&0u16.to_le_bytes());
+            out.extend_from_slice(name.as_bytes());
+            out.extend_from_slice(&packed);
+            central.extend_from_slice(&[0x50, 0x4B, 0x01, 0x02, 20, 0, 20, 0, 0, 0]);
+            central.extend_from_slice(&method.to_le_bytes());
+            central.extend_from_slice(&[0; 8]);
+            central.extend_from_slice(&(packed.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(data.len() as u32).to_le_bytes());
+            central.extend_from_slice(&(name.len() as u16).to_le_bytes());
+            central.extend_from_slice(&[0; 12]); // extra, comment, disk, attrs
+            central.extend_from_slice(&offset.to_le_bytes());
+            central.extend_from_slice(name.as_bytes());
+        }
+        let cd_at = out.len() as u32;
+        out.extend_from_slice(&central);
+        out.extend_from_slice(&[0x50, 0x4B, 0x05, 0x06, 0, 0, 0, 0]);
+        out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(entries.len() as u16).to_le_bytes());
+        out.extend_from_slice(&(central.len() as u32).to_le_bytes());
+        out.extend_from_slice(&cd_at.to_le_bytes());
+        out.extend_from_slice(&0u16.to_le_bytes());
+        out
+    }
+
+    #[test]
+    fn module_comes_out_of_the_archive() {
+        let intel = vec![7u8; 5000];
+        let amd = b"amd module".to_vec();
+        let zip = zip_of(&[
+            ("release/LpcIO.bin", b"other", false),
+            ("release/IntelMSR.bin", &intel, true),
+            ("AMDFamily17.bin", &amd, false),
+        ]);
+        assert_eq!(extract_module(&zip, "IntelMSR"), Some(intel));
+        assert_eq!(extract_module(&zip, "AMDFamily17"), Some(amd));
+        assert_eq!(extract_module(&zip, "RyzenSMU"), None, "not in the archive");
+        assert_eq!(
+            extract_module(&zip[..zip.len() - 3], "IntelMSR"),
+            None,
+            "cut"
+        );
+        assert_eq!(extract_module(b"PK", "IntelMSR"), None);
+        let mut bad = zip.clone();
+        let at = bad
+            .windows(4)
+            .position(|w| w == [0x50, 0x4B, 0x01, 0x02])
+            .expect("cd");
+        bad[at] = 0;
+        assert_eq!(extract_module(&bad, "IntelMSR"), None, "broken directory");
+    }
+
+    #[test]
+    fn only_official_modules_are_saved() {
+        let e = save_module("IntelMSR", b"not a module").expect_err("refused");
+        assert_eq!(e.kind(), std::io::ErrorKind::InvalidData);
+        assert!(sha256_matches(
+            b"abc",
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        ));
+        assert!(!sha256_matches(b"abd", SETUP_DOWNLOAD.1));
+        for (url, sha) in [SETUP_DOWNLOAD, MODULES_DOWNLOAD] {
+            assert!(url.starts_with("https://github.com/namazso/"), "{url}");
+            assert_eq!(sha.len(), 64);
+        }
     }
 
     #[test]

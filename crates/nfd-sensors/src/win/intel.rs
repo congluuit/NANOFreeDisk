@@ -162,6 +162,10 @@ impl SensorProvider for IntelMsrProvider {
         "intel-msr"
     }
 
+    fn warmup(&self) -> std::time::Duration {
+        crate::RATE_WARMUP
+    }
+
     fn discover(&mut self) -> Discovery {
         let topo = nfd_hwinfo::win::topology::native();
         let cpuid = nfd_hwinfo::cpu::native();

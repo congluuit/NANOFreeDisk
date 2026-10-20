@@ -92,6 +92,10 @@ impl SensorProvider for CpuProvider {
         "cpu"
     }
 
+    fn warmup(&self) -> std::time::Duration {
+        crate::RATE_WARMUP
+    }
+
     fn discover(&mut self) -> Discovery {
         let topo = nfd_hwinfo::win::topology::native();
         let id = nfd_hwinfo::cpu::native();
