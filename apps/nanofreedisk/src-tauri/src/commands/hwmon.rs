@@ -618,12 +618,12 @@ pub async fn helper_task_set(state: State<'_, HwState>, on: bool) -> CmdResult<A
                 return Ok(());
             }
             let conn = connect(&helper, false)?;
-            if on {
+            let done = if on {
                 conn.task_register()
             } else {
                 conn.task_remove()
-            }
-            .map_err(|e| err("helper-task", e))
+            };
+            done.map_err(|e| err("helper-task", e))
         })
         .await
         .map_err(|e| err("internal", e))??;
