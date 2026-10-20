@@ -614,6 +614,7 @@ pub async fn task_reveal(
     pid: u32,
     create_time: String,
 ) -> CmdResult<()> {
+    #[cfg(windows)]
     use tauri_plugin_opener::OpenerExt;
     #[cfg(windows)]
     let path = {
@@ -632,14 +633,17 @@ pub async fn task_reveal(
         .await
         .map_err(|e| err("internal", e))??
     };
+    #[cfg(windows)]
+    {
+        app.opener()
+            .reveal_item_in_dir(path)
+            .map_err(|e| err("os", e))
+    }
     #[cfg(not(windows))]
-    let path: String = {
-        let _ = (state, pid, create_time);
-        return unsupported();
-    };
-    app.opener()
-        .reveal_item_in_dir(path)
-        .map_err(|e| err("os", e))
+    {
+        let _ = (app, state, pid, create_time);
+        unsupported()
+    }
 }
 
 #[cfg(test)]

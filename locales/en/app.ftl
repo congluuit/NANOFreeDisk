@@ -457,3 +457,10 @@ hint-shell = If you do this: an entry is added to (or removed from) Explorer's r
 
 error-generic = Something went wrong: { $message }
 error-no-session = Scan a drive or folder first.
+
+## macOS: Full Disk Access (docs/MACOS.md)
+mac-fda-title = Allow Full Disk Access for complete scans
+mac-fda-body = macOS hides Mail, Messages, Safari and other apps' data from NANOFreeDisk, so scans leave those folders out. Open System Settings → Privacy & Security → Full Disk Access, turn on NANOFreeDisk, then quit and reopen the app.
+mac-fda-open = Open Privacy settings
+mac-fda-open-hint = Opens System Settings at Privacy & Security → Full Disk Access.
+mac-fda-dismiss = Not now

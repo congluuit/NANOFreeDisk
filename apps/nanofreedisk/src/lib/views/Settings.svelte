@@ -15,6 +15,10 @@
     type Token,
   } from "../theme";
   import Icon from "../components/Icon.svelte";
+  import { currentOs, hasFeature } from "../platform";
+
+  // macOS has no Explorer menu, Monitor, Drive health or in-place updater
+  const os = $derived(currentOs(app.info?.os));
 
   const MODES: { id: ThemeMode; icon: string }[] = [
     { id: "light", icon: "sun" },
@@ -254,6 +258,7 @@
     </div>
   </div>
 
+  {#if hasFeature(os, "shell-menu")}
   <div class="block card">
     <h2>{t("settings-shell")}</h2>
     <label class="toggle" title={t("hint-shell")}>
@@ -269,6 +274,7 @@
     </label>
     <p class="muted small">{t("settings-shell-hint")}</p>
   </div>
+  {/if}
 
   <div class="block card">
     <h2>{t("settings-history")}</h2>
@@ -289,6 +295,7 @@
     </div>
   </div>
 
+  {#if hasFeature(os, "monitor")}
   <div class="block card" data-settings="monitor">
     <h2>{t("settings-monitor")}</h2>
     <label class="toggle" title={t("hint-mon-alerts")}>
@@ -305,7 +312,9 @@
     </div>
     <p class="muted small">{t("settings-mon-hint")}</p>
   </div>
+  {/if}
 
+  {#if hasFeature(os, "health")}
   <div class="block card" data-settings="health">
     <h2>{t("settings-health")}</h2>
     <label class="toggle" title={t("hint-health-alerts")}>
@@ -314,6 +323,7 @@
     </label>
     <p class="muted small">{t("settings-health-alerts-note")}</p>
   </div>
+  {/if}
 
   <div class="block card" data-settings="devcache">
     <h2>{t("settings-devcache")}</h2>
@@ -372,6 +382,16 @@
     </div>
   </div>
 
+  {#if !hasFeature(os, "updater")}
+  <div class="block card" data-settings="update">
+    <h2>{t("update-title")}</h2>
+    <p class="muted small">{t("update-mac-hint")}</p>
+    <div class="row">
+      <span class="grow"></span>
+      <button class="btn" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
+    </div>
+  </div>
+  {:else}
   <div class="block card" data-settings="update">
     <h2>{t("update-title")}</h2>
     <p class="muted small">{t("update-hint")}</p>
@@ -394,6 +414,7 @@
     {/if}
     {#if update?.notes}<pre class="notes small">{update.notes}</pre>{/if}
   </div>
+  {/if}
 
   <div class="block card about">
     <img src="/icon.png" alt="" width="56" height="56" />

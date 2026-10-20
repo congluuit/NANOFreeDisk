@@ -50,6 +50,10 @@ const CLOUD_NAMES: &[&str] = &[
     "box",
     "mega",
     "pcloud drive",
+    // macOS: iCloud Drive and the File Provider clouds (Dropbox, OneDrive, Google
+    // Drive… in ~/Library/CloudStorage)
+    "mobile documents",
+    "cloudstorage",
 ];
 
 fn is_cloud_name(name: &str) -> bool {

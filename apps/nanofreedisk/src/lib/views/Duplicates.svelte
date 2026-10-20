@@ -127,6 +127,7 @@
     if (c.flags.git) out.push("git");
     if (c.flags.appDir) out.push("app");
     if (c.flags.readonly) out.push("readonly");
+    if (c.flags.clone) out.push("clone");
     return out;
   }
   function folderOf(path: string): string {
@@ -620,6 +621,7 @@
   .tag.cloud,
   .tag.git,
   .tag.readonly,
+  .tag.clone,
   .tag.app {
     color: var(--risk-caution);
     border-color: currentColor;

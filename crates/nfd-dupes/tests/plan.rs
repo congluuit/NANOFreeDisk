@@ -40,6 +40,7 @@ const PLAIN: CopyFlags = CopyFlags {
     git: false,
     app_dir: false,
     readonly: false,
+    clone: false,
 };
 
 #[test]
@@ -214,6 +215,7 @@ fn arb_groups() -> impl Strategy<Value = Vec<DupeGroup>> {
                                 git: f[2] && f[3],
                                 app_dir: f[0] && f[2],
                                 readonly: f[1] && f[3],
+                                clone: false,
                             },
                         );
                         if f[0] && !f[1] {

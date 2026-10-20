@@ -10,7 +10,9 @@
 //!   goes to the Recycle Bin instead. A folder with files in use is moved file by file
 //!   and the busy files stay where they are (status [`ItemStatus::Partial`]).
 //! * **Recycle Bin** (hand-picked items): the Windows shell; restored by reading the
-//!   bin's `$I` records (`nfd_platform::trash::find_recycled`).
+//!   bin's `$I` records (`nfd_platform::trash::find_recycled`). On macOS the Trash
+//!   (`NSFileManager`): the item's path inside the Trash is kept as `stored` and
+//!   [`restore`] moves it back from there.
 //! * **Permanent**: removed for good (Expert, 🟢 Safe only — decided by the planner).
 //! * **Hard link / block clone** (Duplicates): a link to the copy that stays is made
 //!   under a temporary name next to the duplicate, the duplicate is moved to the
@@ -471,12 +473,14 @@ fn is_cross_device(e: &io::Error) -> bool {
 
 fn recycle(item: &PlanItem, result: &mut ItemResult, opts: &ExecOptions) {
     result.mode = DeleteMode::RecycleBin;
-    match nfd_platform::trash::recycle(&item.path, opts.owner) {
-        Ok(nfd_platform::trash::Recycled::Done) => {
+    match nfd_platform::trash::recycle_with_location(&item.path, opts.owner) {
+        Ok((nfd_platform::trash::Recycled::Done, trashed)) => {
             result.status = ItemStatus::Done;
             result.freed = item.bytes;
+            // macOS: where the Trash put it, to put it back from there
+            result.stored = trashed;
         }
-        Ok(nfd_platform::trash::Recycled::Declined) => result.status = ItemStatus::Declined,
+        Ok((nfd_platform::trash::Recycled::Declined, _)) => result.status = ItemStatus::Declined,
         Err(e) => {
             result.status = ItemStatus::Failed;
             result.reason = Some(format!("{:?}", e.kind()).to_lowercase());
@@ -684,6 +688,16 @@ pub fn restore(
         DeleteMode::Permanent => (RestoreStatus::NotRestorable, None),
         DeleteMode::Hardlink | DeleteMode::Clone => restore_linked(original, stored),
         DeleteMode::RecycleBin => {
+            // macOS: the path inside the Trash was recorded when the item went there
+            if let Some(trashed) = stored {
+                if trashed.symlink_metadata().is_err() {
+                    return (RestoreStatus::Missing, None);
+                }
+                return match nfd_platform::trash::restore_trashed(trashed, original) {
+                    Ok(()) => (RestoreStatus::Restored, None),
+                    Err(e) => (RestoreStatus::Failed, Some(e.to_string())),
+                };
+            }
             let found = match nfd_platform::trash::find_recycled(original) {
                 Ok(f) => f,
                 Err(e) => return (RestoreStatus::Failed, Some(e.to_string())),

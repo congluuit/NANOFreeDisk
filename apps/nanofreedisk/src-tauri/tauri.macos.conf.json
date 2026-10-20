@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "longDescription": "NANOFreeDisk shows what uses your disk space and frees it safely: it never deletes what macOS or your tools need, and everything it removes goes to the Trash first.",
+    "macOS": {
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-",
+      "hardenedRuntime": false
+    }
+  }
+}

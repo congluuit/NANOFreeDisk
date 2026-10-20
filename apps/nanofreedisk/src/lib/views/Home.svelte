@@ -10,6 +10,9 @@
   import AiCard from "../components/AiCard.svelte";
   import Icon from "../components/Icon.svelte";
   import type { Volume } from "../types";
+  import { currentOs, hasFeature } from "../platform";
+
+  const os = $derived(currentOs(app.info?.os));
 
   const loc = $derived(intlLocale());
   const system = $derived(app.volumes.find((v) => v.system && v.ready));
@@ -84,8 +87,8 @@
     </div>
   </header>
 
-  <HealthCard />
-  <TempCard />
+  {#if hasFeature(os, "health")}<HealthCard />{/if}
+  {#if hasFeature(os, "sensors")}<TempCard />{/if}
   <AiCard />
 
   <div class="big">
@@ -107,11 +110,13 @@
       <strong>{t("home-action-analyze")}</strong>
       <span class="muted">{t("home-action-analyze-hint")}</span>
     </button>
-    <button class="action card" data-home-health onclick={() => (app.view = "health")} title={t("home-action-health-hint")}>
-      <span class="ic health"><Icon name="health" size={26} /></span>
-      <strong>{t("home-action-health")}</strong>
-      <span class="muted">{t("home-action-health-hint")}</span>
-    </button>
+    {#if hasFeature(os, "health")}
+      <button class="action card" data-home-health onclick={() => (app.view = "health")} title={t("home-action-health-hint")}>
+        <span class="ic health"><Icon name="health" size={26} /></span>
+        <strong>{t("home-action-health")}</strong>
+        <span class="muted">{t("home-action-health-hint")}</span>
+      </button>
+    {/if}
   </div>
 
   <div class="drives">

@@ -34,6 +34,8 @@
   import Health from "./lib/views/Health.svelte";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
+  import { currentOs, hasFeature, modKey, viewAvailable } from "./lib/platform";
+  import MacAccessHint from "./lib/components/MacAccessHint.svelte";
 
   type NavItem = { id: View; icon: string; label: string };
   type NavGroup = { group: string; icon: string; label: string; items: NavItem[] };
@@ -68,6 +70,19 @@
 
   const isGroup = (entry: NavItem | NavGroup): entry is NavGroup => "group" in entry;
 
+  // what this platform has (macOS: no Clean, Health, Hardware or Monitor)
+  const os = $derived(currentOs(app.info?.os));
+  const nav = $derived(
+    NAV.flatMap((entry): (NavItem | NavGroup)[] => {
+      if (!isGroup(entry)) return viewAvailable(os, entry.id) ? [entry] : [];
+      const items = entry.items.filter((item) => viewAvailable(os, item.id));
+      return items.length ? [{ ...entry, items }] : [];
+    }),
+  );
+  $effect(() => {
+    if (!viewAvailable(os, app.view)) app.view = "home";
+  });
+
   // Groups the user opened or closed by hand; the group of the open view is always shown.
   let opened = $state<Record<string, boolean>>({});
   const groupOpen = (g: NavGroup) =>
@@ -91,18 +106,19 @@
     void (async () => {
       await loadSettings();
       applyLocale();
-      api.appInfo().then((info) => (app.info = info)).catch(() => {});
+      await api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
-      startThermalSync();
-      startMonitorSync();
-      startHealthWatch();
+      const here = currentOs(app.info?.os);
+      if (hasFeature(here, "sensors")) startThermalSync();
+      if (hasFeature(here, "monitor")) startMonitorSync();
+      if (hasFeature(here, "health")) startHealthWatch();
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
       await openStartupDupes();
     })();
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === ",") {
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
         e.preventDefault();
         app.view = "settings";
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !app.deleting) {
@@ -148,7 +164,7 @@
     <button class="find" onclick={() => (app.palette = true)} title={t("palette-title")}>
       <Icon name="search" size={16} />
       <span class="ellipsis">{t("palette-open")}</span>
-      <kbd>Ctrl K</kbd>
+      <kbd>{modKey(os)} K</kbd>
     </button>
     {#snippet navButton(item: NavItem, child: boolean)}
       <button
@@ -165,7 +181,7 @@
       </button>
     {/snippet}
     <ul class="nav-list">
-      {#each NAV as entry (entry.label)}
+      {#each nav as entry (entry.label)}
         {#if isGroup(entry)}
           {@const open = groupOpen(entry)}
           {@const holdsActive = entry.items.some((item) => item.id === app.view)}
@@ -214,7 +230,7 @@
       class="nav"
       class:active={app.view === "settings"}
       onclick={() => (app.view = "settings")}
-      title="Ctrl+,"
+      title={`${modKey(os)}+,`}
     >
       <Icon name="settings" />
       <span>{t("nav-settings")}</span>
@@ -222,6 +238,7 @@
   </nav>
 
   <main>
+    <MacAccessHint />
     {#if app.view === "home"}
       <Home />
     {:else if app.view === "analyze"}

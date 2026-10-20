@@ -1,6 +1,7 @@
 # Settings -> Updates (docs/PHASE8_INSTALLERS.md section 2.5)
 update-title = Updates
 update-hint = NANOFreeDisk checks for a new version only when you press the button. Updates come from the project's GitHub releases and are verified with its signing key.
+update-mac-hint = On macOS NANOFreeDisk does not update itself yet: new versions are on the project's GitHub releases page (download the .dmg for your Mac).
 update-check = Check for updates
 update-latest = You have the latest version ({ $version }).
 update-available = Version { $version } is available.

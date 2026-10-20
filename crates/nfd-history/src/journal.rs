@@ -14,6 +14,7 @@ use nfd_core::plan::DeleteMode;
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 
+use crate::uninstall::QUARANTINE_MODES;
 use crate::{History, HistoryError, Result, to_i64, to_u64};
 
 pub(crate) const SCHEMA: &str = "
@@ -453,6 +454,9 @@ impl History {
 fn op_dirs(items: &[ItemRow], id: &str) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = items
         .iter()
+        // only the quarantine: a Recycle Bin item's `stored` is its place in the
+        // macOS Trash, never purged from here
+        .filter(|i| QUARANTINE_MODES.contains(&i.mode.as_str()))
         .filter_map(|i| i.stored.as_deref())
         .filter_map(|s| {
             Path::new(s)
