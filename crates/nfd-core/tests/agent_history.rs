@@ -18,7 +18,8 @@ fn resolver(var: &str) -> Option<String> {
     Some(match var {
         "SYSTEMROOT" => format!("{base}/Windows"),
         "SYSTEMDRIVE" => base.to_owned(),
-        "HOME" | "USERPROFILE" => format!("{base}/Users/nano"),
+        // `MACOS_HOME` only resolves on macOS; here it shows those templates hold too
+        "HOME" | "USERPROFILE" | "MACOS_HOME" => format!("{base}/Users/nano"),
         "APPDATA" => format!("{base}/Users/nano/AppData/Roaming"),
         "LOCALAPPDATA" => format!("{base}/Users/nano/AppData/Local"),
         "TEMP" => format!("{base}/Users/nano/AppData/Local/Temp"),

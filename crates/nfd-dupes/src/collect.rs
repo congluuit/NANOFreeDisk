@@ -61,7 +61,8 @@ fn is_cloud_name(name: &str) -> bool {
 }
 
 /// Application folders by location: `%LOCALAPPDATA%\Programs`, Program Files,
-/// ProgramData (most are protected anyway).
+/// ProgramData (most are protected anyway); on macOS `~/Library` (what apps keep
+/// for themselves, like AppData) and `~/Applications`.
 #[must_use]
 pub fn default_app_dirs(resolve: &impl Fn(&str) -> Option<String>) -> Vec<PathBuf> {
     [
@@ -69,6 +70,8 @@ pub fn default_app_dirs(resolve: &impl Fn(&str) -> Option<String>) -> Vec<PathBu
         ("PROGRAMFILES", ""),
         ("PROGRAMFILES_X86", ""),
         ("PROGRAMDATA", ""),
+        ("MACOS_HOME", "/Library"),
+        ("MACOS_HOME", "/Applications"),
     ]
     .iter()
     .filter_map(|(var, tail)| resolve(var).map(|base| PathBuf::from(format!("{base}{tail}"))))

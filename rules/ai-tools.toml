@@ -713,3 +713,79 @@ level           = "protected"
 impact          = "Saved chats and checkpoints of each project. Conversation history is never deleted (PLAN §5.1)."
 impact_vi       = "Chat đã lưu và checkpoint của từng dự án. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
 verified_on     = 2026-10-16
+
+# ───────────────────────────── macOS-only apps (docs/MACOS.md) ─────────────────────────────
+# Chat history of apps that exist on macOS only. Kept like every AI conversation
+# (PLAN §5.1); the SafetyGate protects the same folders (`${MACOS_HOME}` templates).
+
+[[rule]]
+id              = "openai.chatgpt-mac.conversations"
+vendor          = "OpenAI"
+app             = "ChatGPT for macOS"
+category        = "ai-app"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/com.openai.chat/**"]
+level           = "protected"
+impact          = "Conversations and settings of the ChatGPT desktop app. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Hội thoại và thiết lập của ứng dụng ChatGPT trên máy. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21
+
+[[rule]]
+id              = "openai.codex-mac.app-data"
+vendor          = "OpenAI"
+app             = "Codex for macOS"
+category        = "ai-agent"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/Codex/**"]
+level           = "protected"
+impact          = "Data of the Codex desktop app (threads and their state). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Dữ liệu của ứng dụng Codex trên máy (các thread và trạng thái). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21
+
+[[rule]]
+id              = "github.copilot-xcode.data"
+vendor          = "GitHub"
+app             = "Copilot for Xcode"
+category        = "ai-agent"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/com.github.CopilotForXcode/**"]
+level           = "protected"
+impact          = "Chat history and settings of GitHub Copilot for Xcode. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Lịch sử chat và thiết lập của GitHub Copilot for Xcode. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21
+
+[[rule]]
+id              = "ollama.mac-app.chats"
+vendor          = "Ollama"
+app             = "Ollama (macOS app)"
+category        = "llm-runtime"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/Ollama/**"]
+level           = "protected"
+impact          = "Chats and settings of the Ollama app (the models themselves are in ~/.ollama). Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Cuộc trò chuyện và thiết lập của ứng dụng Ollama (model nằm ở ~/.ollama). Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21
+
+[[rule]]
+id              = "zed.ai.threads"
+vendor          = "Zed Industries"
+app             = "Zed"
+category        = "ai-ide"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/Zed/threads/**", "${HOME}/.config/zed/conversations/**"]
+level           = "protected"
+impact          = "Zed's AI agent threads and assistant conversations. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Các thread của agent AI và hội thoại trợ lý trong Zed. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21
+
+[[rule]]
+id              = "raycast.ai.chats"
+vendor          = "Raycast"
+app             = "Raycast"
+category        = "ai-app"
+platform        = ["macos"]
+paths           = ["${HOME}/Library/Application Support/com.raycast.macos/**"]
+level           = "protected"
+impact          = "Raycast's data, including AI Chat history, snippets and settings. Conversation history is never deleted (PLAN §5.1)."
+impact_vi       = "Dữ liệu của Raycast, gồm lịch sử AI Chat, snippet và thiết lập. Lịch sử hội thoại không bao giờ bị xóa (PLAN §5.1)."
+verified_on     = 2026-10-21

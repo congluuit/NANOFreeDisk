@@ -1040,3 +1040,93 @@ fn real_machine_live_probe_on_a_temp_file() {
         std::fs::remove_dir(&junction).expect("remove junction");
     }
 }
+
+// ------------------------------------------------- macOS (docs/MACOS.md §3), lexical
+
+/// A Mac home at `/Users/nano`, `$TMPDIR` in both spellings.
+#[cfg(unix)]
+fn mac_resolver(var: &str) -> Option<String> {
+    let home = "/Users/nano";
+    Some(match var {
+        "HOME" | "USERPROFILE" | "MACOS_HOME" => home.to_owned(),
+        "APPDATA" => format!("{home}/Library/Application Support"),
+        "LOCALAPPDATA" => format!("{home}/Library/Caches"),
+        "TEMP" => "/var/folders/ab/xyz/T".to_owned(),
+        "MACOS_TEMP_REAL" => "/private/var/folders/ab/xyz/T".to_owned(),
+        "MACOS_ROOT" => "/".to_owned(),
+        _ => return None,
+    })
+}
+
+#[cfg(unix)]
+fn mac(origin: Origin, path: &str) -> &'static str {
+    match SafetyGate::new(&mac_resolver).check_path(Path::new(path), origin) {
+        Ok(()) => "ok",
+        Err(b) => b.code(),
+    }
+}
+
+#[cfg(unix)]
+macro_rules! mac_cases {
+    ($( $name:ident: $origin:expr, $path:expr => $want:expr; )*) => {
+        $(
+            #[test]
+            fn $name() {
+                assert_eq!(mac($origin, $path), $want, "{} ({:?})", $path, $origin);
+            }
+        )*
+    };
+}
+
+#[cfg(unix)]
+mac_cases! {
+    mac_downloads_file: M, "/Users/nano/Downloads/big.dmg" => "ok";
+    mac_old_app_in_downloads: M, "/Users/nano/Downloads/Old.app" => "ok";
+    mac_external_drive_file: M, "/Volumes/USB/movies/a.mkv" => "ok";
+    mac_caches_entry: SAFE, "/Users/nano/Library/Caches/com.x" => "ok";
+    mac_temp_inside: M, "/var/folders/ab/xyz/T/scratch.bin" => "ok";
+    mac_temp_inside_real: M, "/private/var/folders/ab/xyz/T/scratch.bin" => "ok";
+    mac_system: M, "/System/Library/CoreServices" => "protected";
+    mac_library: M, "/Library/Application Support/x" => "protected";
+    mac_applications: M, "/Applications/Safari.app" => "protected";
+    mac_usr_local: M, "/usr/local/bin/brew" => "protected";
+    mac_private_etc: M, "/private/etc/hosts" => "protected";
+    mac_var_db: M, "/var/db/x" => "protected";
+    mac_temp_itself: M, "/private/var/folders/ab/xyz/T" => "protected";
+    mac_other_user_temp: M, "/private/var/folders/cd/zzz/T/x" => "protected";
+    mac_cores: M, "/cores/core.123" => "protected";
+    mac_volumes: M, "/Volumes" => "contains-protected";
+    mac_volume_root: M, "/Volumes/USB" => "volume-root";
+    mac_volume_spotlight: M, "/Volumes/USB/.Spotlight-V100" => "protected";
+    mac_time_machine: M, "/Volumes/TM/Backups.backupdb/x" => "protected";
+    mac_root_fseventsd: M, "/.fseventsd" => "protected";
+    mac_icloud: M, "/Users/nano/Library/Mobile Documents/com~apple~CloudDocs/a.pdf" => "protected";
+    mac_mail: M, "/Users/nano/Library/Mail/V10" => "protected";
+    mac_keychains: M, "/Users/nano/Library/Keychains/login.keychain-db" => "protected";
+    mac_containers: M, "/Users/nano/Library/Containers/com.apple.x/Data" => "protected";
+    mac_iphone_backup: M, "/Users/nano/Library/Application Support/MobileSync/Backup/1" => "protected";
+    mac_trash: M, "/Users/nano/.Trash" => "protected";
+    mac_music_library: M, "/Users/nano/Music/Music/Media.localized/a.m4a" => "protected";
+    mac_inside_app: M, "/Users/nano/Downloads/Old.app/Contents/Info.plist" => "protected";
+    mac_inside_pages: M, "/Users/nano/Documents/Report.pages/Data/1.png" => "protected";
+    mac_photos_library: M, "/Users/nano/Pictures/Photos Library.photoslibrary" => "protected";
+    mac_photos_inside: M, "/Users/nano/Pictures/Photos Library.photoslibrary/originals/1.heic" => "protected";
+    mac_sparsebundle: M, "/Volumes/NAS/Mac.sparsebundle" => "protected";
+    mac_library_itself: M, "/Users/nano/Library" => "contains-protected";
+    mac_users: M, "/Users" => "contains-protected";
+    mac_home: M, "/Users/nano" => "contains-protected";
+    mac_movies_by_rule: SAFE, "/Users/nano/Movies/a.mov" => "protected";
+    mac_movies_by_hand: M, "/Users/nano/Movies/a.mov" => "ok";
+    mac_cloudstorage_by_rule: SAFE, "/Users/nano/Library/CloudStorage/Dropbox/a" => "protected";
+    mac_claude_desktop: M, "/Users/nano/Library/Application Support/Claude/claude-code-sessions" => "protected";
+    mac_vscode_chats: M, "/Users/nano/Library/Application Support/Code/User/workspaceStorage/x" => "protected";
+    mac_chatgpt: M, "/Users/nano/Library/Application Support/com.openai.chat/conversations" => "protected";
+    mac_claude_code: M, "/Users/nano/.claude/projects/x" => "protected";
+}
+
+/// The macOS-only templates never resolve with a Windows resolver.
+#[test]
+fn macos_rules_stay_off_without_macos_variables() {
+    assert_eq!(code(M, r"C:\Users\nano\Downloads\Old.app\Contents\x"), "ok");
+    assert_eq!(code(M, r"C:\Users\nano\Library\Mail\x"), "ok");
+}
