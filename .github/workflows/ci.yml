@@ -109,6 +109,7 @@ jobs:
           New-Item -Force 'HKCU:\Software\NfdCiApp' | Out-Null
           New-ItemProperty 'HKCU:\Software\NfdCiApp' Theme -Value 'dark' | Out-Null
           $run = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
+          if (-not (Test-Path $run)) { New-Item $run | Out-Null }
           New-ItemProperty $run NfdCiApp -Value "`"$app\NfdCiApp.exe`" --tray" -Force | Out-Null
           $u = & $nfd programs uninstall NfdCiApp --remove-leftovers -y --json | ConvertFrom-Json
           $u.operation.items | Select-Object status, mode, reason, path | Format-Table -AutoSize | Out-String -Width 300

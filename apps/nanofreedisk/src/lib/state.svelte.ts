@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "programs" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** Analyze's right side: the suggestions (default) or the map (`viz`). */
 export type AnalyzePanel = "suggest" | "map";

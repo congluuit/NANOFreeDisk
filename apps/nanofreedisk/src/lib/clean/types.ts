@@ -90,7 +90,7 @@ export interface OperationItem {
   n: number;
   path: string;
   ruleId: string | null;
-  mode: "recycle-bin" | "quarantine" | "permanent" | "hardlink" | "clone";
+  mode: "recycle-bin" | "quarantine" | "permanent" | "hardlink" | "clone" | "registry";
   isDir: boolean;
   bytes: number;
   files: number;
@@ -111,7 +111,7 @@ export interface ActivityDetail {
 export interface RestoreResult {
   n: number;
   path: string;
-  status: "restored" | "conflicts" | "missing" | "not-restorable" | "failed";
+  status: "restored" | "conflicts" | "missing" | "not-restorable" | "needs-admin" | "failed";
   message: string | null;
 }
 

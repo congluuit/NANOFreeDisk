@@ -29,6 +29,7 @@
   import Hardware from "./lib/views/Hardware.svelte";
   import DevCache from "./lib/views/DevCache.svelte";
   import Duplicates from "./lib/views/Duplicates.svelte";
+  import Programs from "./lib/views/Programs.svelte";
   import Monitor from "./lib/views/Monitor.svelte";
   import { startMonitorSync } from "./lib/monitor/sync.svelte";
   import Health from "./lib/views/Health.svelte";
@@ -50,6 +51,7 @@
         { id: "clean", icon: "clean", label: "nav-clean" },
         { id: "devcache", icon: "devcache", label: "nav-devcache" },
         { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
+        { id: "programs", icon: "apps", label: "nav-programs" },
         { id: "oldlarge", icon: "drive", label: "nav-oldlarge" },
         { id: "tidy", icon: "folder", label: "nav-tidy" },
       ],
@@ -240,6 +242,8 @@
       <DevCache />
     {:else if app.view === "duplicates"}
       <Duplicates />
+    {:else if app.view === "programs"}
+      <Programs />
     {:else if app.view === "monitor"}
       <Monitor />
     {:else if app.view === "health"}

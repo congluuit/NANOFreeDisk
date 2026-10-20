@@ -8,6 +8,7 @@
   import { rank } from "../palette";
   import { app, fail, navigate, startScan, type View } from "../state.svelte";
   import { dev } from "../devcache/state.svelte";
+  import { pg } from "../programs/state.svelte";
   import type { ThemeMode } from "../theme";
   import Icon from "./Icon.svelte";
 
@@ -43,6 +44,7 @@
       ["tidy", "nav-tidy", "folder"],
       ["devcache", "nav-devcache", "devcache"],
       ["duplicates", "nav-duplicates", "duplicates"],
+      ["programs", "nav-programs", "apps"],
       ["monitor", "nav-monitor", "monitor"],
       ["health", "nav-health", "health"],
       ["settings", "nav-settings", "settings"],
@@ -50,6 +52,17 @@
     for (const [view, id, icon] of nav) {
       items.push({ key: `go-${view}`, group: "go", label: t(id), keywords: words(id), icon, run: go(view) });
     }
+    items.push({
+      key: "go-software-junk",
+      group: "go",
+      label: t("pg-tab-junk"),
+      keywords: "software junk app cache logs crash dumps electron updates uninstall",
+      icon: "clean",
+      run: () => {
+        pg.tab = "junk";
+        app.view = "programs";
+      },
+    });
     items.push({
       key: "go-ai-leftovers",
       group: "go",
