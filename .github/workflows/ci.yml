@@ -112,6 +112,36 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  gui-smoke:
+    name: GUI smoke test (windows)
+    # manual runs only: the real app on a Windows desktop, end to end
+    # (scripts/gui-smoke.mjs, on its own fixtures)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/nanofreedisk/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/nanofreedisk
+      - run: pnpm tauri build --no-bundle
+        working-directory: apps/nanofreedisk
+      - run: node scripts/gui-smoke.mjs --shots gui-shots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gui-smoke-screenshots
+          path: gui-shots/
+          if-no-files-found: ignore
+
   rules:
     name: validate rule packs
     runs-on: windows-latest
