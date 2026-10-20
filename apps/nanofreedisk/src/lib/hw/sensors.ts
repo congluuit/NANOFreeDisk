@@ -186,6 +186,13 @@ export function homeTemps(snap: SensorSnapshot): HomeTemp[] {
 /** What Hardware → Sensors offers for the current Advanced sensors (PawnIO) state. */
 export type AdvancedStep = "on" | "setup" | "start" | "not-running" | "restart" | "none";
 
+/** "Start without the Windows prompt" (ADR 0003) is offered once Advanced sensors
+ * are on, and stays visible while it is set up so it can always be removed. */
+export function showNoPrompt(s: AdvancedStatus | null): boolean {
+  const task = s?.helperTask;
+  return !!task && (advancedStep(s) === "on" || task !== "off");
+}
+
 export function advancedStep(s: AdvancedStatus | null): AdvancedStep {
   if (!s?.pawnio) return "none";
   if (s.active) return "on";

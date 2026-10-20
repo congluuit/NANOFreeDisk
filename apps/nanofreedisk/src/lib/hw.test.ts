@@ -58,7 +58,7 @@ test("temperature levels", () => {
 });
 
 import { readdirSync } from "node:fs";
-import { advancedStep, formatValue, homeTemps, sensorLabel, tree } from "./hw/sensors.ts";
+import { advancedStep, formatValue, homeTemps, sensorLabel, showNoPrompt, tree } from "./hw/sensors.ts";
 import type { SensorSnapshot } from "./hw/types.ts";
 
 /** Sensor labels and note reasons the Rust providers emit. */
@@ -165,6 +165,24 @@ test("Advanced sensors toolbar step per PawnIO state", () => {
   assert.equal(advancedStep(st({ intel_module: false })), "setup", "module missing: setup downloads it");
   assert.equal(advancedStep(st({ running: false })), "not-running");
   assert.equal(advancedStep(st({ running: false }, { restart: true })), "restart");
+});
+
+test("'Start without the Windows prompt' is offered when on, and always while set up", () => {
+  const p = { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false };
+  const st = (extra: object) => ({ pawnio: p, active: false, unavailable: null, ...extra });
+  assert.equal(showNoPrompt(null), false);
+  assert.equal(showNoPrompt(st({ active: true })), false, "not on Windows / older backend: no field");
+  assert.equal(showNoPrompt(st({ active: true, helperTask: "off" })), true);
+  assert.equal(showNoPrompt(st({ helperTask: "off" })), false, "sensors off: nothing to offer yet");
+  assert.equal(showNoPrompt(st({ helperTask: "on" })), true, "set up: can be removed from here");
+  assert.equal(showNoPrompt(st({ helperTask: "stale", pawnio: { ...p, installed: false } })), true);
+});
+
+test("the browser mock turns the no-prompt task on and off", () => {
+  assert.equal((hwHandlers.pawnio_status({}) as { helperTask: string }).helperTask, "off");
+  assert.equal((hwHandlers.helper_task_set({ on: true }) as { helperTask: string }).helperTask, "on");
+  assert.equal((hwHandlers.pawnio_status({}) as { helperTask: string }).helperTask, "on");
+  assert.equal((hwHandlers.helper_task_set({ on: false }) as { helperTask: string }).helperTask, "off");
 });
 
 import { filterTasks, groupTasks, sortTasks, treeRows } from "./hw/tasks.ts";
