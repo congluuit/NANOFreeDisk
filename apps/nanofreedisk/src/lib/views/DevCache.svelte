@@ -30,17 +30,19 @@
 </script>
 
 <section class="page devcache">
-  <header>
+  <header class="page-head">
     <div>
       <h1>{t("dev-title")}</h1>
-      <p class="muted">{t("dev-intro")}</p>
+      <p>{t("dev-intro")}</p>
     </div>
-    <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
-      <Icon name="undo" />{t("nav-activity")}
-    </button>
+    <div class="page-actions">
+      <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
+        <Icon name="undo" />{t("nav-activity")}
+      </button>
+    </div>
   </header>
 
-  <div class="tabs" role="tablist">
+  <div class="tabrow" role="tablist">
     {#each TABS as tab (tab.id)}
       <button role="tab" class="tab" class:on={dev.tab === tab.id} aria-selected={dev.tab === tab.id} data-devtab={tab.id} onclick={() => (dev.tab = tab.id)}>
         <Icon name={tab.icon} size={16} />{t(`dev-tab-${tab.id}`)}
@@ -101,49 +103,13 @@
 </section>
 
 <style>
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px 40px;
+  .devcache {
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 75ch;
-  }
-  .tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .tab {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font: inherit;
-  }
-  .tab.on {
-    color: var(--text);
-    border-bottom-color: var(--accent);
+  .devcache > .page-head {
+    margin-bottom: 0;
   }
   .running,
   .result {
@@ -162,6 +128,12 @@
     gap: 12px;
     align-items: flex-start;
     border-left: 4px solid var(--risk-safe);
+  }
+  .result > :global(svg) {
+    color: var(--risk-safe-ink);
+  }
+  .result.bad > :global(svg) {
+    color: var(--danger);
   }
   .result.bad {
     border-left-color: var(--danger);
@@ -186,13 +158,13 @@
   .grow {
     flex: 1;
   }
-  .small {
-    font-size: 0.86em;
-  }
-
   /* shared by the tab components */
   .devcache :global(.dc-card) {
-    padding: 14px 16px;
+    padding: 16px 18px;
+  }
+  .devcache :global(.dc-card h2) {
+    font-size: 1.06em;
+    font-weight: 700;
   }
   .devcache :global(.dc-loading) {
     display: flex;
@@ -214,40 +186,48 @@
     font-size: 0.86em;
   }
   .devcache :global(.dc-badge) {
-    font-size: 0.75em;
-    padding: 1px 7px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.78em;
+    font-weight: 600;
+    padding: 1px 8px;
     border-radius: 999px;
-    border: 1px solid currentColor;
     white-space: nowrap;
+    background: var(--surface-2);
+    color: var(--text-muted);
   }
   .devcache :global(.dc-badge.safe) {
-    color: var(--risk-safe);
+    background: var(--risk-safe-soft);
+    color: var(--risk-safe-ink);
   }
   .devcache :global(.dc-badge.caution) {
-    color: var(--risk-caution);
+    background: var(--risk-caution-soft);
+    color: var(--risk-caution-ink);
   }
   .devcache :global(.dc-badge.advanced) {
-    color: var(--risk-advanced);
+    background: var(--risk-advanced-soft);
+    color: var(--risk-advanced-ink);
   }
   .devcache :global(.dc-badge.protected) {
-    color: var(--risk-protected);
-  }
-  .devcache :global(.dc-badge.muted) {
-    color: var(--text-muted);
+    background: var(--risk-protected-soft);
+    color: var(--risk-protected-ink);
   }
   .devcache :global(.dc-warn) {
     display: flex;
     gap: 6px;
     align-items: center;
     margin: 4px 0 0;
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
   }
   .devcache :global(.dc-note) {
     display: flex;
     gap: 8px;
     align-items: flex-start;
-    padding: 10px 14px;
+    padding: 12px 16px;
     color: var(--text-muted);
+    background: var(--surface-2);
+    border-color: transparent;
   }
   .devcache :global(.dc-list) {
     list-style: none;
@@ -256,9 +236,9 @@
   }
   .devcache :global(.dc-item) {
     display: grid;
-    grid-template-columns: 28px 1fr auto;
+    grid-template-columns: 26px 1fr auto;
     gap: 10px;
-    padding: 10px 0;
+    padding: 11px 0;
     border-top: 1px solid var(--border);
   }
   .devcache :global(.dc-item:first-child) {

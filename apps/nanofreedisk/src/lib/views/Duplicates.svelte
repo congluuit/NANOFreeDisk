@@ -38,6 +38,7 @@
   import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
+  import StatCard from "../components/StatCard.svelte";
 
   const loc = $derived(intlLocale());
   const KINDS: FileKind[] = ["all", "images", "videos", "music", "documents", "archives"];
@@ -160,17 +161,20 @@
 </script>
 
 <section class="page dupes" bind:this={page}>
-  <header>
+  <header class="page-head">
     <div>
       <h1>{t("dupes-title")}</h1>
-      <p class="muted">{t("dupes-intro")}</p>
+      <p>{t("dupes-intro")}</p>
     </div>
-    <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
-      <Icon name="undo" />{t("nav-activity")}
-    </button>
+    <div class="page-actions">
+      <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
+        <Icon name="undo" />{t("nav-activity")}
+      </button>
+    </div>
   </header>
 
-  <div class="card scope">
+  <div class="panel scope">
+    <h2 class="panel-title">{t("dupes-scope")}</h2>
     <div class="row" role="radiogroup" aria-label={t("dupes-scope")}>
       <label class="radio" title={app.summary ? app.summary.root : t("dupes-scope-current-none")}>
         <input type="radio" name="dupes-scope" value="current" bind:group={dupes.scope} disabled={!app.summary || !!dupes.searching} />
@@ -265,10 +269,12 @@
   {/if}
 
   {#if report && !dupes.searching}
-    <div class="card summary" data-dupes-summary>
-      <Icon name="duplicates" size={20} />
+    <div class="stats" data-dupes-summary>
+      <StatCard label={t("stat-wasted")} tone="caution" value={formatSize(report.wastedBytes, loc)} unit={t("stat-in-groups", { count: report.totalGroups })} />
+      <StatCard label={t("stat-compared")} value={formatCount(report.scannedFiles, loc)} unit={t("stat-compared-unit", { seconds: (report.elapsedMs / 1000).toFixed(1) })} />
+    </div>
+    <div class="summary">
       <div class="grow">
-        <strong>{t("dupes-summary", { groups: formatCount(report.totalGroups, loc), size: formatSize(report.wastedBytes, loc) })}</strong>
         <p class="muted small">
           {t("dupes-stats", { files: formatCount(report.scannedFiles, loc), read: formatSize(report.hashedBytes, loc), cached: formatCount(report.cacheHits, loc), seconds: (report.elapsedMs / 1000).toFixed(1) })}
           {#if report.totalGroups > report.groups.length}· {t("dupes-capped", { count: formatCount(report.groups.length, loc) })}{/if}
@@ -292,7 +298,7 @@
     </div>
 
     {#if dupes.findFolders || report.folderGroups?.length}
-      <div class="tabs" role="tablist">
+      <div class="tabrow" role="tablist">
         <button role="tab" class="tab" class:on={!folderTab} aria-selected={!folderTab} data-dupetab="files" onclick={() => (dupes.tab = "files")}>
           <Icon name="file" size={16} />{t("dupes-tab-files", { count: report.totalGroups })}
         </button>
@@ -482,30 +488,15 @@
 {/if}
 
 <style>
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px 40px;
+  .dupes {
     display: flex;
     flex-direction: column;
     gap: 12px;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
+  .dupes > .page-head,
+  .dupes > .stats {
+    margin-bottom: 0;
   }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 75ch;
-  }
-  .scope,
-  .summary,
   .running,
   .result,
   .empty {
@@ -514,7 +505,7 @@
   .scope {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 12px;
   }
   .row {
     display: flex;
@@ -527,9 +518,6 @@
   }
   .grow {
     flex: 1;
-  }
-  .small {
-    font-size: 0.86em;
   }
   .radio,
   .field {
@@ -549,7 +537,7 @@
     padding: 4px 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--bg);
+    background: var(--surface);
   }
   .chip {
     display: inline-flex;
@@ -583,7 +571,8 @@
   .summary {
     display: flex;
     gap: 12px;
-    align-items: flex-start;
+    align-items: center;
+    flex-wrap: wrap;
   }
   .result {
     border-left: 4px solid var(--risk-safe);
@@ -604,25 +593,18 @@
     gap: 8px;
   }
   .tag {
-    display: inline-block;
     margin: 0 4px;
-    font-size: 0.75em;
-    padding: 1px 7px;
-    border-radius: 999px;
-    border: 1px solid var(--border);
-    color: var(--text-muted);
-    white-space: nowrap;
   }
   .tag.sel {
-    color: var(--accent);
-    border-color: var(--accent);
+    background: var(--accent-soft);
+    color: var(--accent-ink);
   }
   .tag.cloud,
   .tag.git,
   .tag.readonly,
   .tag.app {
-    color: var(--risk-caution);
-    border-color: currentColor;
+    background: var(--risk-caution-soft);
+    color: var(--risk-caution-ink);
   }
   .group {
     padding: 0;
@@ -655,25 +637,7 @@
   .head.static :global(.gcheck) {
     margin-right: 2px;
   }
-  .tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-  }
-  .tab {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-  }
-  .tab.on {
-    color: var(--text);
-    border-bottom-color: var(--accent);
-  }
+
   .head .name {
     font-weight: 600;
     min-width: 0;
@@ -703,7 +667,7 @@
     border-top: 1px solid var(--border);
   }
   .copies li.keep {
-    background: var(--accent-soft);
+    background: var(--risk-safe-soft);
     border-radius: var(--radius-sm);
   }
   .keepbox,

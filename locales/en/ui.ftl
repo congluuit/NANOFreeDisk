@@ -72,3 +72,42 @@ sel-compact-items = { $count ->
 sel-none-short = Nothing selected
 sel-clear-short = Clear
 sel-select-safe = Select safe
+
+## Clean
+
+stat-checked = Last checked
+stat-rules = { $count ->
+    [one] 1 rule found something
+   *[other] { $count } rules found something
+}
+
+## Cleanup history
+
+stat-freed = Freed
+stat-operations = { $count ->
+    [one] in 1 cleanup
+   *[other] in { $count } cleanups
+}
+stat-restorable = Can be restored
+stat-restorable-unit = items, from the quarantine or the Recycle Bin
+
+## Tidy up
+
+stat-of-folders = of { $total } folders
+stat-checked-n = { $count } checked
+stat-listed-only = listed only, removed in Explorer
+
+## Dev caches
+
+stat-kept = Kept
+stat-kept-unit = folders kept on purpose
+
+## Duplicates
+
+stat-wasted = Could be freed
+stat-in-groups = { $count ->
+    [one] in 1 group of identical files
+   *[other] in { $count } groups of identical files
+}
+stat-compared = Files compared
+stat-compared-unit = in { $seconds } s

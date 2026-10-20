@@ -68,3 +68,39 @@ sel-compact-items = { $count ->
 sel-none-short = Chưa chọn gì
 sel-clear-short = Bỏ chọn
 sel-select-safe = Chọn mục an toàn
+
+## Clean
+
+stat-checked = Kiểm tra lần cuối
+stat-rules = { $count ->
+   *[other] { $count } quy tắc tìm thấy
+}
+
+## Cleanup history
+
+stat-freed = Đã giải phóng
+stat-operations = { $count ->
+   *[other] qua { $count } lần dọn
+}
+stat-restorable = Có thể khôi phục
+stat-restorable-unit = mục, từ khu cách ly hoặc Thùng rác
+
+## Tidy up
+
+stat-of-folders = trên { $total } thư mục
+stat-checked-n = đã kiểm tra { $count }
+stat-listed-only = chỉ liệt kê, xóa trong Explorer
+
+## Dev caches
+
+stat-kept = Giữ lại
+stat-kept-unit = thư mục được giữ có chủ ý
+
+## Duplicates
+
+stat-wasted = Có thể giải phóng
+stat-in-groups = { $count ->
+   *[other] trong { $count } nhóm tệp giống hệt nhau
+}
+stat-compared = Tệp đã so sánh
+stat-compared-unit = trong { $seconds } giây

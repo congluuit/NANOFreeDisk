@@ -17,6 +17,7 @@
   import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
+  import StatCard from "../components/StatCard.svelte";
 
   const loc = $derived(intlLocale());
   let preview = $state<{ ruleId: string; items: Candidate[] | null } | null>(null);
@@ -88,24 +89,30 @@
   }
 
   const levelLabel = (r: RuleSummary) => t(`clean-level-${levelOf(r)}`);
+  const countOf = (level: string) => visible.filter((r) => r.level === level).length;
   const cliCommand = $derived(
     `nfd clean --level ${picked.some((id) => rules.find((r) => r.ruleId === id)?.level === "advanced") ? "advanced" : picked.some((id) => rules.find((r) => r.ruleId === id)?.level === "caution") ? "caution" : "safe"} --rule ${picked.join(",") || "…"} --apply`,
   );
 </script>
 
-<section class="page" bind:this={page}>
-  <header>
+<section class="page clean" bind:this={page}>
+  <header class="page-head">
     <div>
       <h1>{t("clean-title")}</h1>
-      <p class="muted">{t("clean-intro")}</p>
+      <p>{t("clean-intro")}</p>
     </div>
-    <div class="actions-top">
+    <div class="page-actions actions-top">
       <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
         <Icon name="undo" />{t("nav-activity")}
       </button>
-      <button class="btn ghost" onclick={() => scanJunk()} disabled={clean.scanning || !!clean.running} title={t("clean-rescan")}>
+      <button class="btn ghost icon" onclick={() => scanJunk()} disabled={clean.scanning || !!clean.running} title={t("clean-rescan")} aria-label={t("clean-rescan")}>
         <Icon name="refresh" />
       </button>
+      {#if clean.scan}
+        <button class="btn primary" disabled={!safeIds.length || !!clean.running} onclick={() => ask(safeIds)} data-effect title={t("clean-safe-hint")}>
+          <Icon name="clean" />{t("clean-safe-button", { size: formatSize(bytesOf(safeIds), loc) })}
+        </button>
+      {/if}
     </div>
   </header>
 
@@ -152,22 +159,17 @@
       <span>{clean.scanning ? t("clean-scanning") : t("clean-not-scanned")}</span>
     </div>
   {:else}
-    <div class="summary card">
-      <div class="totals">
-        <div><span class="dot safe"></span>{t("clean-level-safe")}<b class="num">{formatSize(clean.scan.safe, loc)}</b></div>
-        <div><span class="dot caution"></span>{t("clean-level-caution")}<b class="num">{formatSize(clean.scan.caution, loc)}</b></div>
-        {#if expert()}
-          <div><span class="dot advanced"></span>{t("clean-level-advanced")}<b class="num">{formatSize(clean.scan.advanced, loc)}</b></div>
-        {/if}
-        <span class="muted small">{t("clean-checked-at", { date: formatDate(clean.scan.at, loc) })}</span>
-      </div>
-      <button class="btn primary big" disabled={!safeIds.length || !!clean.running} onclick={() => ask(safeIds)} data-effect title={t("clean-safe-hint")}>
-        <Icon name="clean" />{t("clean-safe-button", { size: formatSize(bytesOf(safeIds), loc) })}
-      </button>
+    <div class="stats">
+      <StatCard label={t("stat-safe")} tone="safe" value={formatSize(clean.scan.safe, loc)} unit={t("stat-items", { count: countOf("safe") })} hint={t("clean-safe-hint")} />
+      <StatCard label={t("stat-review")} tone="caution" value={formatSize(clean.scan.caution, loc)} unit={t("stat-items", { count: countOf("caution") })} />
+      {#if expert()}
+        <StatCard label={t("clean-level-advanced")} tone="advanced" value={formatSize(clean.scan.advanced, loc)} unit={t("stat-items", { count: countOf("advanced") })} />
+      {/if}
+      <StatCard label={t("stat-checked")} value={formatDate(clean.scan.at, loc)} unit={t("stat-rules", { count: visible.length })} />
     </div>
 
     {#each packs as p (p.id)}
-      <div class="card pack">
+      <div class="panel pack">
         <h2>
           <GroupCheck items={selItems} group={p.id} picked={picked} onchange={setPicked} expert={expert()} name={p.name} busy={!!clean.running} />
           <span class="grow">{p.name}</span><span class="muted num">{formatSize(p.bytes, loc)}</span>
@@ -180,8 +182,8 @@
               </label>
               <div class="what">
                 <div class="name">
-                  <span class="badge {levelOf(r)}">{levelLabel(r)}</span>
                   <strong>{r.app}</strong><span class="muted small">{r.vendor}</span>
+                  <span class="tag {levelOf(r)}">{levelLabel(r)}</span>
                 </div>
                 <p class="impact small"><span class="muted">{t("clean-if-deleted")}</span> {impactText(r)}</p>
                 {#if r.running.length}
@@ -225,7 +227,7 @@
     {/each}
 
     {#if guide.length}
-      <div class="card pack guide">
+      <div class="panel pack guide">
         <button class="btn ghost" onclick={() => (showGuide = !showGuide)}>
           <Icon name="shield" size={16} />{t("clean-guide-title", { count: guide.length })}
         </button>
@@ -235,7 +237,7 @@
               <li class="rule protected">
                 <span></span>
                 <div class="what">
-                  <div class="name"><span class="badge protected">{levelLabel(r)}</span><strong>{r.app}</strong><span class="muted small">{r.vendor}</span></div>
+                  <div class="name"><strong>{r.app}</strong><span class="muted small">{r.vendor}</span><span class="tag protected">{levelLabel(r)}</span></div>
                   <p class="impact small">{impactText(r)}</p>
                 </div>
                 <span></span>
@@ -267,7 +269,7 @@
       <p>{t("clean-confirm-body", { size: formatSize(bytesOf(clean.confirm), loc), rules: confirmRules.length })}</p>
       <ul class="confirm-list">
         {#each confirmRules as r (r.ruleId)}
-          <li><span class="badge {levelOf(r)}">{levelLabel(r)}</span><span class="ellipsis">{r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
+          <li><span class="tag {levelOf(r)}">{levelLabel(r)}</span><span class="ellipsis">{r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
         {/each}
       </ul>
       <ConfirmTotals summary={confirmSummary} bind:ack />
@@ -295,37 +297,17 @@
 {/if}
 
 <style>
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px 40px;
+  .clean {
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 70ch;
-  }
-  .actions-top {
-    display: flex;
-    gap: 8px;
+  .clean > .page-head,
+  .clean > .stats {
+    margin-bottom: 0;
   }
   .grow {
     flex: 1;
-  }
-  .small {
-    font-size: 0.86em;
   }
   .row {
     display: flex;
@@ -375,52 +357,12 @@
     align-items: center;
     color: var(--text-muted);
   }
-  .summary {
-    display: flex;
-    gap: 16px;
-    align-items: center;
-    justify-content: space-between;
-    flex-wrap: wrap;
-  }
-  .totals {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-    flex-wrap: wrap;
-  }
-  .totals > div {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .dot.safe {
-    background: var(--risk-safe);
-  }
-  .dot.caution {
-    background: var(--risk-caution);
-  }
-  .dot.advanced {
-    background: var(--risk-advanced);
-  }
-  .btn.big {
-    padding: 10px 18px;
-    font-size: 1.05em;
-  }
-  .pack {
-    padding: 14px 16px;
-  }
   .pack h2 {
     display: flex;
-    gap: 8px;
+    gap: 10px;
     align-items: center;
-    margin: 0 0 8px;
-    font-size: 1.05em;
+    margin: 0 0 6px;
+    font-size: 1.06em;
   }
   .rules {
     list-style: none;
@@ -429,9 +371,9 @@
   }
   .rule {
     display: grid;
-    grid-template-columns: 28px 1fr auto;
+    grid-template-columns: 26px 1fr auto;
     gap: 10px;
-    padding: 10px 0;
+    padding: 11px 0;
     border-top: 1px solid var(--border);
   }
   .rule:first-child {
@@ -443,18 +385,22 @@
   .name {
     display: flex;
     gap: 8px;
-    align-items: baseline;
+    align-items: center;
     flex-wrap: wrap;
   }
+  .name strong {
+    font-weight: 600;
+  }
   .impact {
-    margin: 4px 0 0;
+    margin: 3px 0 0;
+    color: var(--text-muted);
   }
   .warn {
     display: flex;
     gap: 6px;
     align-items: center;
     margin: 4px 0 0;
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
   }
   .size {
     display: flex;
@@ -462,25 +408,6 @@
     align-items: flex-end;
     gap: 2px;
     min-width: 110px;
-  }
-  .badge {
-    font-size: 0.75em;
-    padding: 1px 7px;
-    border-radius: 999px;
-    border: 1px solid currentColor;
-    white-space: nowrap;
-  }
-  .badge.safe {
-    color: var(--risk-safe);
-  }
-  .badge.caution {
-    color: var(--risk-caution);
-  }
-  .badge.advanced {
-    color: var(--risk-advanced);
-  }
-  .badge.protected {
-    color: var(--risk-protected);
   }
   .preview ul {
     list-style: none;
