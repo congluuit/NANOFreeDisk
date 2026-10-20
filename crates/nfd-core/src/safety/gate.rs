@@ -186,6 +186,8 @@ pub struct SafetyGate {
     program_data: Option<String>,
     /// `ProgramData\Microsoft\Windows\Start Menu\Programs` (leftover shortcuts).
     start_menu_common: Option<String>,
+    /// `Program Files`, `Program Files (x86)` as this machine names them.
+    program_files: Vec<String>,
     /// Folders where SYSTEM-attributed entries are refused.
     system_dirs: Vec<String>,
     /// Protected templates except the user-data ones: (template, comparable path).
@@ -218,6 +220,10 @@ impl SafetyGate {
                 "${PROGRAMDATA}/Microsoft/Windows/Start Menu/Programs",
                 resolve,
             ),
+            program_files: ["${PROGRAMFILES}", "${PROGRAMFILES_X86}"]
+                .iter()
+                .filter_map(|t| expand_template(t, resolve))
+                .collect(),
             system_root,
             system_dirs,
             subtree: resolved(PROTECTED_TEMPLATES, USER_DATA_TEMPLATES),
@@ -395,6 +401,22 @@ impl SafetyGate {
                 return Ok(Some(sm.to_owned()));
             }
         }
+        let program_files_child = |child: &str, template: String| {
+            if LEFTOVER_PROGRAM_FILES_DENY.contains(&child) || child.starts_with("windows") {
+                Err(Blocked::Protected { template })
+            } else {
+                Ok(())
+            }
+        };
+        // this machine's Program Files, wherever they are…
+        for pf in &self.program_files {
+            if is_within(cand, pf) && cand != pf {
+                let child = first_below(pf);
+                program_files_child(&child, format!("{pf}/{child}"))?;
+                return Ok(Some(pf.clone()));
+            }
+        }
+        // …and a `Program Files` folder at the top of any volume
         let top = parts[volume_depth];
         if matches!(top, "program files" | "program files (x86)") && parts.len() > volume_depth + 1
         {

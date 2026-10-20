@@ -3179,6 +3179,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "nfd-apps"
+version = "0.1.1"
+dependencies = [
+ "nfd-core",
+ "nfd-platform",
+ "nfd-rules",
+ "nfd-tasks",
+ "proptest",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
 name = "nfd-browsers"
 version = "0.1.1"
 dependencies = [

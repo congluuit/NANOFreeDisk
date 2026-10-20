@@ -210,17 +210,8 @@ pub fn reg_text_for_value(hive: Hive, key: &str, name: &str, value: &Value) -> S
 /// its bytes (UTF-16LE with BOM, as `reg export` writes, or UTF-8).
 #[must_use]
 pub fn reg_file_keys(bytes: &[u8]) -> Vec<String> {
-    let text = if bytes.starts_with(&[0xff, 0xfe]) {
-        let units: Vec<u16> = bytes[2..]
-            .chunks_exact(2)
-            .map(|c| u16::from_le_bytes([c[0], c[1]]))
-            .collect();
-        String::from_utf16_lossy(&units)
-    } else {
-        String::from_utf8_lossy(bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes))
-            .into_owned()
-    };
-    text.lines()
+    decode_reg_text(bytes)
+        .lines()
         .map(str::trim)
         .filter_map(|l| l.strip_prefix('[')?.strip_suffix(']'))
         .map(|k| k.trim_start_matches('-').to_owned())
@@ -234,6 +225,46 @@ pub fn parent_and_name(path: &str) -> Option<(&str, &str)> {
     let path = path.trim_matches('\\');
     let (parent, name) = path.rsplit_once('\\')?;
     (!parent.is_empty() && !name.is_empty()).then_some((parent, name))
+}
+
+/// The names of the values a `.reg` file writes (`"name"=…`; `@` for the default
+/// value), in order.
+#[must_use]
+pub fn reg_file_value_names(bytes: &[u8]) -> Vec<String> {
+    decode_reg_text(bytes)
+        .lines()
+        .map(str::trim_start)
+        .filter_map(|l| {
+            if l.starts_with("@=") {
+                return Some("@".to_owned());
+            }
+            let rest = l.strip_prefix('"')?;
+            let mut name = String::new();
+            let mut chars = rest.chars();
+            while let Some(c) = chars.next() {
+                match c {
+                    '\\' => name.push(chars.next()?),
+                    '"' => return chars.as_str().starts_with('=').then_some(name),
+                    other => name.push(other),
+                }
+            }
+            None
+        })
+        .collect()
+}
+
+/// The text of a `.reg` file (UTF-16LE with BOM, or UTF-8).
+fn decode_reg_text(bytes: &[u8]) -> String {
+    if bytes.starts_with(&[0xff, 0xfe]) {
+        let units: Vec<u16> = bytes[2..]
+            .chunks_exact(2)
+            .map(|c| u16::from_le_bytes([c[0], c[1]]))
+            .collect();
+        String::from_utf16_lossy(&units)
+    } else {
+        String::from_utf8_lossy(bytes.strip_prefix(&[0xef, 0xbb, 0xbf]).unwrap_or(bytes))
+            .into_owned()
+    }
 }
 
 /// UTF-16LE with a BOM, the encoding `reg import` expects of version-5 files.
@@ -752,6 +783,10 @@ mod tests {
             &Value::Sz("x".into()),
         );
         let keys = reg_file_keys(&utf16_file(&text));
+        assert_eq!(
+            reg_file_value_names(&utf16_file(&text)),
+            vec!["Tool".to_owned()]
+        );
         assert_eq!(
             keys,
             vec![r"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run".to_owned()]

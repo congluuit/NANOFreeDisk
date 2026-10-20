@@ -663,7 +663,7 @@ fn dir_size(dir: &Path) -> u64 {
 }
 
 /// Outcome of restoring one item.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum RestoreStatus {
     Restored,

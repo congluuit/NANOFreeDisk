@@ -1064,7 +1064,7 @@ cases! {
     leftover_msbuild: L, r"C:\Program Files (x86)\MSBuild" => "protected";
     leftover_reference_assemblies: L, r"C:\Program Files (x86)\Reference Assemblies" => "protected";
     leftover_programdata_app: L, r"C:\ProgramData\Acme" => "ok";
-    leftover_programdata_itself: L, r"C:\ProgramData" => "contains-protected";
+    leftover_programdata_itself: L, r"C:\ProgramData" => "protected";
     leftover_programdata_microsoft: L, r"C:\ProgramData\Microsoft\Crypto" => "protected";
     leftover_programdata_package_cache: L, r"C:\ProgramData\Package Cache\{1234}" => "protected";
     leftover_programdata_packages: L, r"C:\ProgramData\Packages\Acme_abc" => "protected";
