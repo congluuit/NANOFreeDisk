@@ -13,6 +13,7 @@
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
+  import StatCard from "../components/StatCard.svelte";
   import type { SelItem } from "../selection";
   import { expert } from "../state.svelte";
   import type { EmptyRow, EmptyRows, Located, ShortcutRow, ShortcutRows } from "../types";
@@ -81,20 +82,26 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="page" bind:this={page}>
-    <header>
-      <h1>{t("tidy-title")}</h1>
-      <p class="muted">{t("tidy-intro")}</p>
-      <p class="note"><Icon name="shield" size={16} />{t("tidy-quarantine-note")}</p>
+  <section class="page tidy" bind:this={page}>
+    <header class="page-head">
+      <div>
+        <h1>{t("tidy-title")}</h1>
+        <p>{t("tidy-intro")}</p>
+      </div>
+      <span class="tag safe note"><Icon name="shield" size={13} />{t("tidy-quarantine-note")}</span>
     </header>
 
+    <div class="stats">
+      <StatCard label={t("tidy-empty-title")} value={empty ? formatCount(empty.matched, loc) : null} unit={empty ? t("stat-of-folders", { total: formatCount(empty.totalDirs, loc) }) : t("stat-checking")} />
+      <StatCard label={t("tidy-links-title")} value={links ? formatCount(links.rows.length, loc) : null} unit={checking ? t("stat-checking") : links ? t("stat-checked-n", { count: links.checked }) : ""} />
+      <StatCard label={t("tidy-junctions-title")} value={junctions ? formatCount(junctions.rows.length, loc) : null} unit={t("stat-listed-only")} />
+    </div>
     <p class="muted small hint">{t("action-select-hint")}</p>
 
-    <div class="card block">
+    <div class="panel block">
       <h2>
         <GroupCheck items={selItems} group="empty" {picked} onchange={setPicked} expert={expert()} name={t("tidy-empty-title")} />
         <Icon name="folder" size={18} />{t("tidy-empty-title")}
-        {#if empty}<span class="count">{formatCount(empty.matched, loc)}</span>{/if}
       </h2>
       {#if empty}
         <p class="muted small">{t("tidy-empty-summary", { count: empty.matched, total: empty.totalDirs })}</p>
@@ -108,11 +115,10 @@
       </div>
     </div>
 
-    <div class="card block">
+    <div class="panel block">
       <h2>
         <GroupCheck items={selItems} group="links" {picked} onchange={setPicked} expert={expert()} name={t("tidy-links-title")} />
         <Icon name="link" size={18} />{t("tidy-links-title")}
-        {#if links}<span class="count">{formatCount(links.rows.length, loc)}</span>{/if}
       </h2>
       {#if checking}
         <p class="muted small">{t("tidy-links-checking")}</p>
@@ -130,10 +136,9 @@
       </div>
     </div>
 
-    <div class="card block">
+    <div class="panel block">
       <h2>
         <Icon name="link" size={18} />{t("tidy-junctions-title")}
-        {#if junctions}<span class="count">{formatCount(junctions.rows.length, loc)}</span>{/if}
       </h2>
       {#if junctions}
         <p class="muted small">{t("tidy-junctions-summary", { checked: junctions.checked })}</p>
@@ -173,58 +178,39 @@
     gap: 12px;
     color: var(--text-muted);
   }
-  .page {
-    height: 100%;
+  .tidy {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    padding: 20px 24px;
-    min-height: 0;
+    padding-bottom: 18px;
   }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.45em;
-  }
-  header p {
-    margin: 0 0 4px;
-    max-width: 80ch;
+  .tidy > .page-head,
+  .tidy > .stats {
+    margin-bottom: 0;
   }
   .note {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    color: var(--risk-safe);
-    font-size: 0.9em;
+    flex: none;
+    font-weight: 500;
   }
-  .hint {
-    margin: 0;
-    font-size: 0.86em;
+  .tidy > .hint {
+    margin: -4px 0 0;
   }
   .block {
-    flex: 1;
-    min-height: 140px;
+    flex: 1 0 200px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    padding-top: 10px;
+    padding: 14px 0 0;
   }
   h2 {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 0 14px 2px;
-    font-size: 1.05em;
-  }
-  .count {
-    font-size: 0.8em;
-    font-weight: normal;
-    padding: 0 8px;
-    border-radius: 8px;
-    background: var(--accent-soft);
+    margin: 0 18px 2px;
+    font-size: 1.06em;
   }
   .small {
-    font-size: 0.86em;
-    margin: 0 14px 6px;
+    margin: 0 18px 8px;
   }
   .body {
     flex: 1;

@@ -1031,10 +1031,13 @@ mod tests {
         let rows = s.shortcut_rows(&checks, 10);
         assert_eq!(rows.checked, 3);
         assert_eq!(rows.unreadable, 1);
-        assert_eq!(rows.rows.len(), 1, "{rows:?}");
-        assert_eq!(rows.rows[0].located.node.name, "broken.lnk");
-        assert_eq!(rows.rows[0].status, Status::Missing);
-        assert!(rows.rows[0].target.ends_with("gone.exe"));
+        // `.lnk` shortcuts point at Windows paths: only there is a target "missing"
+        if cfg!(windows) {
+            assert_eq!(rows.rows.len(), 1, "{rows:?}");
+            assert_eq!(rows.rows[0].located.node.name, "broken.lnk");
+            assert_eq!(rows.rows[0].status, Status::Missing);
+            assert!(rows.rows[0].target.ends_with("gone.exe"));
+        }
     }
 
     #[test]

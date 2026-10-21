@@ -18,16 +18,33 @@
 //! Both ends check each other: the app only accepts the PID UAC started, the helper
 //! only talks to the PID it was given, and both must be the same executable. The
 //! pipe is local-only and its ACL admits the owner and administrators.
+//!
+//! Opt-in (ADR 0003, [`task`]): a scheduled task starts an administrator-only copy
+//! of the helper in Program Files without a UAC prompt (`--elevated-helper-task`).
+//! It then talks to any app of the same account whose executable hashes like the
+//! copy, so this protocol's read-only list above is the boundary that matters:
+//! [`Request::TaskRegister`] / [`Request::TaskRemove`] are the only additions, and
+//! they can only install or remove the helper's own copy and task.
 
 use serde::{Deserialize, Serialize};
 
 pub use nfd_sensors::{Device, Kind, Note};
 
+pub mod task;
+pub use task::{TASK_FLAG, TaskState};
+
 /// Command-line switch of the helper mode.
 pub const HELPER_FLAG: &str = "--elevated-helper";
 
 /// Wire version; both ends refuse a mismatch (stale helper after an update).
-pub const PROTOCOL: u32 = 3;
+pub const PROTOCOL: u32 = 4;
+
+/// Whether these arguments start one of the helper modes. Checked before any other
+/// command-line mode, so nothing appended to a helper command line can reach them.
+pub fn is_helper(args: &[String]) -> bool {
+    args.get(1)
+        .is_some_and(|a| a == HELPER_FLAG || a == TASK_FLAG)
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "kebab-case")]
@@ -52,6 +69,17 @@ pub enum Request {
         protocol: u32,
         drives: Vec<HealthDrive>,
         volumes: Vec<String>,
+    },
+    /// Set up "start without the Windows prompt" for the account the helper runs
+    /// as (ADR 0003): copy the helper's own image into its administrator-only
+    /// folder and register the task. No parameters: nothing else can be copied or
+    /// registered.
+    TaskRegister {
+        protocol: u32,
+    },
+    /// Remove that task and copy.
+    TaskRemove {
+        protocol: u32,
     },
 }
 
@@ -100,6 +128,8 @@ pub enum Response {
     Health {
         privileged: nfd_health::Privileged,
     },
+    /// [`Request::TaskRegister`] / [`Request::TaskRemove`] done.
+    TaskDone,
     /// Advanced sensors are not available in the helper (PawnIO missing…).
     Unavailable {
         reason: String,
@@ -115,6 +145,12 @@ pub const MAX_FRAME: usize = 4 << 20;
 
 /// Files per monitor tick sent over the pipe (busiest first).
 pub const MONITOR_FILES: usize = 1000;
+
+/// The helper reads the hardware at most this often; faster [`Request::Sample`]s
+/// get the previous values (the views sample about once a second). A caller can
+/// therefore not turn the RAPL energy counters into a high-rate power side channel
+/// (PLATYPUS, CVE-2020-8694) — ADR 0003.
+pub const MIN_SAMPLE_INTERVAL: std::time::Duration = std::time::Duration::from_millis(200);
 
 /// `u32` little-endian length + JSON.
 pub fn encode<T: Serialize>(msg: &T) -> Vec<u8> {
@@ -149,7 +185,12 @@ pub fn helper_args(args: &[String]) -> Option<(String, u32)> {
 #[cfg(windows)]
 mod win;
 #[cfg(windows)]
-pub use win::{Connection, RemoteMonitor, RemoteProvider, StartError, run_helper, start};
+pub mod win_task;
+#[cfg(windows)]
+pub use win::{
+    Connection, RemoteMonitor, RemoteProvider, StartError, run_helper, run_task_helper, start,
+    start_task,
+};
 
 #[cfg(test)]
 mod tests {
@@ -254,5 +295,32 @@ mod tests {
         );
         assert_eq!(helper_args(&a(&["app.exe", HELPER_FLAG, &name])), None);
         assert_eq!(helper_args(&a(&["app.exe"])), None);
+        assert!(is_helper(&a(&["app.exe", HELPER_FLAG, &name, "1234"])));
+        assert!(is_helper(&a(&["app.exe", TASK_FLAG])));
+        assert!(!is_helper(&a(&[
+            "app.exe",
+            "--uninstall-cleanup",
+            TASK_FLAG
+        ])));
+        assert!(!is_helper(&a(&["app.exe"])));
+    }
+
+    #[test]
+    fn task_requests_carry_nothing_but_the_protocol() {
+        for r in [
+            Request::TaskRegister { protocol: PROTOCOL },
+            Request::TaskRemove { protocol: PROTOCOL },
+        ] {
+            assert_eq!(decode::<Request>(&encode(&r)[4..]), Some(r));
+        }
+        assert_eq!(
+            decode::<Request>(br#"{"op":"task-register","protocol":4,"exe":"C:\\evil.exe"}"#),
+            Some(Request::TaskRegister { protocol: 4 }),
+            "an extra field is ignored: the helper only ever copies its own image"
+        );
+        assert_eq!(
+            decode::<Response>(&encode(&Response::TaskDone)[4..]),
+            Some(Response::TaskDone)
+        );
     }
 }

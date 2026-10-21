@@ -29,7 +29,7 @@ use super::{
     AGENT_HISTORY_TEMPLATES, Blocked, CONTAINER_TEMPLATES, LEFTOVER_PROGRAM_DATA_DENY,
     LEFTOVER_PROGRAM_FILES_DENY, LEFTOVER_START_MENU_DENY, PROTECTED_TEMPLATES,
     USER_DATA_TEMPLATES, VOLUME_ROOT_PROTECTED, agent_history_name, comparable, contains_pattern,
-    expand_template, is_within, within_pattern,
+    expand_template, is_within, macos, within_pattern,
 };
 use crate::RiskLevel;
 use crate::plan::CleanPlan;
@@ -196,6 +196,13 @@ pub struct SafetyGate {
     containers: Vec<(&'static str, String)>,
     /// AI agents' conversation history (last component may hold wildcards).
     agent_history: Vec<(&'static str, String)>,
+    /// macOS (`MACOS_ROOT` resolves): volume roots, packages and the system folders
+    /// below apply.
+    macos: bool,
+    /// [`macos::MACOS_SYSTEM_TEMPLATES`], resolved.
+    macos_system: Vec<(&'static str, String)>,
+    /// [`macos::MACOS_CARVE_OUTS`], resolved.
+    carve_outs: Vec<String>,
 }
 
 impl SafetyGate {
@@ -208,6 +215,11 @@ impl SafetyGate {
                 .filter(|t| !skip.contains(t))
                 .filter_map(|t| expand_template(t, resolve).map(|p| (*t, p)))
                 .collect()
+        };
+        let both = |a: &[&'static str], b: &[&'static str], skip: &[&str]| {
+            let mut v = resolved(a, skip);
+            v.extend(resolved(b, skip));
+            v
         };
         let system_root = expand_template("${SYSTEMROOT}", resolve);
         let system_dirs = ["${SYSTEMROOT}", "${PROGRAMFILES}", "${PROGRAMFILES_X86}"]
@@ -226,10 +238,20 @@ impl SafetyGate {
                 .collect(),
             system_root,
             system_dirs,
-            subtree: resolved(PROTECTED_TEMPLATES, USER_DATA_TEMPLATES),
-            user_data: resolved(USER_DATA_TEMPLATES, &[]),
-            containers: resolved(CONTAINER_TEMPLATES, &[]),
+            subtree: both(
+                PROTECTED_TEMPLATES,
+                macos::MACOS_PROTECTED_TEMPLATES,
+                USER_DATA_TEMPLATES,
+            ),
+            user_data: both(USER_DATA_TEMPLATES, macos::MACOS_USER_DATA_TEMPLATES, &[]),
+            containers: both(CONTAINER_TEMPLATES, macos::MACOS_CONTAINER_TEMPLATES, &[]),
             agent_history: resolved(AGENT_HISTORY_TEMPLATES, &[]),
+            macos: resolve("MACOS_ROOT").is_some(),
+            macos_system: resolved(macos::MACOS_SYSTEM_TEMPLATES, &[]),
+            carve_outs: macos::MACOS_CARVE_OUTS
+                .iter()
+                .filter_map(|t| expand_template(t, resolve))
+                .collect(),
         }
     }
 
@@ -265,6 +287,9 @@ impl SafetyGate {
         };
         if parts.len() <= volume_depth {
             return Err(Blocked::VolumeRoot);
+        }
+        if self.macos {
+            self.check_macos(&cand, &parts)?;
         }
         let in_system_root = self
             .system_root
@@ -447,6 +472,45 @@ impl SafetyGate {
             }
         }
         Ok(None)
+    }
+
+    /// macOS: `/Volumes` and the volumes in it, their system folders, the startup
+    /// disk's system folders (but the user's temporary folder) and packages.
+    fn check_macos(&self, cand: &str, parts: &[&str]) -> Result<(), Blocked> {
+        if parts.first() == Some(&"volumes") {
+            match parts.len() {
+                1 => {
+                    return Err(Blocked::ContainsProtected {
+                        template: "/Volumes".to_owned(),
+                    });
+                }
+                2 => return Err(Blocked::VolumeRoot),
+                _ => {}
+            }
+        }
+        if let Some(template) = macos::volume_root_rule(parts) {
+            return Err(Blocked::Protected { template });
+        }
+        let carved = self
+            .carve_outs
+            .iter()
+            .any(|c| cand.len() > c.len() && is_within(cand, c));
+        for (template, root) in &self.macos_system {
+            if !carved && is_within(cand, root) {
+                return Err(Blocked::Protected {
+                    template: (*template).to_owned(),
+                });
+            }
+            if is_within(root, cand) {
+                return Err(Blocked::ContainsProtected {
+                    template: (*template).to_owned(),
+                });
+            }
+        }
+        if let Some(template) = macos::package_rule(parts) {
+            return Err(Blocked::Protected { template });
+        }
+        Ok(())
     }
 
     fn check_system_root_rule(&self, cand: &str) -> Result<(), Blocked> {

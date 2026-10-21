@@ -6,17 +6,30 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-21
+
+First release with a macOS build (preview), the Programs view and a new, clearer look.
+
 ### Added
 - **Programs** (Free up space → Programs, `nfd programs`): every installed program — desktop, MSI and Store apps — with its size, install date and what deserves care (runtimes, drivers, all-users installs). **Uninstall** runs the vendor's own uninstaller (several are run one after the other) and waits for it and every process it starts; then the app looks for **what was left behind** — the install folder, folders named like the program in Program Files, ProgramData and AppData, dead shortcuts in the Start menu and on the Desktop, its registry keys, `App Paths` and `Run` entries, its entry in Installed apps — each with the reason it belongs to the program. Only clear matches are ticked; vendor folders, names another installed program shares and weak matches are listed for you to decide; folders another program uses, that a running process holds or that contain AI conversation history are never offered. Programs whose uninstaller is gone offer their leftovers directly.
 - **Nothing is gone for good**: files go to the quarantine (7 days), registry keys and values are exported to a `.reg` backup before they are deleted, and everything comes back from the Cleanup history. Leftovers of all-users installs (Program Files, ProgramData, `HKEY_LOCAL_MACHINE`) are removed — and put back — with **one** Windows administrator prompt; that step checks every item again and never touches what Windows keeps there (Common Files, WindowsApps, `ProgramData\Microsoft`, Package Cache…).
 - **Software junk**: the caches (Electron / Chromium apps), crash dumps, logs, temporary files and old update packages of the programs you keep, grouped by program; profiles, sign-ins and site data are never listed, and nothing the Junk files view already cleans is counted twice.
 - **Set up Advanced sensors in one click** (Hardware → Sensors): CPU temperatures need PawnIO and its official CPU module, which used to mean a manual download into a hidden folder. The app now downloads PawnIO's official installer and module from its author's GitHub releases, accepts them only when their SHA-256 matches the pinned values, installs PawnIO through Windows' administrator prompt and stores the module — then turns the sensors on.
 - **Turn on automatically when the app opens**: after Advanced sensors were turned on once, the next start turns them on again (one Windows prompt per start; untick to stop).
+- **Start without the Windows prompt** (opt-in, next to the option above; [ADR 0003](docs/adr/0003-helper-without-uac-prompt.md)): a Windows scheduled task starts the read-only administrator helper (Advanced sensors, Monitor file detail, full drive-health read) from a copy in `Program Files\NANOFreeDisk Helper` that only administrators can change — never from the user-writable install folder — so there is no prompt at each start. After an app update Windows asks once more and the copy is renewed; unticking it, or uninstalling, removes the task and the copy.
+- **macOS (preview)**: one universal app for Intel and Apple silicon Macs, macOS 11+ (`.dmg` and zipped `.app`, ad-hoc signed, not notarized yet). Analyze, Duplicates, Old & Large, Tidy up, DevCache and Activity work; deleting moves items to the Trash (Put Back and Activity → Restore work) or the quarantine. Protected on macOS: the system folders, iCloud Drive, Mail, Messages, keychains, app sandboxes, iPhone backups, Time Machine, Photos / Music / TV libraries, the inside of app bundles and document packages, and AI agents' chat history (ChatGPT, Codex, Copilot for Xcode, Ollama, Zed, Raycast besides the cross-platform tools). Duplicates counts APFS clones once and never pre-selects them, and never reads iCloud files that are not downloaded. A hint explains how to grant Full Disk Access. Clean, Drive health, Hardware and Monitor stay Windows-only for now. See the README's macOS section and `docs/MACOS.md`.
+
+### Changed
+- **A clearer look**, modeled on a read-only "disk map": every view starts with a short header and a row of stat cards (big number, small label). **Analyze** shows *Free right now*, *Safe to remove*, *Needs review* and *Not in this scan*; an **Explorer** card holds the treemap (or the folder list) colored by file type or by cleanup verdict, safe-to-clear blocks hatched, with a legend; the suggestions become a **Recommendations** panel — grouped tick boxes (*Safe to remove*, *Review first*) with the path under each item, the selected total, *Select safe*, *Copy list* and *Clean N selected*. Home, the sidebar and the other views use the same cards, panels and tab rows, in the light and dark themes. AI conversation history stays 🔒 Protected and is never offered.
 
 ### Fixed
 - Wrong CPU numbers right after opening a sensor view: load, power, effective clocks, network and GPU rates were computed over a few milliseconds on the first sample (e.g. 58 % CPU load at 20 %, inflated power maxima). Rate sources now wait 500 ms after discovery.
 - The Home card no longer shows an ACPI thermal zone (often a fixed firmware value) as the CPU temperature; it says why the CPU value is missing and links to the setup instead.
 - The estimated CPU clock is named "Average clock while busy" and is hidden once Advanced sensors report measured clocks.
+
+### Security
+- `rustls-webpki` 0.103.16 (RUSTSEC-2026-0382: certificate paths through the distrusted emSign intermediates are rejected) — used by the in-app updater's HTTPS client.
+- The elevated helper reads the hardware at most every 200 ms (faster requests get the previous values), runs with a System32-only DLL search, and is started only by its own command-line switch, checked before every other mode.
 
 ## [0.1.1] - 2026-10-17
 
@@ -129,6 +142,7 @@ First preview release for Windows 10/11 (x64): branded setup, MSI, classic EXE a
 - **Drive health's administrator reads use the shared elevated helper**: if Advanced sensors or the disk monitor's file detail already started it, there is no second UAC prompt (and the other way round); the helper stays until the app closes.
 - **AI conversation history is never deleted** (PLAN §5.1): the SafetyGate protects the session / conversation folders of Claude Code and Claude Desktop, Codex, Gemini CLI, Antigravity, Copilot (VS Code and CLI), Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Qwen Code, LM Studio and Jan, plus Aider chat logs and `.specstory` folders inside projects, against every origin — rules of any level, DevCache, Duplicates and items picked by hand — and refuses the folders that contain them. The rules that used to offer old transcripts (🟡 Claude Code / Codex sessions, Gemini CLI `tmp` and history, Copilot chat, Cursor and VS Code `workspaceStorage`, Windsurf Cascade, Continue, Cline, Roo Code) are now 🔴 Keep rules, and new Keep rules list the other agents' history in DevCache.
 
-[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/congluuit/NANOFreeDisk/releases/tag/v0.1.0

@@ -10,6 +10,7 @@
   import { dev } from "../devcache/state.svelte";
   import { pg } from "../programs/state.svelte";
   import type { ThemeMode } from "../theme";
+  import { currentOs, viewAvailable } from "../platform";
   import Icon from "./Icon.svelte";
 
   type Group = "go" | "action" | "drive" | "folder" | "setting";
@@ -49,7 +50,7 @@
       ["health", "nav-health", "health"],
       ["settings", "nav-settings", "settings"],
     ];
-    for (const [view, id, icon] of nav) {
+    for (const [view, id, icon] of nav.filter(([v]) => viewAvailable(currentOs(app.info?.os), v))) {
       items.push({ key: `go-${view}`, group: "go", label: t(id), keywords: words(id), icon, run: go(view) });
     }
     items.push({

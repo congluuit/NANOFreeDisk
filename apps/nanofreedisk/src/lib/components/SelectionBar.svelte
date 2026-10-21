@@ -38,8 +38,12 @@
     nested?: boolean;
     /** More buttons next to the action (Duplicates: links, quarantine). */
     children?: Snippet;
+    /** Footer of a panel: "X selected · N items", only "Select safe" / Clear. */
+    compact?: boolean;
+    /** With nothing selected, show only this hint (no buttons). */
+    idle?: string;
   }
-  let { items, all, picked, onchange, expert, busy = false, scope = null, primary = false, files = true, action, noLevels = false, sticky = true, nested = false, children }: Props = $props();
+  let { items, all, picked, onchange, expert, busy = false, scope = null, primary = false, files = true, action, noLevels = false, sticky = true, nested = false, children, compact = false, idle }: Props = $props();
 
   const loc = $derived(intlLocale());
   const counted = $derived(all ?? items);
@@ -76,9 +80,11 @@
 
 <svelte:window onkeydown={onkey} />
 
-<div class="selbar card" class:sticky class:nested data-selection-bar aria-live="polite">
+<div class="selbar" class:card={!nested && !compact} class:sticky class:nested class:compact data-selection-bar aria-live="polite">
   <div class="sum">
-    {#if s.count}
+    {#if s.count && compact}
+      <span data-sel-summary><strong>{t("sel-compact", { size: formatSize(s.bytes, loc) })}</strong> <span class="muted">· {t("sel-compact-items", { count: s.count })}</span></span>
+    {:else if s.count}
       <strong data-sel-summary>
         {files
           ? t("sel-summary", { count: formatCount(s.count, loc), files: formatCount(s.files, loc), size: formatSize(s.bytes, loc) })
@@ -88,19 +94,32 @@
         <span class="skip small" data-sel-skip><Icon name="alert" size={14} />{t("sel-skip", { count: s.skipCount, apps: s.skipReasons.join(", "), size: formatSize(s.skipBytes, loc) })}</span>
       {/if}
     {:else}
-      <span class="muted" data-sel-summary>{t("sel-none")}</span>
+      <span class="muted" data-sel-summary>{idle ?? (compact ? t("sel-none-short") : t("sel-none"))}</span>
     {/if}
   </div>
-  <div class="row">
-    <div class="picks" role="group" aria-label={t("sel-group-label")}>
-      <button class="btn ghost small" data-sel="all" disabled={busy || !anySelectable} onclick={everything} title={t("sel-keys-hint")}>{t("sel-all")}</button>
-      <button class="btn ghost small" data-sel="none" disabled={busy || !picked.length} onclick={clear} title={t("sel-keys-hint")}>{t("sel-clear")}</button>
-      {#each levels as l (l)}
-        <button class="btn ghost small lvl {l}" data-sel={l} disabled={busy} onclick={() => only(l)} title={t("sel-only-hint")}>
-          <span class="dot"></span>{t("sel-only", { level: t(`clean-level-${l}`) })}
-        </button>
-      {/each}
-    </div>
+  <div class="row" hidden={!!idle && !s.count}>
+    {#if compact}
+      <div class="picks" role="group" aria-label={t("sel-group-label")}>
+        {#if picked.length}
+          <button class="btn ghost small" data-sel="none" disabled={busy} onclick={clear} title={t("sel-keys-hint")}>{t("sel-clear-short")}</button>
+        {/if}
+        {#if levels.includes("safe")}
+          <button class="btn small" data-sel="safe" disabled={busy} onclick={() => only("safe")} title={t("sel-only-hint")}>{t("sel-select-safe")}</button>
+        {:else}
+          <button class="btn small" data-sel="all" disabled={busy || !anySelectable} onclick={everything} title={t("sel-keys-hint")}>{t("sel-all")}</button>
+        {/if}
+      </div>
+    {:else}
+      <div class="picks" role="group" aria-label={t("sel-group-label")}>
+        <button class="btn ghost small" data-sel="all" disabled={busy || !anySelectable} onclick={everything} title={t("sel-keys-hint")}>{t("sel-all")}</button>
+        <button class="btn ghost small" data-sel="none" disabled={busy || !picked.length} onclick={clear} title={t("sel-keys-hint")}>{t("sel-clear")}</button>
+        {#each levels as l (l)}
+          <button class="btn ghost small lvl" data-sel={l} disabled={busy} onclick={() => only(l)} title={t("sel-only-hint")}>
+            <span class="dot {l}"></span>{t("sel-only", { level: t(`clean-level-${l}`) })}
+          </button>
+        {/each}
+      </div>
+    {/if}
     <span class="grow"></span>
     {@render children?.()}
     {#if action}
@@ -121,11 +140,13 @@
 <style>
   .selbar {
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 16px;
     padding: 12px 16px;
+  }
+  .selbar.card {
     box-shadow: var(--shadow);
-    border-top: 2px solid var(--accent-soft);
   }
   /* the scrolling views have a 40px bottom padding, which sticky positioning keeps
      clear: sit on the very bottom edge instead */
@@ -134,21 +155,35 @@
     bottom: -40px;
     z-index: 5;
   }
-  .selbar.nested {
-    box-shadow: none;
-    background: var(--surface-2);
+  .selbar.nested,
+  .selbar.compact {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .selbar.compact {
+    padding: 12px 0 0;
   }
   .sum {
+    flex: 1 1 260px;
     display: flex;
-    gap: 6px 14px;
+    gap: 4px 14px;
     align-items: baseline;
     flex-wrap: wrap;
+    min-width: 0;
+  }
+  .compact .sum {
+    flex-basis: 150px;
+  }
+  .row[hidden] {
+    display: none;
   }
   .row {
     display: flex;
     gap: 8px;
     align-items: center;
     flex-wrap: wrap;
+    justify-content: flex-end;
+    margin-left: auto;
   }
   .picks {
     display: flex;
@@ -156,33 +191,15 @@
     flex-wrap: wrap;
   }
   .grow {
-    flex: 1;
-  }
-  .small {
-    font-size: 0.86em;
-  }
-  .btn.small {
-    padding: 0.3em 0.65em;
+    display: none;
   }
   .skip {
     display: inline-flex;
     gap: 5px;
     align-items: center;
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
   }
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .lvl.safe .dot {
-    background: var(--risk-safe);
-  }
-  .lvl.caution .dot {
-    background: var(--risk-caution);
-  }
-  .lvl.advanced .dot {
-    background: var(--risk-advanced);
+  .lvl {
+    gap: 6px;
   }
 </style>

@@ -21,7 +21,9 @@ export default defineConfig({
   },
   envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
-    target: "chrome110",
+    // WebView2 on Windows; on macOS the system WebKit (Safari 16+, macOS 11+:
+    // see docs/MACOS.md for why 11.0 is the minimum)
+    target: process.env.TAURI_ENV_PLATFORM === "darwin" ? "safari16" : "chrome110",
     minify: !process.env.TAURI_ENV_DEBUG,
     sourcemap: !!process.env.TAURI_ENV_DEBUG,
   },

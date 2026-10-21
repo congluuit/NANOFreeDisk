@@ -7,9 +7,11 @@ import {
   contrastIssues,
   exportToml,
   importToml,
+  paletteVars,
   resolvePalette,
   type PresetId,
 } from "./theme.ts";
+import { hex6, tileStyle } from "./mapstyle.ts";
 
 test("built-in presets meet WCAG AA for text", () => {
   for (const [id, p] of Object.entries(PRESETS)) {
@@ -46,4 +48,31 @@ test("custom mode ignores invalid overrides", () => {
   assert.equal(r.colors.bg, PRESETS.solarized.colors.bg);
   assert.equal(r.colors.text, "#111111");
   assert.equal(r.dark, false);
+});
+
+test("treemap tiles and frames keep their labels readable in every preset", () => {
+  const tokens = ["tm-1", "tm-2", "tm-3", "tm-4", "tm-5", "tm-6", "tm-7", "tm-8", "tm-other", "risk-safe", "risk-caution", "risk-advanced"] as const;
+  for (const [id, p] of Object.entries(PRESETS)) {
+    for (const k of tokens) {
+      const st = tileStyle(p.colors[k], p.colors.surface, p.dark);
+      assert.ok(contrast(st.ink, st.fill) >= 4.5, `${id} ${k} tile label ${contrast(st.ink, st.fill).toFixed(2)}`);
+      assert.ok(contrast(st.frameInk, st.frame) >= 4.5, `${id} ${k} frame label ${contrast(st.frameInk, st.frame).toFixed(2)}`);
+    }
+  }
+});
+
+test("pills keep their text readable in every preset", () => {
+  for (const [id, p] of Object.entries(PRESETS)) {
+    const v = paletteVars(p.colors, p.dark);
+    for (const r of ["risk-safe", "risk-caution", "risk-advanced", "risk-protected"]) {
+      assert.ok(contrast(v[`${r}-ink`], v[`${r}-soft`]) >= 4.5, `${id} ${r}`);
+    }
+    assert.ok(contrast(v["accent-ink"], v["accent-soft"]) >= 4.5, `${id} accent`);
+  }
+});
+
+test("hex6 normalizes CSS colors", () => {
+  assert.equal(hex6("#ABC"), "#aabbcc");
+  assert.equal(hex6(" #12abEF "), "#12abef");
+  assert.equal(hex6("rgb(1, 2, 3)"), "#888888");
 });

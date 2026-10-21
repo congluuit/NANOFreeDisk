@@ -93,21 +93,43 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="page" bind:this={page}>
-    <header>
-      <div class="ellipsis">
+  <section class="page oldlarge" bind:this={page}>
+    <header class="page-head">
+      <div>
         <h1>{t("ol-title")}</h1>
-        <p class="muted">{t("ol-intro")}</p>
+        <p>{t("ol-intro")}</p>
       </div>
-      {#if app.current !== rootId}
-        <label class="check">
-          <input type="checkbox" bind:checked={onlyFolder} />
-          {t("ol-only-folder")}
-        </label>
-      {/if}
+      <div class="page-actions">
+        {#if app.current !== rootId}
+          <label class="check">
+            <input type="checkbox" bind:checked={onlyFolder} />
+            {t("ol-only-folder")}
+          </label>
+        {/if}
+        {#if data}
+          <span class="tag accent total">{t("ol-summary", { files: data.distinctFiles, size: formatSize(data.distinctOnDisk, loc) })}</span>
+        {/if}
+      </div>
     </header>
 
-    <div class="controls card">
+    <div class="tabs" role="tablist">
+      {#each LISTS as l (l.id)}
+        {@const r = data?.[l.id]}
+        <button role="tab" class="tab card" class:on={list === l.id} aria-selected={list === l.id} onclick={() => (list = l.id)} title={t(`ol-${l.id}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })}>
+          <span class="label"><Icon name={l.icon} size={15} />{t(`ol-${l.id}-title`)}</span>
+          <span class="value"><b>{r ? formatSize(r.matchedOnDisk, loc) : "—"}</b><span class="muted">{r ? t("ol-files", { count: r.matched }) : ""}</span></span>
+        </button>
+      {/each}
+    </div>
+
+    <div class="listcard panel">
+      <header class="panel-head">
+        <div>
+          <h2>{t(`ol-${list}-title`)}</h2>
+          <p>{t(`ol-${list}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })} · {list === "stale" ? t("ol-stale-note") : t("action-select-hint")}</p>
+        </div>
+      </header>
+    <div class="controls">
       <label>
         <span>{t("ol-large-min")}</span>
         <select bind:value={app.settings.largeGb}>
@@ -134,35 +156,7 @@
           </select>
         </label>
       {/if}
-      <span class="grow"></span>
-      {#if data}
-        <strong class="total">
-          {t("ol-summary", { files: data.distinctFiles, size: formatSize(data.distinctOnDisk, loc) })}
-        </strong>
-      {/if}
     </div>
-
-    <div class="tabs" role="tablist">
-      {#each LISTS as l (l.id)}
-        {@const r = data?.[l.id]}
-        <button role="tab" class="tab card" class:on={list === l.id} aria-selected={list === l.id} onclick={() => (list = l.id)}>
-          <span class="ic"><Icon name={l.icon} size={20} /></span>
-          <span class="txt">
-            <strong>{t(`ol-${l.id}-title`)}</strong>
-            <span class="muted small">{t(`ol-${l.id}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })}</span>
-          </span>
-          <span class="num">
-            <b>{r ? formatSize(r.matchedOnDisk, loc) : "…"}</b>
-            <span class="muted small">{r ? t("ol-files", { count: r.matched }) : ""}</span>
-          </span>
-        </button>
-      {/each}
-    </div>
-
-    <div class="listcard card">
-      <div class="listbar">
-        <span class="muted small">{list === "stale" ? t("ol-stale-note") : t("action-select-hint")}</span>
-      </div>
       <div class="body">
         {#if rows && rows.rows.length}
           <ItemTable
@@ -212,28 +206,17 @@
     gap: 12px;
     color: var(--text-muted);
   }
-  .page {
-    height: 100%;
+  .oldlarge {
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    padding: 20px 24px;
-    min-height: 0;
+    gap: 14px;
+    padding-bottom: 18px;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
+  .oldlarge > .page-head {
+    margin-bottom: 0;
   }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.45em;
-  }
-  header p {
-    margin: 0;
-    white-space: normal;
-    max-width: 75ch;
+  .total {
+    font-weight: 600;
   }
   .check {
     display: inline-flex;
@@ -245,8 +228,9 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 10px 18px;
-    padding: 10px 14px;
+    gap: 8px 18px;
+    padding: 0 0 12px;
+    font-size: 0.92em;
   }
   .controls label {
     display: inline-flex;
@@ -256,74 +240,71 @@
   .controls label span {
     color: var(--text-muted);
   }
-  .grow {
-    flex: 1;
-  }
-  .total {
-    color: var(--accent);
-  }
   .tabs {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
   }
   .tab {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 14px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 13px 16px 14px;
     text-align: left;
     min-width: 0;
+    font: inherit;
+    color: var(--text);
+    transition: border-color 0.12s;
   }
   .tab.on {
     border-color: var(--accent);
-    box-shadow: inset 0 -3px 0 var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .tab:hover:not(.on) {
-    background: var(--hover);
+    border-color: var(--text-muted);
   }
-  .ic {
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    flex: none;
-    border-radius: 10px;
-    background: var(--accent-soft);
-    color: var(--accent);
-  }
-  .txt {
+  .label {
     display: flex;
-    flex-direction: column;
-    min-width: 0;
-    flex: 1;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.86em;
+    color: var(--text-muted);
   }
-  .tab .num {
+  .tab.on .label {
+    color: var(--accent-ink);
+  }
+  .value {
     display: flex;
-    flex-direction: column;
-    align-items: flex-end;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
   }
-  .small {
-    font-size: 0.84em;
+  .value b {
+    font-size: 1.85em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+  }
+  .value .muted {
+    font-size: 0.86em;
   }
   .listcard {
-    flex: 1;
-    min-height: 160px;
+    flex: 1 0 260px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    padding-bottom: 0;
   }
-  .listbar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--border);
+  .listcard .panel-head {
+    margin-bottom: 8px;
   }
   .body {
     flex: 1;
     overflow: auto;
     min-height: 0;
+    margin: 0 -18px;
+    border-top: 1px solid var(--border);
   }
   .more {
     margin: 8px 10px;

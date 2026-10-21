@@ -15,6 +15,10 @@
     type Token,
   } from "../theme";
   import Icon from "../components/Icon.svelte";
+  import { currentOs, hasFeature } from "../platform";
+
+  // macOS has no Explorer menu, Monitor, Drive health or in-place updater
+  const os = $derived(currentOs(app.info?.os));
 
   const MODES: { id: ThemeMode; icon: string }[] = [
     { id: "light", icon: "sun" },
@@ -151,10 +155,15 @@
   }
 </script>
 
-<section class="page">
-  <h1>{t("settings-title")}</h1>
+<section class="page settings">
+  <header class="page-head">
+    <div>
+      <h1>{t("settings-title")}</h1>
+      <p>{t("settings-sub")}</p>
+    </div>
+  </header>
 
-  <div class="block card">
+  <div class="block panel">
     <h2>{t("settings-language")}</h2>
     <select bind:value={app.settings.locale} aria-label={t("settings-language")} data-effect title={t("hint-language")}>
       <option value="system">{t("settings-language-system")}</option>
@@ -164,7 +173,7 @@
     </select>
   </div>
 
-  <div class="block card">
+  <div class="block panel">
     <h2>{t("settings-theme")}</h2>
     <div class="modes" role="radiogroup" aria-label={t("settings-theme")}>
       {#each MODES as m (m.id)}
@@ -239,7 +248,7 @@
     {/if}
   </div>
 
-  <div class="block card">
+  <div class="block panel">
     <h2>{t("mode-label")}</h2>
     <div class="modes two" role="radiogroup" aria-label={t("mode-label")}>
       {#each ["simple", "expert"] as const as m (m)}
@@ -254,7 +263,8 @@
     </div>
   </div>
 
-  <div class="block card">
+  {#if hasFeature(os, "shell-menu")}
+  <div class="block panel">
     <h2>{t("settings-shell")}</h2>
     <label class="toggle" title={t("hint-shell")}>
       <input
@@ -269,8 +279,9 @@
     </label>
     <p class="muted small">{t("settings-shell-hint")}</p>
   </div>
+  {/if}
 
-  <div class="block card">
+  <div class="block panel">
     <h2>{t("settings-history")}</h2>
     <label class="toggle" title={t("hint-history-toggle")}>
       <input type="checkbox" bind:checked={app.settings.history} data-effect title={t("hint-history-toggle")} />
@@ -289,7 +300,8 @@
     </div>
   </div>
 
-  <div class="block card" data-settings="monitor">
+  {#if hasFeature(os, "monitor")}
+  <div class="block panel" data-settings="monitor">
     <h2>{t("settings-monitor")}</h2>
     <label class="toggle" title={t("hint-mon-alerts")}>
       <input type="checkbox" bind:checked={app.settings.monitorAlerts} data-effect title={t("hint-mon-alerts")} />
@@ -305,8 +317,10 @@
     </div>
     <p class="muted small">{t("settings-mon-hint")}</p>
   </div>
+  {/if}
 
-  <div class="block card" data-settings="health">
+  {#if hasFeature(os, "health")}
+  <div class="block panel" data-settings="health">
     <h2>{t("settings-health")}</h2>
     <label class="toggle" title={t("hint-health-alerts")}>
       <input type="checkbox" bind:checked={app.settings.healthAlerts} data-effect title={t("hint-health-alerts")} />
@@ -314,8 +328,9 @@
     </label>
     <p class="muted small">{t("settings-health-alerts-note")}</p>
   </div>
+  {/if}
 
-  <div class="block card" data-settings="devcache">
+  <div class="block panel" data-settings="devcache">
     <h2>{t("settings-devcache")}</h2>
     <label class="toggle" title={t("hint-dev-alerts")}>
       <input type="checkbox" bind:checked={app.settings.devAlerts} data-effect title={t("hint-dev-alerts")} />
@@ -355,7 +370,7 @@
     </div>
   </div>
 
-  <div class="block card">
+  <div class="block panel">
     <h2>{t("settings-font-scale")}</h2>
     <div class="row">
       <input
@@ -372,7 +387,17 @@
     </div>
   </div>
 
-  <div class="block card" data-settings="update">
+  {#if !hasFeature(os, "updater")}
+  <div class="block panel" data-settings="update">
+    <h2>{t("update-title")}</h2>
+    <p class="muted small">{t("update-mac-hint")}</p>
+    <div class="row">
+      <span class="grow"></span>
+      <button class="btn" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
+    </div>
+  </div>
+  {:else}
+  <div class="block panel" data-settings="update">
     <h2>{t("update-title")}</h2>
     <p class="muted small">{t("update-hint")}</p>
     <div class="row">
@@ -394,8 +419,9 @@
     {/if}
     {#if update?.notes}<pre class="notes small">{update.notes}</pre>{/if}
   </div>
+  {/if}
 
-  <div class="block card about">
+  <div class="block panel about">
     <img src="/icon.png" alt="" width="56" height="56" />
     <div>
       <h2>{t("settings-about")}</h2>
@@ -404,7 +430,7 @@
     </div>
   </div>
 
-  <div class="block card donate" data-settings="donate">
+  <div class="block panel donate" data-settings="donate">
     <img src="/donate-qr.jpg" alt={t("donate-qr-alt")} width="200" />
     <div>
       <h2>☕ {t("donate-title")}</h2>
@@ -435,22 +461,20 @@
     border-radius: 6px;
     background: var(--surface-2, rgba(127, 127, 127, 0.08));
   }
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px;
+  .settings {
     display: flex;
     flex-direction: column;
     gap: 14px;
+  }
+  .settings > :global(*) {
     max-width: 980px;
   }
-  h1 {
-    margin: 0 0 6px;
-    font-size: 1.6em;
+  .settings > .page-head {
+    margin-bottom: 0;
   }
   h2 {
-    margin: 0 0 10px;
-    font-size: 1.05em;
+    margin: 0 0 12px;
+    font-size: 1.06em;
   }
   h3 {
     margin: 16px 0 8px;
@@ -458,9 +482,7 @@
   }
   .block {
     padding: 16px 18px;
-  }
-  .small {
-    font-size: 0.86em;
+    flex-shrink: 0;
   }
   .modes {
     display: grid;
@@ -474,7 +496,11 @@
     padding: 10px 12px;
     border-radius: var(--radius-sm);
     border: 1px solid var(--border);
-    background: var(--surface-2);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .mode:hover:not(.on) {
+    border-color: var(--text-muted);
   }
   .toggle {
     display: inline-flex;
@@ -491,7 +517,9 @@
   }
   .mode.on {
     border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
     background: var(--accent-soft);
+    font-weight: 600;
   }
   .row {
     display: flex;
@@ -512,7 +540,7 @@
     display: flex;
     gap: 6px;
     align-items: center;
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
     margin: 8px 0 0;
     font-size: 0.9em;
   }
@@ -578,7 +606,7 @@
     padding: 4px 6px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--bg);
+    background: var(--surface);
     color: var(--text);
   }
   .vendor {

@@ -8,6 +8,7 @@ on:
       - "docs/**"
       - "!docs/DEVTOOL_CACHE_CATALOG.md"
   pull_request:
+  # a manual run also builds the macOS app (job macos-app) and keeps it as an artifact
   workflow_dispatch:
 
 concurrency:
@@ -34,8 +35,8 @@ jobs:
           components: rustfmt
       - run: cargo fmt --all --check
 
-  # NANOFreeDisk ships for Windows only: lint and test there (macOS / Linux are not
-  # targets, so they are not built in CI).
+  # NANOFreeDisk ships for Windows and macOS (docs/MACOS.md): lint and test on both.
+  # Linux is not a target.
   clippy:
     name: clippy (windows)
     runs-on: windows-latest
@@ -57,6 +58,59 @@ jobs:
       - uses: taiki-e/install-action@nextest
       - run: cargo nextest run --no-fail-fast --workspace --all-features
       - run: cargo test --workspace --doc
+
+  macos:
+    name: clippy + test (macos)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@nextest
+      - run: cargo clippy --workspace --all-targets --all-features -- -D warnings
+      - run: cargo nextest run --no-fail-fast --workspace --all-features
+      - run: cargo test --workspace --doc
+      # the macOS rule packs never propose anything protected either
+      - name: clean dry run proposes nothing protected
+        run: |
+          cargo run -q -p nfd-cli -- clean --level advanced --dry-run --json > clean.json
+          jq -e '.schema == "nanofreedisk.clean.v1"' clean.json
+          jq -e '[.items[] | select(.level == "protected")] | length == 0' clean.json
+          echo "$(jq '.items | length' clean.json) item(s), none protected"
+
+  macos-app:
+    name: build macOS app (universal)
+    # manual runs only (Actions → CI → Run workflow): the .dmg and the zipped .app
+    # are kept as the run's artifact; tagged releases build them in release.yml
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/nanofreedisk/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+        working-directory: apps/nanofreedisk
+      - name: Build the universal app
+        run: |
+          VERSION=$(grep -m1 -E '^version\s*=' Cargo.toml | sed -E 's/.*"([^"]+)".*/\1/')
+          ./scripts/build-macos.sh dist "$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NANOFreeDisk-macos-universal
+          path: dist/*
+          if-no-files-found: error
 
   rules:
     name: validate rule packs
@@ -219,7 +273,7 @@ jobs:
   ci-ok:
     name: CI OK
     if: always()
-    needs: [fmt, clippy, test, rules, etw, deny, msrv, frontend]
+    needs: [fmt, clippy, test, macos, rules, etw, deny, msrv, frontend]
     runs-on: ubuntu-latest
     steps:
       - name: Check all required jobs succeeded

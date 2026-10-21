@@ -7,6 +7,12 @@
 //! be recycled (too large for the bin, removable drive, network share): nothing is
 //! ever destroyed silently.
 //!
+//! macOS uses `NSFileManager trashItemAtURL:resultingItemURL:error:` — the same
+//! move as Finder's "Move to Trash" (Put Back works), to the Trash of the item's
+//! volume. The resulting path is returned by [`recycle_with_location`] so the app
+//! can put the item back itself ([`restore_trashed`]); the macOS Trash keeps no
+//! record of where an item came from that other programs can read.
+//!
 //! Callers must run the safety checks first (`nfd_core::safety`); this module only
 //! performs the move.
 
@@ -31,7 +37,35 @@ pub enum Recycled {
 /// The shell's failure, or [`io::ErrorKind::Unsupported`] on platforms without a
 /// recycle bin implementation yet.
 pub fn recycle(path: &Path, owner: isize) -> io::Result<Recycled> {
+    recycle_with_location(path, owner).map(|(r, _)| r)
+}
+
+/// [`recycle`], plus where the item now is when the platform says so (macOS: its
+/// path inside the Trash; Windows: `None`, the bin's `$I` records are read
+/// instead, [`find_recycled`]).
+///
+/// # Errors
+/// As [`recycle`].
+pub fn recycle_with_location(path: &Path, owner: isize) -> io::Result<(Recycled, Option<PathBuf>)> {
     imp::recycle(path, owner)
+}
+
+/// Put an item moved to the Trash at `trashed` back at `original` (missing parent
+/// folders are created again).
+///
+/// # Errors
+/// Something already exists at the original path, or the move fails.
+pub fn restore_trashed(trashed: &Path, original: &Path) -> io::Result<()> {
+    if original.symlink_metadata().is_ok() {
+        return Err(io::Error::new(
+            io::ErrorKind::AlreadyExists,
+            "something with the same name is already there",
+        ));
+    }
+    if let Some(parent) = original.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::rename(trashed, original)
 }
 
 /// An item found in the Recycle Bin (Windows `$I…` / `$R…` pair).
@@ -91,6 +125,11 @@ pub fn parse_info(bytes: &[u8]) -> Option<(PathBuf, i64, u64)> {
 /// # Errors
 /// The volume's Recycle Bin cannot be listed.
 pub fn find_recycled(original: &Path) -> io::Result<Vec<RecycledItem>> {
+    if cfg!(not(windows)) {
+        // no `$Recycle.Bin` here: trashed items are found by the path recorded when
+        // they were moved ([`recycle_with_location`])
+        return Ok(Vec::new());
+    }
     let Some(std::path::Component::Prefix(prefix)) = original.components().next() else {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -174,7 +213,7 @@ pub fn restore_recycled(item: &RecycledItem) -> io::Result<()> {
 mod imp {
     use std::io;
     use std::os::windows::ffi::OsStrExt;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::ptr;
 
     use windows_sys::Win32::UI::Shell::{
@@ -184,7 +223,11 @@ mod imp {
 
     use super::Recycled;
 
-    pub(super) fn recycle(path: &Path, owner: isize) -> io::Result<Recycled> {
+    pub(super) fn recycle(path: &Path, owner: isize) -> io::Result<(Recycled, Option<PathBuf>)> {
+        recycle_shell(path, owner).map(|r| (r, None))
+    }
+
+    fn recycle_shell(path: &Path, owner: isize) -> io::Result<Recycled> {
         if !path.is_absolute() {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
@@ -237,17 +280,58 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
 mod imp {
     use std::io;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
+
+    use objc2_foundation::{NSFileManager, NSString, NSURL};
 
     use super::Recycled;
 
-    pub(super) fn recycle(_path: &Path, _owner: isize) -> io::Result<Recycled> {
+    pub(super) fn recycle(path: &Path, _owner: isize) -> io::Result<(Recycled, Option<PathBuf>)> {
+        if !path.is_absolute() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "path must be absolute",
+            ));
+        }
+        // never follows a link: the item itself goes, as in Finder
+        path.symlink_metadata()?;
+        let text = path
+            .to_str()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "path is not UTF-8"))?;
+        let trashed = objc2::rc::autoreleasepool(|_| {
+            let url = NSURL::fileURLWithPath(&NSString::from_str(text));
+            let mut resulting = None;
+            NSFileManager::defaultManager()
+                .trashItemAtURL_resultingItemURL_error(&url, Some(&mut resulting))
+                .map_err(|e| io::Error::other(e.localizedDescription().to_string()))?;
+            Ok::<_, io::Error>(
+                resulting
+                    .and_then(|u| u.path())
+                    .map(|p| PathBuf::from(p.to_string())),
+            )
+        })?;
+        match path.symlink_metadata() {
+            Err(e) if e.kind() == io::ErrorKind::NotFound => Ok((Recycled::Done, trashed)),
+            Ok(_) => Err(io::Error::other("the item is still there after trashing")),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
+mod imp {
+    use std::io;
+    use std::path::{Path, PathBuf};
+
+    use super::Recycled;
+
+    pub(super) fn recycle(_path: &Path, _owner: isize) -> io::Result<(Recycled, Option<PathBuf>)> {
         Err(io::Error::new(
             io::ErrorKind::Unsupported,
-            "the Recycle Bin is only implemented on Windows so far",
+            "the trash is only implemented on Windows and macOS",
         ))
     }
 }
@@ -287,6 +371,26 @@ mod format_tests {
         assert_eq!((p, size), (PathBuf::from(r"D:\a"), 7));
         assert!(parse_info(&[0; 10]).is_none());
         assert!(parse_info(&v2("", 1, ft)).is_none());
+    }
+}
+
+#[cfg(all(test, target_os = "macos"))]
+mod macos_tests {
+    use super::*;
+
+    #[test]
+    fn trashed_file_comes_back() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let file = dir.path().join("nfd-trash-test.txt");
+        std::fs::write(&file, b"restore me").expect("write");
+        let (r, at) = recycle_with_location(&file, 0).expect("trash");
+        assert_eq!(r, Recycled::Done);
+        assert!(!file.exists());
+        let at = at.expect("the Trash location");
+        assert!(at.exists(), "{}", at.display());
+        restore_trashed(&at, &file).expect("put back");
+        assert_eq!(std::fs::read(&file).expect("read"), b"restore me");
+        assert!(find_recycled(&file).expect("no bin").is_empty());
     }
 }
 

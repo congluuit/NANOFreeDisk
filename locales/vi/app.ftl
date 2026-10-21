@@ -20,8 +20,8 @@ nav-soon = Có trong { $phase }
 
 ## Home
 
-home-title = Ổ đĩa của bạn
-home-subtitle = Chọn ổ đĩa hoặc thư mục để xem cái gì chiếm dung lượng. Không có gì bị xóa nếu bạn chưa xác nhận.
+home-title = Tổng quan
+home-subtitle = Máy tính này trong một cái nhìn. Chọn một ổ hoặc thư mục để xem cái gì chiếm chỗ; không gì bị xóa khi chưa có xác nhận của bạn.
 home-scan-folder = Quét một thư mục…
 home-pick-folder = Chọn thư mục cần phân tích
 home-action-analyze = Xem cái gì chiếm ổ đĩa
@@ -438,3 +438,10 @@ hint-shell = Nếu bấm: một mục được thêm vào (hoặc gỡ khỏi) m
 
 error-generic = Đã xảy ra lỗi: { $message }
 error-no-session = Hãy quét một ổ đĩa hoặc thư mục trước.
+
+## macOS: Quyền truy cập toàn bộ ổ đĩa (docs/MACOS.md)
+mac-fda-title = Cho phép Truy cập toàn bộ ổ đĩa để quét đầy đủ
+mac-fda-body = macOS ẩn dữ liệu của Mail, Tin nhắn, Safari và các ứng dụng khác với NANOFreeDisk, nên khi quét các thư mục đó bị bỏ qua. Mở Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Truy cập toàn bộ ổ đĩa, bật NANOFreeDisk, rồi thoát và mở lại ứng dụng.
+mac-fda-open = Mở cài đặt Quyền riêng tư
+mac-fda-open-hint = Mở Cài đặt hệ thống tại Quyền riêng tư & Bảo mật → Truy cập toàn bộ ổ đĩa.
+mac-fda-dismiss = Để sau

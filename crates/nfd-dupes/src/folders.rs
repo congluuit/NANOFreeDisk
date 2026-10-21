@@ -105,6 +105,7 @@ fn or_flags(a: CopyFlags, b: CopyFlags) -> CopyFlags {
         git: a.git || b.git,
         app_dir: a.app_dir || b.app_dir,
         readonly: a.readonly || b.readonly,
+        clone: a.clone || b.clone,
     }
 }
 

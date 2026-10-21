@@ -8,6 +8,11 @@
 //! * `--remove-data` then removes the data folders; a quarantine that still holds
 //!   files (an item that could not be put back) is kept.
 //! * The Explorer menu is always removed.
+//! * "Start without the Windows prompt" (ADR 0003) is removed: the account's
+//!   scheduled task and the helper's protected copy in Program Files — through the
+//!   task itself when it matches this build (no prompt), else through UAC after a
+//!   message (never with `--silent`). An elevated cleanup (per-machine uninstall)
+//!   removes every account's.
 //!
 //! Flags: `--remove-data`, `--silent` (no dialogs: quarantine restored when the data
 //! goes, else left alone), `--quarantine restore|purge|keep`, `--lang en|vi`.
@@ -94,6 +99,8 @@ struct Text {
     ask_remove: &'static str,
     confirm_purge: &'static str,
     failed: &'static str,
+    #[cfg_attr(not(windows), allow(dead_code))]
+    helper_task: &'static str,
 }
 
 const EN: Text = Text {
@@ -103,6 +110,7 @@ const EN: Text = Text {
     ask_remove: "{n} item(s) ({size}) that NANOFreeDisk cleaned are still in its quarantine and can be restored.\n\nYes — put them back where they were\nNo — delete them permanently",
     confirm_purge: "Permanently delete {n} item(s) ({size})? This cannot be undone.",
     failed: "{n} item(s) could not be put back and stay in the quarantine:\n\n{list}",
+    helper_task: "NANOFreeDisk was set up to start its administrator helper without the Windows prompt. Windows will now ask for administrator rights once to remove that task and the helper's copy in Program Files.",
 };
 
 const VI: Text = Text {
@@ -112,6 +120,7 @@ const VI: Text = Text {
     ask_remove: "{n} mục ({size}) NANOFreeDisk đã dọn vẫn nằm trong khu cách ly và còn khôi phục được.\n\nYes (Có) — trả chúng về chỗ cũ\nNo (Không) — xóa vĩnh viễn",
     confirm_purge: "Xóa vĩnh viễn {n} mục ({size})? Không thể hoàn tác.",
     failed: "{n} mục không trả về được và vẫn nằm trong khu cách ly:\n\n{list}",
+    helper_task: "NANOFreeDisk đã được thiết lập để khởi động trình trợ giúp quản trị mà không cần hỏi Windows. Windows sẽ hỏi quyền quản trị một lần để gỡ tác vụ đó và bản sao của trình trợ giúp trong Program Files.",
 };
 
 fn fill(template: &str, n: u64, size: u64) -> String {
@@ -147,6 +156,8 @@ pub fn run(args: &[String]) -> i32 {
             }
         }
     }
+    #[cfg(windows)]
+    remove_helper_task(opts.silent, text);
 
     let db = nfd_history::default_path();
     let local = db.as_deref().and_then(Path::parent).map(Path::to_path_buf);
@@ -202,6 +213,36 @@ pub fn run(args: &[String]) -> i32 {
     }
     uninstall::remove_empty_volume_quarantines(&roots);
     code
+}
+
+/// Remove "start without the Windows prompt" (ADR 0003) before the program files go.
+#[cfg(windows)]
+fn remove_helper_task(silent: bool, text: &Text) {
+    use nfd_helper::TaskState;
+    use nfd_helper::win_task;
+    if win_task::elevated() {
+        let _ = win_task::remove_all();
+        return;
+    }
+    let state = win_task::state();
+    if state == TaskState::Off {
+        return;
+    }
+    let through_task = if state == TaskState::On {
+        nfd_helper::start_task().ok()
+    } else {
+        None
+    };
+    let conn = through_task.or_else(|| {
+        if silent {
+            return None; // stale and silent: left in place (ADR 0003, residual risks)
+        }
+        sys::info(text.title, text.helper_task);
+        nfd_helper::start().ok()
+    });
+    if let Some(c) = conn {
+        let _ = c.task_remove();
+    }
 }
 
 fn decide(opts: &Options, text: &Text, items: u64, bytes: u64) -> Choice {
@@ -326,6 +367,7 @@ mod sys {
 mod sys {
     use super::Lang;
 
+    #[allow(dead_code)]
     pub enum Answer {
         Yes,
         No,

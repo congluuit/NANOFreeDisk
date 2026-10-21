@@ -21,6 +21,9 @@ export const hwApi = {
   /** Shows UAC; adds PawnIO sensors from the elevated helper. `auto`: the app
    * opening with the setting on (once per session, only when PawnIO is ready). */
   advancedStart: (auto = false) => call<AdvancedStatus>("advanced_sensors_start", { auto }),
+  /** "Start without the Windows prompt" (ADR 0003): on = the helper registers its
+   * scheduled task (may show UAC once), off = removes it. */
+  helperTaskSet: (on: boolean) => call<AdvancedStatus>("helper_task_set", { on }),
   /** Installs PawnIO (UAC) and/or fetches the official module, both hash-pinned. */
   pawnioSetup: () => call<AdvancedStatus>("pawnio_setup"),
   pawnioSite: () => call<void>("pawnio_open_site"),

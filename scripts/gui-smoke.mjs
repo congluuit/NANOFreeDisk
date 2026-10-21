@@ -417,8 +417,11 @@ const child = spawn(exe, [], {
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// a cold CI runner starts WebView2 slowly: NFD_SMOKE_START_S raises the 20 s wait
+const startTries = Math.max(80, Number(process.env.NFD_SMOKE_START_S ?? 0) * 4);
 async function target() {
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < startTries; i++) {
+    if (child.exitCode != null) throw new Error(`the app exited with code ${child.exitCode} before WebView2 came up`);
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
       const page = list.find((t) => t.type === "page");
@@ -472,6 +475,12 @@ const nav = (v) =>
       ? `document.querySelectorAll('.side .nav')[${v}].click()`
       : `document.querySelector('.side .nav[data-view="${v}"]').click()`,
   );
+// Analyze → Explorer opens on the map: the folder list (and its details) on demand
+async function showFolders(details = false) {
+  await evaluate("document.querySelector('[data-lens=folders]')?.click()");
+  for (let i = 0; i < 30 && !(await evaluate("!!document.querySelector('.tree')")); i++) await sleep(100);
+  if (details) await evaluate("(() => { const b = document.querySelector('[data-details-toggle]'); if (b && b.getAttribute('aria-expanded') !== 'true') b.click(); })()");
+}
 
 try {
   const page = await target();
@@ -790,6 +799,8 @@ try {
   const health = await invoke("health");
   const healthMs = Date.now() - healthStart;
   check("health score", Number.isInteger(health.score) && health.score >= 0 && health.score <= 100 && Array.isArray(health.findings), `${health.score} ${health.grade} ${health.findings?.map((f) => f.kind).join(",")} in ${healthMs} ms`);
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('section.analyze')")); i++) await sleep(150);
+  await showFolders();
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('.tree .row')")); i++) await sleep(150);
   check("UI shows the scan", await evaluate("!!document.querySelector('.tree .row')"));
   await sleep(500);
@@ -880,8 +891,8 @@ try {
   check("advice: the treemap gets a verdict per tile", advSlice.verdicts?.length === advSlice.ids.length);
   // the view
   await nav("analyze");
-  await evaluate("document.querySelector('[data-panel=suggest]')?.click()");
-  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-suggestions] [data-advice-headline]')")); i++) await sleep(150);
+  await showFolders();
+  for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-suggestions] [data-section=safe]')")); i++) await sleep(150);
   check("Analyze opens on the suggestions", await evaluate("!!document.querySelector('[data-suggestions] [data-section=safe]') && !!document.querySelector('[data-suggestions] [data-section=keep]')"));
   check("Suggestions tick the safe groups only", await evaluate(`document.querySelector('[data-pick=${JSON.stringify(rust?.key ?? "")}]')?.checked === true && document.querySelector('[data-pick=${JSON.stringify(installer?.key ?? "")}]')?.checked === false`));
   check("the tree shows verdict badges", await evaluate("document.querySelectorAll('.tree [data-row-verdict]').length >= 3"));
@@ -928,6 +939,7 @@ try {
   check("delete anyway needs the acknowledgement", noAckOverride?.__error?.code === "not-confirmed" && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(noAckOverride));
   // the UI path: select .git, "Delete anyway…", tick, confirm
   await nav("analyze");
+  await showFolders(true);
   await evaluate(`(() => { const r = [...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('proj')); r?.querySelector('.chev')?.click(); })()`);
   for (let i = 0; i < 30 && !(await evaluate("[...document.querySelectorAll('.tree .row')].some((x) => x.innerText.trim().startsWith('.git'))")); i++) await sleep(100);
   await evaluate(`[...document.querySelectorAll('.tree .row')].find((x) => x.innerText.trim().startsWith('.git'))?.dispatchEvent(new MouseEvent('click', { bubbles: true }))`);
@@ -949,6 +961,8 @@ try {
     const back = await invoke("activity_restore", { id: ovOp.id });
     check("delete anyway can be undone", back.every?.((r) => r.status === "restored") && existsSync(join(advFixture, "proj", ".git", "HEAD")), JSON.stringify(back));
   }
+  // back to the default lens (the choice is remembered in the settings)
+  await evaluate("document.querySelector('[data-lens=map]')?.click()");
   const healthAdv = await invoke("health");
   check("health uses the advice instead of Old & large", !healthAdv.findings?.some((f) => f.kind === "old-large"), JSON.stringify(healthAdv.findings?.map((f) => f.kind)));
   await invoke("advice_refresh", { rulesDir: null });
@@ -1367,6 +1381,10 @@ try {
   check("Advanced sensors status needs no admin", typeof adv.active === "boolean" && !adv.__error, JSON.stringify(adv.pawnio ?? adv));
   const auto = await invoke("advanced_sensors_start", { auto: true });
   check("automatic Advanced sensors never prompt in the smoke test", auto.active === adv.active && !auto.__error, JSON.stringify(auto));
+  // ADR 0003: the no-prompt scheduled task is reported, never set up or used under NFD_NO_AUTO_ELEVATE
+  check("no-prompt helper task state is reported", ["off", "on", "stale"].includes(adv.helperTask), String(adv.helperTask));
+  const noTask = await invoke("helper_task_set", { on: true });
+  check("no-prompt helper task is never set up by the smoke test", noTask?.__error?.code === "no-auto-elevate", JSON.stringify(noTask));
   await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
   check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));

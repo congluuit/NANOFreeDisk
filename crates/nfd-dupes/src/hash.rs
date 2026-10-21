@@ -59,6 +59,10 @@ pub trait Source: Sync {
     fn link_mode(&self, _path: &Path) -> Option<crate::LinkKind> {
         None
     }
+    /// Whether `path` shares its blocks with other files (APFS clones).
+    fn clone_info(&self, _path: &Path) -> Option<nfd_platform::link::CloneInfo> {
+        None
+    }
 }
 
 /// The real filesystem (`nfd_platform::fsinfo` + `nfd_platform::io`).
@@ -94,6 +98,10 @@ impl Source for LiveSource {
             nfd_platform::link::LinkMode::Clone => crate::LinkKind::Clone,
             nfd_platform::link::LinkMode::Hardlink => crate::LinkKind::Hardlink,
         })
+    }
+
+    fn clone_info(&self, path: &Path) -> Option<nfd_platform::link::CloneInfo> {
+        nfd_platform::link::clone_info(path)
     }
 }
 

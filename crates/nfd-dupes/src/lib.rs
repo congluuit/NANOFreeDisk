@@ -17,6 +17,11 @@
 //! 6. **Folders** (optional, [`folders`]) — folders whose whole contents are
 //!    identical, at the top-most level.
 //!
+//! APFS clones (macOS: Finder's Duplicate, `cp -c`) share their blocks: copies with
+//! the same clone id count once in [`DupeGroup::wasted`], are flagged
+//! ([`CopyFlags::clone`]) and never pre-selected, and a group made only of clones
+//! of each other is left out ([`SkipReason::Clone`]) — deleting one frees nothing.
+//!
 //! Hashes are cached in the history database ([`cache`]) by volume, file id, size
 //! and last write, so a second run reads almost nothing.
 //!
@@ -134,6 +139,8 @@ pub enum SkipReason {
     Unreadable,
     /// Size or last write changed since the scan (or while it was read).
     Changed,
+    /// APFS clones of each other: they share their data, deleting one frees nothing.
+    Clone,
 }
 
 impl SkipReason {
@@ -150,6 +157,7 @@ impl SkipReason {
             Self::AppDir => "app-dir",
             Self::Unreadable => "unreadable",
             Self::Changed => "changed",
+            Self::Clone => "clone",
         }
     }
 }
@@ -174,6 +182,10 @@ pub struct CopyFlags {
     /// Inside an application folder (shown only with `include_app_dirs`).
     pub app_dir: bool,
     pub readonly: bool,
+    /// Shares its data blocks with another file (APFS clone): deleting it frees
+    /// little or nothing.
+    #[serde(default)]
+    pub clone: bool,
 }
 
 /// How a copy can be replaced by a link to the copy that stays (same volume only).
@@ -217,7 +229,8 @@ pub struct DupeGroup {
     pub hash: String,
     /// Size of each copy.
     pub size: u64,
-    /// `size × (copies − 1)`: what keeping one copy frees.
+    /// `size × (copies − 1)`: what keeping one copy frees (APFS clones of each
+    /// other count as one copy).
     pub wasted: u64,
     pub copies: Vec<FileCopy>,
 }
@@ -265,6 +278,16 @@ struct Unit {
     /// Hashes computed in this run (to store in the cache).
     fresh: bool,
     gone: bool,
+}
+
+/// Clone ids that more than one of `clones` share, with how many share each.
+fn shared_clone_ids(clones: &[Option<nfd_platform::link::CloneInfo>]) -> HashMap<u64, usize> {
+    let mut counts: HashMap<u64, usize> = HashMap::new();
+    for id in clones.iter().flatten().filter_map(|c| c.id) {
+        *counts.entry(id).or_default() += 1;
+    }
+    counts.retain(|_, n| *n > 1);
+    counts
 }
 
 /// Find duplicates among the files of `trees`.
@@ -554,12 +577,30 @@ pub fn find(
     }
     let mut out: Vec<DupeGroup> = groups
         .iter()
-        .map(|g| {
+        .filter_map(|g| {
             let first = &cands[units[g[0]].cand];
+            let clones: Vec<Option<nfd_platform::link::CloneInfo>> = g
+                .iter()
+                .map(|&u| source.clone_info(&cands[units[u].cand].path))
+                .collect();
+            let shared = shared_clone_ids(&clones);
+            // pure clones of each other hold their data once
+            let distinct = g.len() - shared.values().map(|n| n - 1).sum::<usize>();
+            if distinct < 2 {
+                for &u in g {
+                    skips.add(SkipReason::Clone, || cands[units[u].cand].path.clone());
+                }
+                return None;
+            }
             let mut copies: Vec<FileCopy> = g
                 .iter()
-                .map(|&u| {
+                .zip(&clones)
+                .map(|(&u, clone)| {
                     let c = &cands[units[u].cand];
+                    let mut flags = c.flags;
+                    flags.clone = clone.is_some_and(|i| {
+                        i.may_share_blocks || i.id.is_some_and(|id| shared.contains_key(&id))
+                    });
                     let mut links: Vec<PathBuf> = units[u]
                         .links
                         .iter()
@@ -572,19 +613,19 @@ pub fn find(
                         volume: c.volume,
                         file_id: c.file_id,
                         links,
-                        flags: c.flags,
+                        flags,
                         link: link_modes.get(&c.volume).copied().flatten(),
                     }
                 })
                 .collect();
             copies.sort_by(|a, b| a.path.cmp(&b.path));
-            DupeGroup {
+            Some(DupeGroup {
                 id: 0,
                 hash: units[g[0]].full.map(|d| hash::hex(&d)).unwrap_or_default(),
                 size: first.size,
-                wasted: first.size * (copies.len() as u64 - 1),
+                wasted: first.size * (distinct as u64 - 1),
                 copies,
-            }
+            })
         })
         .collect();
     out.sort_by(|a, b| {

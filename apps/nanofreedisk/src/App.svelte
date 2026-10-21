@@ -35,6 +35,8 @@
   import Health from "./lib/views/Health.svelte";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
+  import { currentOs, hasFeature, modKey, viewAvailable } from "./lib/platform";
+  import MacAccessHint from "./lib/components/MacAccessHint.svelte";
 
   type NavItem = { id: View; icon: string; label: string };
   type NavGroup = { group: string; icon: string; label: string; items: NavItem[] };
@@ -70,6 +72,19 @@
 
   const isGroup = (entry: NavItem | NavGroup): entry is NavGroup => "group" in entry;
 
+  // what this platform has (macOS: no Clean, Health, Hardware or Monitor)
+  const os = $derived(currentOs(app.info?.os));
+  const nav = $derived(
+    NAV.flatMap((entry): (NavItem | NavGroup)[] => {
+      if (!isGroup(entry)) return viewAvailable(os, entry.id) ? [entry] : [];
+      const items = entry.items.filter((item) => viewAvailable(os, item.id));
+      return items.length ? [{ ...entry, items }] : [];
+    }),
+  );
+  $effect(() => {
+    if (!viewAvailable(os, app.view)) app.view = "home";
+  });
+
   // Groups the user opened or closed by hand; the group of the open view is always shown.
   let opened = $state<Record<string, boolean>>({});
   const groupOpen = (g: NavGroup) =>
@@ -93,18 +108,19 @@
     void (async () => {
       await loadSettings();
       applyLocale();
-      api.appInfo().then((info) => (app.info = info)).catch(() => {});
+      await api.appInfo().then((info) => (app.info = info)).catch(() => {});
       await listenScanEvents();
-      startThermalSync();
-      startMonitorSync();
-      startHealthWatch();
+      const here = currentOs(app.info?.os);
+      if (hasFeature(here, "sensors")) startThermalSync();
+      if (hasFeature(here, "monitor")) startMonitorSync();
+      if (hasFeature(here, "health")) startHealthWatch();
       scheduleReminder();
       await refreshVolumes();
       await openStartupPath();
       await openStartupDupes();
     })();
     const onKey = (e: KeyboardEvent) => {
-      if (e.ctrlKey && e.key === ",") {
+      if ((e.ctrlKey || e.metaKey) && e.key === ",") {
         e.preventDefault();
         app.view = "settings";
       } else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k" && !app.deleting) {
@@ -150,7 +166,7 @@
     <button class="find" onclick={() => (app.palette = true)} title={t("palette-title")}>
       <Icon name="search" size={16} />
       <span class="ellipsis">{t("palette-open")}</span>
-      <kbd>Ctrl K</kbd>
+      <kbd>{modKey(os)} K</kbd>
     </button>
     {#snippet navButton(item: NavItem, child: boolean)}
       <button
@@ -167,7 +183,7 @@
       </button>
     {/snippet}
     <ul class="nav-list">
-      {#each NAV as entry (entry.label)}
+      {#each nav as entry (entry.label)}
         {#if isGroup(entry)}
           {@const open = groupOpen(entry)}
           {@const holdsActive = entry.items.some((item) => item.id === app.view)}
@@ -179,7 +195,7 @@
               aria-controls={`nav-${entry.group}`}
               onclick={() => toggleGroup(entry)}
             >
-              <Icon name={entry.icon} />
+              <Icon name={entry.icon} size={18} />
               <span class="ellipsis">{t(entry.label)}</span>
               <span class="caret" class:open><Icon name="chevron" size={14} /></span>
             </button>
@@ -198,7 +214,7 @@
     <!-- the cleanup history always stays last, apart from the task groups -->
     {@render navButton({ id: "activity", icon: "undo", label: "nav-activity" }, false)}
     <div class="divider"></div>
-    <div class="mode" role="radiogroup" aria-label={t("mode-label")}>
+    <div class="mode segmented" role="radiogroup" aria-label={t("mode-label")}>
       {#each ["simple", "expert"] as const as m (m)}
         <button
           role="radio"
@@ -216,14 +232,16 @@
       class="nav"
       class:active={app.view === "settings"}
       onclick={() => (app.view = "settings")}
-      title="Ctrl+,"
+      title={`${modKey(os)}+,`}
+      aria-current={app.view === "settings" ? "page" : undefined}
     >
-      <Icon name="settings" />
-      <span>{t("nav-settings")}</span>
+      <Icon name="settings" size={18} />
+      <span class="ellipsis">{t("nav-settings")}</span>
     </button>
   </nav>
 
   <main>
+    <MacAccessHint />
     {#if app.view === "home"}
       <Home />
     {:else if app.view === "analyze"}
@@ -273,26 +291,29 @@
 <style>
   .shell {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 224px 1fr;
     height: 100%;
   }
   .side {
     display: flex;
     flex-direction: column;
-    gap: 4px;
-    padding: 14px 10px;
+    gap: 2px;
+    padding: 16px 12px 12px;
     background: var(--surface);
     border-right: 1px solid var(--border);
     min-height: 0;
+    min-width: 0;
   }
   .brand {
     display: flex;
     gap: 10px;
     align-items: center;
-    padding: 4px 8px 16px;
+    padding: 2px 6px 16px;
+    min-width: 0;
   }
   .brand img {
     border-radius: 8px;
+    flex: none;
   }
   .name {
     font-weight: 800;
@@ -300,7 +321,7 @@
     font-size: 1.08em;
   }
   .name span {
-    color: var(--accent);
+    color: var(--accent-ink);
   }
   .ver {
     font-size: 0.78em;
@@ -318,7 +339,7 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 7px 10px;
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -330,39 +351,42 @@
     color: var(--text);
   }
   .nav.active {
-    background: var(--accent-soft);
+    background: var(--surface-2);
     color: var(--text);
-    box-shadow: inset 3px 0 0 var(--accent);
+    font-weight: 600;
+  }
+  .nav.active :global(svg) {
+    color: var(--accent-ink);
   }
   .nav.child {
-    padding: 6px 10px 6px 34px;
-    font-size: 0.95em;
+    padding: 6px 10px 6px 36px;
   }
   .nav-list {
     overflow-y: auto;
     min-height: 0;
   }
   .group {
-    margin-top: 6px;
+    margin-top: 4px;
   }
   .group-head {
     display: flex;
     align-items: center;
     gap: 10px;
     width: 100%;
-    padding: 8px 10px;
+    padding: 7px 10px;
     border: none;
     border-radius: var(--radius-sm);
     background: transparent;
-    color: var(--text);
-    font-weight: 600;
+    color: var(--text-muted);
     text-align: left;
   }
   .group-head:hover {
     background: var(--hover);
+    color: var(--text);
   }
   .group-head.holds-active {
-    box-shadow: inset 3px 0 0 var(--accent);
+    color: var(--text);
+    font-weight: 600;
   }
   .caret {
     display: flex;
@@ -389,24 +413,24 @@
   }
   .divider {
     height: 1px;
-    margin: 6px 4px 8px;
+    margin: 6px 4px 10px;
     background: var(--border);
   }
   .find {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin: 0 0 10px;
+    margin: 0 0 12px;
     padding: 6px 10px;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    background: var(--bg);
+    background: var(--surface-2);
     color: var(--text-muted);
     text-align: left;
   }
   .find:hover {
-    border-color: var(--accent);
     color: var(--text);
+    border-color: var(--text-muted);
   }
   .find span {
     flex: 1;
@@ -414,29 +438,19 @@
   kbd {
     font-family: inherit;
     font-size: 0.75em;
-    padding: 0 4px;
+    padding: 0 5px;
     border: 1px solid var(--border);
     border-radius: 4px;
+    background: var(--surface);
   }
   .mode {
     display: grid;
     grid-template-columns: 1fr 1fr;
     margin-bottom: 6px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
   }
   .mode button {
-    border: none;
-    background: transparent;
-    padding: 5px 4px;
-    color: var(--text-muted);
+    justify-content: center;
     font-size: 0.86em;
-  }
-  .mode button.on {
-    background: var(--accent-soft);
-    color: var(--text);
-    font-weight: 600;
   }
   main {
     min-width: 0;
@@ -454,7 +468,7 @@
     max-width: 440px;
   }
   .toast {
-    background: var(--surface-2);
+    background: var(--surface);
     border: 1px solid var(--border);
     border-left: 4px solid var(--accent);
     padding: 10px 14px;
@@ -466,5 +480,35 @@
   }
   .toast.error {
     border-left-color: var(--danger);
+  }
+  /* a narrow window: the sidebar becomes a rail of icons, every entry shown */
+  @media (max-width: 1000px) {
+    .shell {
+      grid-template-columns: 60px 1fr;
+    }
+    .side {
+      padding: 12px 8px;
+      align-items: stretch;
+    }
+    .brand {
+      padding: 0 0 12px;
+      justify-content: center;
+    }
+    .brand > div,
+    .side .ellipsis,
+    kbd,
+    .group-head,
+    .mode {
+      display: none;
+    }
+    .find,
+    .nav,
+    .nav.child {
+      justify-content: center;
+      padding: 8px 0;
+    }
+    .children[hidden] {
+      display: flex;
+    }
   }
 </style>

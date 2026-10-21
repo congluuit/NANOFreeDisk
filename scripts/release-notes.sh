@@ -13,6 +13,7 @@ REPO="$3"
 CHANGES="${4:-}"
 BASE="https://github.com/$REPO/releases/download/v$VERSION"
 SETUP="NANOFreeDisk-Setup-$VERSION-x64.exe"
+DMG="NANOFreeDisk-$VERSION-macos-universal.dmg"
 
 if [[ "$DIST" == "-" ]]; then
   mapfile -t FILES
@@ -26,6 +27,8 @@ describe() {
     *-x64-vi-VN.msi) echo "MSI, Vietnamese UI (IT / Group Policy)" ;;
     *-x64.msi) echo "MSI, English UI (IT / Group Policy, winget)" ;;
     *-portable.zip) echo "Portable: unzip and run, data stays next to the exe" ;;
+    *-macos-universal.dmg) echo "macOS 11+ (Intel and Apple silicon): open, drag to Applications" ;;
+    *-macos-universal.app.zip) echo "macOS 11+: the same app, zipped" ;;
     SHA256SUMS.txt) echo "SHA-256 checksums of every file" ;;
     *.minisig) echo "minisign signature of SHA256SUMS.txt" ;;
     *.cdx.json) echo "Software bill of materials (CycloneDX)" ;;
@@ -35,7 +38,11 @@ describe() {
 }
 
 has_setup=false
-for f in "${FILES[@]}"; do [[ "$f" == "$SETUP" ]] && has_setup=true; done
+has_dmg=false
+for f in "${FILES[@]}"; do
+  [[ "$f" == "$SETUP" ]] && has_setup=true
+  [[ "$f" == "$DMG" ]] && has_dmg=true
+done
 
 echo "## NANOFreeDisk $VERSION"
 echo
@@ -43,6 +50,12 @@ if $has_setup; then
   echo "### ⬇️ [**Download $SETUP**]($BASE/$SETUP)"
   echo
   echo "**Recommended for most people.** The NANOFreeDisk installer: pick the folder, install for you or for everyone on this PC, uninstall any time from Settings → Apps."
+  echo
+fi
+if $has_dmg; then
+  echo "### 🍎 macOS: [**$DMG**]($BASE/$DMG)"
+  echo
+  echo "One app for Intel and Apple silicon Macs, macOS 11 Big Sur or later. It is not notarized by Apple yet: the first time, right-click the app → **Open** (macOS 15+: System Settings → Privacy & Security → **Open Anyway**). See the README's macOS section."
   echo
 fi
 echo "| Package | What it is |"

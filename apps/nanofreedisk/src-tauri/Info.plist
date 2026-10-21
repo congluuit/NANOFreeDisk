@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Merged into the app's Info.plist by the Tauri bundler (macOS): the reasons
+     macOS shows when NANOFreeDisk first scans these folders. -->
+<plist version="1.0">
+<dict>
+  <key>NSDesktopFolderUsageDescription</key>
+  <string>NANOFreeDisk measures the files on your Desktop to show what uses your disk space. It never deletes anything without asking you.</string>
+  <key>NSDocumentsFolderUsageDescription</key>
+  <string>NANOFreeDisk measures the files in Documents to show what uses your disk space and to find duplicates. It never deletes anything without asking you.</string>
+  <key>NSDownloadsFolderUsageDescription</key>
+  <string>NANOFreeDisk measures the files in Downloads to show what uses your disk space and to find duplicates. It never deletes anything without asking you.</string>
+  <key>NSRemovableVolumesUsageDescription</key>
+  <string>NANOFreeDisk measures the files on this drive to show what uses its space.</string>
+  <key>NSNetworkVolumesUsageDescription</key>
+  <string>NANOFreeDisk measures the files on this network drive to show what uses its space.</string>
+  <key>NSHumanReadableCopyright</key>
+  <string>© 2026 Lưu Đức Thành Công (NANO). MIT License.</string>
+</dict>
+</plist>

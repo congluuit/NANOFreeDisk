@@ -13,8 +13,8 @@ export { advancedStep, type AdvancedStep } from "./sensors";
 
 export const advanced = $state({
   status: null as AdvancedStatus | null,
-  /** Setup or start in progress (Windows is showing a prompt). */
-  busy: null as null | "setup" | "start",
+  /** Setup, start or the no-prompt task in progress (Windows may show a prompt). */
+  busy: null as null | "setup" | "start" | "task",
 });
 
 export async function refreshAdvanced(): Promise<void> {
@@ -96,4 +96,19 @@ export async function autoStartAdvanced(): Promise<void> {
 export function setAdvancedAuto(on: boolean): void {
   app.settings.advancedAuto = on;
   saveSettingsSoon();
+}
+
+/** "Start without the Windows prompt" (ADR 0003): a scheduled task that starts the
+ * helper's protected copy. The state lives in Windows, not in the settings. */
+export async function setHelperTask(on: boolean): Promise<void> {
+  advanced.busy = "task";
+  try {
+    advanced.status = await hwApi.helperTaskSet(on);
+    toast(t(on ? "hw-adv-noprompt-on" : "hw-adv-noprompt-off"), "info");
+  } catch (e) {
+    toast(code(e) === "uac-declined" ? t("hw-adv-noprompt-declined") : t("hw-adv-noprompt-failed", { message: errorText(e) }), "error");
+    await refreshAdvanced();
+  } finally {
+    advanced.busy = null;
+  }
 }

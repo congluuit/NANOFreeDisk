@@ -55,7 +55,6 @@
     } else if (f.fix === "oldlarge" && !app.summary) {
       void startScan(f.subject || system?.root || "");
     } else if (f.fix === "suggestions") {
-      app.settings.analyzePanel = "suggest";
       app.view = "analyze";
     } else {
       if (f.kind === "ai-leftovers") dev.tab = "ai";
@@ -65,16 +64,21 @@
 </script>
 
 {#if health}
-  <section class="health card {health.grade}" aria-label={t("health-title")}>
-    <div class="ring" title={t("health-basis")}>
-      <svg viewBox="0 0 100 100" width="104" height="104" aria-hidden="true">
-        <circle cx="50" cy="50" r={R} class="track" />
-        <circle cx="50" cy="50" r={R} class="value" stroke-dasharray={`${(health.score / 100) * C} ${C}`} transform="rotate(-90 50 50)" />
-      </svg>
-      <div class="num"><b>{health.score}</b><span class="muted">/100</span></div>
+  <section class="health panel {health.grade}" aria-label={t("health-title")}>
+    <div class="top">
+      <div class="ring" title={t("health-basis")}>
+        <svg viewBox="0 0 100 100" width="76" height="76" aria-hidden="true">
+          <circle cx="50" cy="50" r={R} class="track" />
+          <circle cx="50" cy="50" r={R} class="value" stroke-dasharray={`${(health.score / 100) * C} ${C}`} transform="rotate(-90 50 50)" />
+        </svg>
+        <div class="num"><b>{health.score}</b><span class="muted">/100</span></div>
+      </div>
+      <div class="head">
+        <h2>{t("health-title")}</h2>
+        <span class="tag grade">{t(`health-${health.grade}`)}</span>
+      </div>
     </div>
     <div class="body">
-      <h2>{t("health-title")} · <span class="grade">{t(`health-${health.grade}`)}</span></h2>
       {#if shown.length}
         <ul>
           {#each shown as f, i (i)}
@@ -82,7 +86,7 @@
               <span class="dot"></span>
               <span class="txt">{text(f)}</span>
               {#if f.penalty}<span class="pts muted">−{f.penalty}</span>{/if}
-              <button class="btn ghost" onclick={() => fix(f)} title={f.fix === "home" || !app.summary ? t("hint-scan") : undefined}>{t(`health-fix-${f.fix}`)}<Icon name="chevron" size={14} /></button>
+              <button class="btn ghost small" onclick={() => fix(f)} title={f.fix === "home" || !app.summary ? t("hint-scan") : undefined}>{t(`health-fix-${f.fix}`)}<Icon name="chevron" size={14} /></button>
             </li>
           {/each}
         </ul>
@@ -97,16 +101,20 @@
 <style>
   .health {
     display: flex;
-    gap: 20px;
-    align-items: center;
-    padding: 16px 20px;
+    flex-direction: column;
+    gap: 10px;
     margin-bottom: 18px;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    gap: 14px;
   }
   .ring {
     position: relative;
     flex: none;
-    width: 104px;
-    height: 104px;
+    width: 76px;
+    height: 76px;
   }
   circle {
     fill: none;
@@ -135,27 +143,37 @@
     line-height: 1.05;
   }
   .num b {
-    font-size: 2em;
+    font-size: 1.6em;
+    letter-spacing: -0.02em;
   }
   .num span {
-    font-size: 0.8em;
+    font-size: 0.72em;
   }
-  .body {
-    flex: 1;
+  .head {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
     min-width: 0;
   }
   h2 {
-    margin: 0 0 6px;
-    font-size: 1.1em;
+    margin: 0;
+    font-size: 1.06em;
   }
   .grade {
-    color: var(--risk-safe);
+    background: var(--risk-safe-soft);
+    color: var(--risk-safe-ink);
   }
   .fair .grade {
-    color: var(--risk-caution);
+    background: var(--risk-caution-soft);
+    color: var(--risk-caution-ink);
   }
   .poor .grade {
-    color: var(--risk-protected);
+    background: var(--risk-protected-soft);
+    color: var(--risk-protected-ink);
+  }
+  .body {
+    min-width: 0;
   }
   ul {
     list-style: none;
@@ -166,7 +184,9 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 2px 0;
+    padding: 7px 0;
+    border-top: 1px solid var(--border);
+    font-size: 0.92em;
   }
   .dot {
     flex: none;
@@ -187,16 +207,20 @@
   }
   .pts {
     font-variant-numeric: tabular-nums;
+    font-size: 0.9em;
+  }
+  li .btn {
+    padding-right: 0.3em;
   }
   .ok {
     display: flex;
     gap: 6px;
     align-items: center;
-    color: var(--risk-safe);
+    color: var(--risk-safe-ink);
     margin: 4px 0;
   }
   .small {
-    font-size: 0.82em;
+    font-size: 0.8em;
     margin: 6px 0 0;
   }
 </style>

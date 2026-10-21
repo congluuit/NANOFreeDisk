@@ -9,6 +9,8 @@ export interface CopyFlags {
   /** Inside an application folder (only listed with "include app folders"). */
   appDir: boolean;
   readonly: boolean;
+  /** Shares its data with another copy (APFS clone): removing it frees little or nothing. */
+  clone?: boolean;
 }
 
 export interface FileCopy {

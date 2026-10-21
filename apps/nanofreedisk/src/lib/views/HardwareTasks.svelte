@@ -251,17 +251,28 @@
   .summary {
     display: grid;
     grid-template-columns: repeat(5, 1fr);
-    gap: 10px;
-    margin-bottom: 10px;
+    gap: 12px;
+    margin-bottom: 12px;
   }
   .stat {
     display: flex;
     flex-direction: column;
-    padding: 8px 12px;
-    font-size: 0.9em;
+    gap: 2px;
+    padding: 10px 14px;
+    min-width: 0;
+  }
+  .stat .muted {
+    font-size: 0.86em;
   }
   .stat b {
-    font-size: 1.15em;
+    font-family: inherit;
+    font-size: 1.45em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .toolbar {
     display: flex;
