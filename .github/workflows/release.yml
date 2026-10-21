@@ -281,12 +281,13 @@ jobs:
           tool: cargo-cyclonedx
       - run: cargo cyclonedx --format json --override-filename sbom && cp sbom.cdx.json dist/sbom-$VERSION.cdx.json || true
 
+      # --current: the notes of the checked-out tag, also when an older tag is rebuilt
       - name: Changelog for this version
         id: cliff
         uses: orhun/git-cliff-action@v4
         with:
           config: cliff.toml
-          args: --latest --strip header
+          args: --current --strip header
         env:
           OUTPUT: RELEASE_NOTES.md
 
