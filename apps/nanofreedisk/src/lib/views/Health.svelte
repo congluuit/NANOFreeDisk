@@ -14,6 +14,7 @@
   import { cliCommand, heatClass, hours, nvmeRows, reasonArgs, statusToken, volumeRows } from "../health/view";
   import CliHint from "../components/CliHint.svelte";
   import Icon from "../components/Icon.svelte";
+  import StatCard from "../components/StatCard.svelte";
 
   const loc = $derived(intlLocale());
   let report = $state<HealthReport | null>(null);
@@ -23,6 +24,13 @@
   let selected = $state<number | null>(null);
   let serials = $state(false);
 
+  const counts = $derived({
+    good: report?.drives.filter((d) => d.status === "good").length ?? 0,
+    attention: report?.drives.filter((d) => d.status === "caution" || d.status === "bad").length ?? 0,
+  });
+  const hottest = $derived(
+    (report?.drives ?? []).filter((d) => d.temperature != null).sort((a, b) => (b.temperature ?? 0) - (a.temperature ?? 0))[0] ?? null,
+  );
   const drive = $derived(report?.drives.find((d) => d.index === selected) ?? report?.drives[0] ?? null);
   // Simple mode shows the attributes the verdict and the cards use
   const KEY_ATTRS = new Set([0x05, 0x09, 0x0c, 0xc2, 0xbe, 0xc5, 0xc6, 0xc7, 0xe7, 0xe9, 0xb1, 0xa9, 0xad, 0xf1]);
@@ -101,14 +109,14 @@
   const hex = (n: number) => n.toString(16).toUpperCase().padStart(2, "0");
 </script>
 
-<section class="page">
-  <header>
+<section class="page health-view">
+  <header class="page-head">
     <div>
       <h1>{t("health-title-view")}</h1>
-      <p class="muted">{t("health-subtitle")}</p>
+      <p>{t("health-subtitle")}</p>
     </div>
-    <div class="actions">
-      <button class="btn ghost" data-health-refresh onclick={() => load(true)} disabled={loading} title={t("health-refresh")} aria-label={t("health-refresh")}>
+    <div class="page-actions">
+      <button class="btn ghost icon" data-health-refresh onclick={() => load(true)} disabled={loading} title={t("health-refresh")} aria-label={t("health-refresh")}>
         <Icon name="refresh" />
       </button>
       {#if inTauri && report && !report.elevated}
@@ -136,6 +144,11 @@
     {:else if !report}
       <p class="muted">{t("health-loading")}</p>
     {:else}
+      <div class="stats">
+        <StatCard label={t("stat-drives")} value={String(report.drives.length)} tone={counts.attention ? "caution" : report.drives.length ? "safe" : null} unit={counts.attention ? t("stat-drives-attention", { count: counts.attention }) : t("stat-drives-good")} />
+        <StatCard label={t("stat-hottest")} value={hottest ? `${Math.round(hottest.temperature ?? 0)} °C` : null} unit={hottest?.model ?? ""} tone={hottest ? (hottest.heat === "critical" ? "protected" : hottest.heat === "warning" ? "caution" : null) : null} />
+        <StatCard label={t("health-volumes")} value={String(report.volumes.length)} unit={t("stat-volumes-checked")} />
+      </div>
       {#if !report.elevated}
         <p class="muted small note"><Icon name="lock" size={14} />{t("health-standard-user")}</p>
       {/if}
@@ -170,7 +183,7 @@
 
       {#if drive}
         {@const d = drive}
-        <article class="card detail" data-detail={d.index}>
+        <article class="panel detail" data-detail={d.index}>
           <h2>
             <span class="dot" style={`background: var(${statusToken(d.status)})`}></span>
             {d.model}
@@ -242,7 +255,7 @@
       <div class="vols">
         {#each report.volumes as v (v.root)}
           {@const d = report.drives.find((x) => x.index === v.disk)}
-          <article class="card vol" data-volume={v.root}>
+          <article class="panel vol" data-volume={v.root}>
             <h3>{v.root.replace(/\\$/, "")} {#if v.label}<span class="muted">{v.label}</span>{/if}</h3>
             <dl>
               {#each volumeRows(v, d, t, loc) as [k, val, bad] (k)}
@@ -258,34 +271,15 @@
 </section>
 
 <style>
-  .page {
+  .health-view {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: 24px 28px 0;
-    gap: 14px;
+    padding-bottom: 0;
     min-height: 0;
+    overflow: hidden;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 70ch;
-  }
-  .actions {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    flex-wrap: wrap;
+  .health-view > .page-head {
+    margin-bottom: 14px;
   }
   .check {
     display: inline-flex;
@@ -298,9 +292,6 @@
     min-height: 0;
     overflow: auto;
     padding-bottom: 24px;
-  }
-  .small {
-    font-size: 0.86em;
   }
   .err {
     color: var(--danger);
@@ -321,15 +312,20 @@
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
-    padding: 12px 14px;
+    padding: 14px 16px;
     text-align: left;
     color: var(--text);
-    border-left: 4px solid var(--tone);
+    font: inherit;
     cursor: pointer;
     min-width: 0;
+    transition: border-color 0.12s;
+  }
+  .drive:hover:not(.on) {
+    border-color: var(--text-muted);
   }
   .drive.on {
-    box-shadow: 0 0 0 2px var(--accent);
+    border-color: var(--accent);
+    box-shadow: inset 0 0 0 1px var(--accent);
   }
   .top {
     display: flex;
@@ -339,12 +335,12 @@
     min-width: 0;
   }
   .badge {
-    color: var(--tone);
-    border: 1px solid var(--tone);
+    background: color-mix(in srgb, var(--tone) 16%, var(--surface));
+    color: color-mix(in srgb, var(--tone) 60%, var(--text));
     border-radius: 999px;
-    padding: 0 10px;
+    padding: 1px 10px;
     font-weight: 600;
-    font-size: 0.9em;
+    font-size: 0.82em;
   }
   .facts {
     display: flex;
@@ -371,7 +367,6 @@
   }
   .detail {
     margin-top: 14px;
-    padding: 14px 16px;
   }
   h2 {
     display: flex;
@@ -402,13 +397,13 @@
     display: flex;
     gap: 6px;
     align-items: center;
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
   }
   .ok {
     display: flex;
     gap: 6px;
     align-items: center;
-    color: var(--risk-safe);
+    color: var(--risk-safe-ink);
     margin: 0 0 10px;
   }
   dl {
@@ -461,7 +456,5 @@
     gap: 12px;
     margin-bottom: 12px;
   }
-  .vol {
-    padding: 12px 14px;
-  }
+
 </style>

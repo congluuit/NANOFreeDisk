@@ -19,6 +19,8 @@ export interface Layout {
   /** Slice indices in paint order (parents before children). */
   order: Int32Array;
   count: number;
+  /** 1 where a directory frame got a label strip of `header` px. */
+  head: Uint8Array;
 }
 
 export interface LayoutOptions {
@@ -41,8 +43,9 @@ export function layoutTreemap(slice: Slice, bounds: Rect, opts: Partial<LayoutOp
   const w = new Float32Array(n).fill(NaN);
   const h = new Float32Array(n).fill(NaN);
   const order = new Int32Array(n);
+  const heads = new Uint8Array(n);
   let count = 0;
-  if (n === 0) return { x, y, w, h, order, count };
+  if (n === 0) return { x, y, w, h, order, count, head: heads };
 
   // children lists (slice is parent-before-child, children already size-descending)
   const first = new Int32Array(n).fill(-1);
@@ -74,6 +77,7 @@ export function layoutTreemap(slice: Slice, bounds: Rect, opts: Partial<LayoutOp
     // inner area: root uses the whole bounds; nested dirs get padding + label strip
     const pad = isRoot ? 0 : o.pad;
     const head = !isRoot && pw > 60 && ph > o.header * 2.5 ? o.header : 0;
+    if (head) heads[p] = 1;
     let ix = x[p] + pad;
     let iy = y[p] + pad + head;
     let iw = pw - 2 * pad;
@@ -97,7 +101,7 @@ export function layoutTreemap(slice: Slice, bounds: Rect, opts: Partial<LayoutOp
       if (slice.kinds[c] === 1) stack.push(c);
     }
   }
-  return { x, y, w, h, order, count };
+  return { x, y, w, h, order, count, head: heads };
 }
 
 function worst(sum: number, min: number, max: number, side: number): number {

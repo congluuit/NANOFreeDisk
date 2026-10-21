@@ -159,13 +159,13 @@
   );
 </script>
 
-<section class="page">
-  <header>
+<section class="page monitor">
+  <header class="page-head">
     <div>
       <h1>{t("mon-title")}</h1>
-      <p class="muted">{t("mon-subtitle")}</p>
+      <p>{t("mon-subtitle")}</p>
     </div>
-    <div class="actions">
+    <div class="page-actions">
       {#if view}
         <span class="badge" data-source={snap?.source ?? "counters"} title={t(`mon-source-${snap?.source ?? "counters"}-hint`)}>
           <Icon name={detail ? "file" : "monitor"} size={14} />{t(`mon-source-${snap?.source ?? "counters"}`)}
@@ -184,7 +184,7 @@
     </div>
   </header>
 
-  <div class="seg" role="tablist" aria-label={t("mon-title")}>
+  <div class="segmented seg" role="tablist" aria-label={t("mon-title")}>
     {#each [["activity", "monitor", "mon-tab-activity"], ["history", "clock", "mon-tab-history"], ["who", "search", "mon-tab-who"]] as [id, icon, label] (id)}
       <button role="tab" class="montab" data-montab={id} class:on={tab === id} aria-selected={tab === id} onclick={() => (tab = id as Tab)}>
         <Icon name={icon} size={16} />{t(label)}
@@ -211,7 +211,7 @@
             <span class="legend"><i class="sw write"></i>{t("mon-write")} <b class="mono">{rate(snap?.write ?? 0)}</b></span>
             <span class="muted small mono">{num(snap?.ops ?? 0)} {t("mon-ops")}</span>
             <span class="grow"></span>
-            <div class="mini-seg" role="radiogroup" aria-label={t("mon-window")}>
+            <div class="segmented mini-seg" role="radiogroup" aria-label={t("mon-window")}>
               {#each [60, 600] as const as w (w)}
                 <button role="radio" aria-checked={windowSecs === w} class:on={windowSecs === w} onclick={() => ((windowSecs = w), void tick())}>
                   {t(w === 60 ? "mon-window-60" : "mon-window-600")}
@@ -409,73 +409,38 @@
 {/if}
 
 <style>
-  .page {
+  .monitor {
     display: flex;
     flex-direction: column;
-    height: 100%;
-    padding: 24px 28px 0;
+    padding-bottom: 0;
     gap: 12px;
     min-height: 0;
+    overflow: hidden;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    flex-wrap: wrap;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
+  .monitor > .page-head {
+    margin-bottom: 2px;
   }
   h2 {
     margin: 0 0 8px;
-    font-size: 1em;
-  }
-  header p {
-    margin: 0;
-    max-width: 70ch;
-  }
-  .actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex-wrap: wrap;
+    font-size: 1.06em;
   }
   .badge {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 4px 10px;
+    padding: 3px 10px;
     border-radius: 999px;
-    border: 1px solid var(--border);
     background: var(--surface-2);
-    font-size: 0.86em;
+    color: var(--text-muted);
+    font-size: 0.84em;
+    font-weight: 600;
   }
   .seg {
-    display: flex;
     align-self: flex-start;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-    background: var(--surface);
+    flex-shrink: 0;
   }
   .montab {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 14px;
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-  }
-  .montab + .montab {
-    border-left: 1px solid var(--border);
-  }
-  .montab.on {
-    background: var(--accent-soft);
-    color: var(--text);
-    font-weight: 600;
+    padding: 5px 12px;
   }
   .note {
     margin: 0;
@@ -485,7 +450,8 @@
     font-size: 0.9em;
   }
   .note.warn {
-    border-left: 3px solid var(--risk-caution);
+    background: var(--risk-caution-soft);
+    color: var(--risk-caution-ink);
   }
   .note.err {
     color: var(--danger);
@@ -507,7 +473,7 @@
   .chart {
     flex: 3 1 420px;
     min-width: 0;
-    padding: 10px 12px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
     gap: 6px;
@@ -535,27 +501,13 @@
   .sw.write {
     background: var(--io-write);
   }
-  .mini-seg {
-    display: flex;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    overflow: hidden;
-  }
   .mini-seg button {
-    border: none;
-    background: transparent;
-    color: var(--text-muted);
-    padding: 3px 10px;
-    font-size: 0.85em;
-  }
-  .mini-seg button.on {
-    background: var(--accent-soft);
-    color: var(--text);
+    padding: 2px 10px;
+    font-size: 0.82em;
   }
   svg {
     width: 100%;
     height: 150px;
-    background: var(--surface-2);
     border-radius: var(--radius-sm);
   }
   .grid {
@@ -586,7 +538,7 @@
     gap: 8px;
   }
   .disk {
-    padding: 8px 12px;
+    padding: 12px 14px;
     display: flex;
     flex-direction: column;
     gap: 2px;

@@ -23,18 +23,20 @@
 </script>
 
 <section class="page programs">
-  <header>
+  <header class="page-head">
     <div>
       <h1>{t("pg-title")}</h1>
-      <p class="muted">{t("pg-intro")}</p>
-      <p class="note"><Icon name="shield" size={16} />{t("pg-safety-note")}</p>
+      <p>{t("pg-intro")}</p>
     </div>
-    <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
-      <Icon name="undo" />{t("nav-activity")}
-    </button>
+    <div class="page-actions">
+      <span class="tag safe note"><Icon name="shield" size={13} />{t("pg-safety-note")}</span>
+      <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
+        <Icon name="undo" />{t("nav-activity")}
+      </button>
+    </div>
   </header>
 
-  <div class="tabs" role="tablist">
+  <div class="tabrow" role="tablist">
     {#each TABS as tab (tab.id)}
       <button role="tab" class="tab" class:on={pg.tab === tab.id} aria-selected={pg.tab === tab.id} data-pgtab={tab.id} onclick={() => (pg.tab = tab.id)}>
         <Icon name={tab.icon} size={16} />{t(`pg-tab-${tab.id}`)}
@@ -105,56 +107,18 @@
 {/if}
 
 <style>
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px 40px;
+  .programs {
     display: flex;
     flex-direction: column;
     gap: 14px;
   }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0 0 4px;
-    max-width: 78ch;
+  .programs > .page-head {
+    margin-bottom: 0;
   }
   .note {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    color: var(--risk-safe);
-    font-size: 0.9em;
-  }
-  .tabs {
-    display: flex;
-    gap: 4px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
-  .tab {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 8px 12px;
-    background: none;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--text-muted);
-    cursor: pointer;
-    font: inherit;
-  }
-  .tab.on {
-    color: var(--text);
-    border-bottom-color: var(--accent);
+    flex: none;
+    font-weight: 500;
+    white-space: normal;
   }
   .running {
     padding: 14px 16px;

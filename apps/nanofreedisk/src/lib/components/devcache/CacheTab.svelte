@@ -15,6 +15,7 @@
   import GroupCheck from "../GroupCheck.svelte";
   import Icon from "../Icon.svelte";
   import SelectionBar from "../SelectionBar.svelte";
+  import StatCard from "../StatCard.svelte";
 
   const loc = $derived(intlLocale());
   let open = $state<string[]>([]);
@@ -94,18 +95,18 @@
   <div class="card dc-loading"><Icon name="search" size={22} /><span>{dev.scanning ? t("dev-scanning") : t("clean-not-scanned")}</span></div>
 {:else}
   <div class="dc-scope" bind:this={scope}>
-  <div class="card dc-card summary">
-    <div class="totals">
-      <div><span class="dot safe"></span>{t("clean-level-safe")}<b class="num">{formatSize(report.safe, loc)}</b></div>
-      <div><span class="dot caution"></span>{t("clean-level-caution")}<b class="num">{formatSize(report.caution, loc)}</b></div>
+  <div class="summary">
+    <div class="stats">
+      <StatCard label={t("stat-safe")} tone="safe" value={formatSize(report.safe, loc)} hint={t("dev-safe-all-hint")} />
+      <StatCard label={t("stat-review")} tone="caution" value={formatSize(report.caution, loc)} />
       {#if expert()}
-        <div><span class="dot advanced"></span>{t("clean-level-advanced")}<b class="num">{formatSize(report.advanced, loc)}</b></div>
+        <StatCard label={t("clean-level-advanced")} tone="advanced" value={formatSize(report.advanced, loc)} />
       {/if}
-      <span class="muted dc-small"><Icon name="lock" size={14} /> {t("dev-kept-count", { count: report.kept })}</span>
+      <StatCard label={t("stat-kept")} value={String(report.kept)} unit={t("stat-kept-unit")} hint={t("dev-kept-hint")} />
     </div>
-    <div class="dc-row">
-      <button class="btn ghost" onclick={() => scanDev()} disabled={dev.scanning || !!dev.running} title={t("clean-rescan")}><Icon name="refresh" /></button>
-      <button class="btn primary big" disabled={!allSafe.length || !!dev.running} onclick={() => ask(allSafe)} data-effect title={t("dev-safe-all-hint")}>
+    <div class="dc-row actions">
+      <button class="btn ghost icon" onclick={() => scanDev()} disabled={dev.scanning || !!dev.running} title={t("clean-rescan")} aria-label={t("clean-rescan")}><Icon name="refresh" /></button>
+      <button class="btn primary" disabled={!allSafe.length || !!dev.running} onclick={() => ask(allSafe)} data-effect title={t("dev-safe-all-hint")}>
         <Icon name="clean" />{t("clean-safe-button", { size: formatSize(bytesOf(allSafe), loc) })}
       </button>
     </div>
@@ -250,41 +251,17 @@
   }
   .summary {
     display: flex;
-    gap: 16px;
-    align-items: center;
-    justify-content: space-between;
+    gap: 12px;
+    align-items: stretch;
     flex-wrap: wrap;
   }
-  .totals {
-    display: flex;
-    gap: 18px;
-    align-items: center;
-    flex-wrap: wrap;
+  .summary .stats {
+    flex: 1 1 480px;
+    margin: 0;
   }
-  .totals > div,
-  .totals > span {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-  .dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    display: inline-block;
-  }
-  .dot.safe {
-    background: var(--risk-safe);
-  }
-  .dot.caution {
-    background: var(--risk-caution);
-  }
-  .dot.advanced {
-    background: var(--risk-advanced);
-  }
-  .btn.big {
-    padding: 10px 18px;
-    font-size: 1.05em;
+  .summary .actions {
+    flex: none;
+    align-self: center;
   }
   .chev {
     display: inline-flex;
@@ -294,7 +271,7 @@
     transform: rotate(90deg);
   }
   .vendor.over {
-    border-left: 4px solid var(--risk-caution);
+    border-color: var(--risk-caution);
   }
   .head h2 {
     margin: 0;

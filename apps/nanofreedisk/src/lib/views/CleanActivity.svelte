@@ -9,6 +9,7 @@
   import { reasonText } from "../clean/state.svelte";
   import type { ActivityDetail, OperationRow } from "../clean/types";
   import Icon from "../components/Icon.svelte";
+  import StatCard from "../components/StatCard.svelte";
 
   const loc = $derived(intlLocale());
   let ops = $state<OperationRow[] | null>(null);
@@ -39,6 +40,9 @@
     }
     return out;
   });
+
+  const freed = $derived((ops ?? []).reduce((n, o) => n + o.freed, 0));
+  const restorable = $derived((ops ?? []).reduce((n, o) => n + o.restorable, 0));
 
   async function details(o: OperationRow) {
     if (open?.operation.id === o.id) {
@@ -92,23 +96,33 @@
 </script>
 
 <section class="page">
-  <header>
+  <header class="page-head">
     <div>
       <h1>{t("activity-title")}</h1>
-      <p class="muted">{t("activity-intro")}</p>
+      <p>{t("activity-intro")}</p>
     </div>
-    <button class="btn ghost" onclick={load} title={t("home-refresh")}><Icon name="refresh" /></button>
+    <div class="page-actions">
+      <button class="btn ghost icon" onclick={load} title={t("home-refresh")} aria-label={t("home-refresh")}><Icon name="refresh" /></button>
+    </div>
   </header>
 
+  {#if ops?.length}
+    <div class="stats">
+      <StatCard label={t("stat-freed")} value={formatSize(freed, loc)} unit={t("stat-operations", { count: ops.length })} />
+      <StatCard label={t("stat-restorable")} tone={restorable ? "accent" : null} value={String(restorable)} unit={t("stat-restorable-unit")} />
+    </div>
+  {/if}
+
   {#if ops && !ops.length}
-    <div class="card none"><Icon name="check" size={22} /><span class="muted">{t("activity-empty")}</span></div>
+    <div class="panel none"><Icon name="check" size={22} /><span class="muted">{t("activity-empty")}</span></div>
   {/if}
 
   {#each days as d (d.day)}
+    <section class="panel day-panel">
     <h2 class="day">{d.day}</h2>
     <ul class="ops">
       {#each d.rows as o (o.id)}
-        <li class="card op {o.state}">
+        <li class="op {o.state}">
           <div class="line">
             <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : o.kind === "ai-leftovers" || o.kind === "worktree" ? "agent" : o.kind === "uninstall" || o.kind === "software-junk" ? "apps" : "trash"} size={18} /></span>
             <div class="what">
@@ -158,40 +172,26 @@
         </li>
       {/each}
     </ul>
+    </section>
   {/each}
 </section>
 
 <style>
-  .page {
-    height: 100%;
-    overflow: auto;
-    padding: 28px 32px 40px;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 14px;
-  }
-  h1 {
-    margin: 0 0 4px;
-    font-size: 1.6em;
-  }
-  header p {
-    margin: 0;
-    max-width: 70ch;
-  }
   .none {
     display: flex;
     gap: 10px;
     align-items: center;
-    padding: 16px;
+  }
+  .day-panel {
+    margin-bottom: 14px;
+    padding-top: 12px;
+    padding-bottom: 6px;
   }
   .day {
-    font-size: 0.95em;
+    font-size: 0.86em;
+    font-weight: 600;
     color: var(--text-muted);
-    margin: 18px 0 8px;
+    margin: 0 0 4px;
   }
   .ops {
     list-style: none;
@@ -199,10 +199,13 @@
     padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 8px;
   }
   .op {
-    padding: 10px 14px;
+    padding: 10px 0;
+    border-top: 1px solid var(--border);
+  }
+  .op:first-child {
+    border-top: none;
   }
   .op.restored,
   .op.purged {
@@ -214,16 +217,23 @@
     align-items: center;
   }
   .kind {
-    color: var(--accent);
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    color: var(--text-muted);
+  }
+  .what strong {
+    font-weight: 600;
   }
   .what {
     flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;
-  }
-  .small {
-    font-size: 0.86em;
   }
   .state {
     color: var(--text-muted);
@@ -252,10 +262,10 @@
   }
   .status.done,
   .status.partial {
-    color: var(--risk-safe);
+    color: var(--risk-safe-ink);
   }
   .status.skipped {
-    color: var(--risk-caution);
+    color: var(--risk-caution-ink);
   }
   .status.failed {
     color: var(--danger);

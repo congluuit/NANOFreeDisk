@@ -60,7 +60,7 @@
 <div class="toolbar">
   <span class="muted small privacy"><Icon name="shield" size={14} />{t("hw-privacy")}</span>
   <span class="grow"></span>
-  <button class="btn ghost" onclick={load} disabled={loading} title={t("hw-refresh")}><Icon name="refresh" /></button>
+  <button class="btn ghost icon" onclick={load} disabled={loading} title={t("hw-refresh")} aria-label={t("hw-refresh")}><Icon name="refresh" /></button>
   <button class="btn" onclick={copyText} disabled={!hw.inventory}><Icon name="copy" />{t("hw-copy-text")}</button>
   {#if inTauri && app.settings.mode === "expert"}
     <button class="btn" onclick={exportJson} disabled={!hw.inventory}><Icon name="export" />{t("hw-export-json")}</button>
@@ -75,7 +75,7 @@
   {:else}
     <div class="grid">
       {#each list as s (s.id)}
-        <article class="card sec" data-sec={s.id}>
+        <article class="panel sec" data-sec={s.id}>
           <h2><span class="ic"><Icon name={s.icon} size={18} /></span>{s.title}</h2>
           {#each s.items as it, i (i)}
             <div class="item">
@@ -127,9 +127,6 @@
   .grow {
     flex: 1;
   }
-  .small {
-    font-size: 0.86em;
-  }
   .scroll {
     flex: 1;
     min-height: 0;
@@ -144,7 +141,6 @@
     column-gap: 14px;
   }
   .sec {
-    padding: 14px 16px;
     min-width: 0;
     margin-bottom: 14px;
     break-inside: avoid;
@@ -153,17 +149,17 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    margin: 0 0 10px;
-    font-size: 1.02em;
+    margin: 0 0 12px;
+    font-size: 1.06em;
   }
   .ic {
     display: grid;
     place-items: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 8px;
-    background: var(--accent-soft);
-    color: var(--accent);
+    width: 32px;
+    height: 32px;
+    border-radius: 9px;
+    background: var(--surface-2);
+    color: var(--text-muted);
   }
   .item + .item {
     margin-top: 10px;
@@ -179,11 +175,6 @@
   }
   .tag {
     flex: none;
-    padding: 0 6px;
-    border-radius: 4px;
-    background: var(--surface-2);
-    color: var(--text-muted);
-    font-size: 0.8em;
   }
   dl {
     display: grid;
@@ -217,9 +208,9 @@
     margin-top: 10px;
   }
   .chip {
-    padding: 1px 7px;
-    border: 1px solid var(--border);
+    padding: 1px 8px;
     border-radius: 999px;
+    background: var(--surface-2);
     font-size: 0.78em;
     color: var(--text-muted);
   }

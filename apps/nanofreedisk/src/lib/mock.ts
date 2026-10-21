@@ -111,6 +111,9 @@ function build(): void {
   named(root, ["Users", "nano", "AppData", "Local", "Temp", "~build-cache"]);
   const desk = named(root, ["Users", "nano", "Desktop"]);
   for (const n of ["Photoshop.lnk", "Old Game.lnk", "Notes.lnk", "Tax 2019.lnk"]) add(desk, n, "file", 2048);
+  // an AI agent's conversation history: big, and never deletable (PLAN §5.1)
+  const chats = named(root, ["Users", "nano", ".claude", "projects"]);
+  for (let i = 0; i < 6; i++) add(chats, `session-${i + 1}.jsonl`, "file", 1_400_000_000 + i * 310_000_000);
   add(root, "pagefile.sys", "file", 17_179_869_184, 3);
   add(root, "hiberfil.sys", "file", 6_871_947_673, 3);
   add(named(root, ["Users", "nano"]), "AppData-link", "junction");
@@ -408,6 +411,8 @@ function classifyMock(id: number): MUnit | null {
   const parent = e.parent >= 0 ? entries[e.parent].name.toLowerCase() : "";
   if (p === "c:\\windows") return mockUnit(id, "keep", "system", "none", bi("Part of Windows. Deleting files here breaks Windows or its updates.", "Một phần của Windows. Xóa tệp ở đây làm hỏng Windows hoặc bản cập nhật."));
   if (p === "c:\\program files") return mockUnit(id, "keep", "programs", "none", bi("Installed programs: uninstall them from Settings → Apps instead.", "Chương trình đã cài: hãy gỡ trong Cài đặt → Ứng dụng."));
+  if (p.endsWith("\\.claude\\projects"))
+    return mockUnit(id, "keep", "agent-history", "none", bi("Your conversations with Claude Code. They exist nowhere else: never deleted.", "Các cuộc trò chuyện của bạn với Claude Code. Không lưu ở nơi nào khác: không bao giờ bị xóa."), { app: "Claude Code" });
   if (name === "pagefile.sys" || name === "hiberfil.sys")
     return mockUnit(id, "guide", "explained", "guide", bi("Windows' memory on disk; only Windows' own settings shrink it.", "Bộ nhớ của Windows trên đĩa; chỉ thiết lập của Windows thu nhỏ được."), { title: name === "pagefile.sys" ? bi("Page file", "Tệp hoán đổi") : bi("Hibernation file", "Tệp ngủ đông"), source: name.replace(".sys", "") });
   if (parent === "temp" && p.includes("\\appdata\\local\\temp\\"))
@@ -467,7 +472,7 @@ function adviceNode(id: number): NodeAdvice {
     const x = unitOf[d] >= 0 ? units[unitOf[d]] : null;
     if (x && entries[d].kind === "file" && !entries[d].removed && actionable(x)) reclaim += entries[d].size;
   }
-  const hard = !!u && (u.reason === "system" || u.reason === "programs");
+  const hard = !!u && (u.reason === "system" || u.reason === "programs" || u.reason === "agent-history");
   return { verdict: u?.verdict ?? null, reason: u?.reason ?? null, root: !!u && u.entry === id, hard, inside, reclaim };
 }
 
@@ -489,8 +494,8 @@ function mockGroups() {
       key, verdict: first.verdict, reason: first.reason, level: first.level, source: first.source, app: first.app, title: first.title,
       impact: first.impact, untouched: first.untouched, action: first.action, blocked: first.blocked, store: first.store, requiresClosed: [],
       bytes, recent: 0, files: sized.reduce((s, x) => s + x.files, 0), count: sized.length, selected: actionable && first.selected, actionable,
-      hard: first.reason === "system" || first.reason === "programs",
-      overridable: !actionable && first.reason !== "system" && first.reason !== "programs" && first.reason !== "explained",
+      hard: first.reason === "system" || first.reason === "programs" || first.reason === "agent-history",
+      overridable: !actionable && first.reason !== "system" && first.reason !== "programs" && first.reason !== "explained" && first.reason !== "agent-history",
       location: sized.length === 1 ? path(units[sized[0].i].entry).slice(3) : null, elsewhere: false,
       items: sized.slice(0, 20).map((x) => ({ id: units[x.i].entry, path: path(units[x.i].entry).slice(3), bytes: x.bytes, files: x.files, blocked: null })),
     };

@@ -4,7 +4,7 @@
   import { formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app } from "../state.svelte";
-  import { bestText } from "../theme";
+  import { tileStyle, type TileStyle } from "../mapstyle";
   import { hitTest, layoutTreemap, minBytesFor, type Layout } from "../treemap";
   import { REST_ID, type Slice } from "../types";
   import { VERDICTS, VERDICT_TOKEN, verdictOfCode } from "../advice";
@@ -30,20 +30,25 @@
   let height = $state(0);
   let slice = $state<Slice | null>(null);
   let layout: Layout | null = null;
+  /** Tiles drawn (a folder below the drawn levels is one tile of its own). */
+  let shown: Uint8Array = new Uint8Array(0);
   let hover = $state(-1);
   let tip = $state({ x: 0, y: 0 });
   let stats = $state({ nodes: 0, layoutMs: 0, drawMs: 0 });
   let themeTick = $state(0);
   const loc = $derived(intlLocale());
 
-  // Paint bucket per tile, computed once per slice: category index, then "small
-  // items", then links; DIR for directory frames.
+  // Paint bucket per tile, computed once per slice: category (or verdict) index, then
+  // "small items", links and what is safe to clear (green, hatched); DIR for frames.
   const BUCKETS = [...CATEGORIES, "other"] as const;
   const REST = BUCKETS.length;
   const LINK = BUCKETS.length + 1;
+  const SAFE = BUCKETS.length + 2;
+  const NB = SAFE + 1;
   const DIR = 255;
   // by verdict: bucket = verdict code (unclaimed tiles count as "unknown")
-  const byVerdict = $derived(colorBy === "verdict" && !!slice?.verdicts?.length);
+  const hasVerdicts = $derived(!!slice?.verdicts?.length);
+  const byVerdict = $derived(colorBy === "verdict" && hasVerdicts);
   const paint = $derived.by(() => {
     const p = new Uint8Array(slice?.ids.length ?? 0);
     if (!slice) return p;
@@ -51,10 +56,43 @@
     for (let i = 0; i < p.length; i++) {
       const k = slice.kinds[i];
       if (k === 1) p[i] = DIR;
-      else if (byVerdict) p[i] = k === 2 ? LINK : Math.min(codes[i] ?? 4, 4);
-      else p[i] = k === 3 ? REST : k === 2 ? LINK : BUCKETS.indexOf(categoryOf(slice.names[i]));
+      else if (k === 2) p[i] = LINK;
+      else if (k === 3) p[i] = REST;
+      else if (hasVerdicts && codes[i] === 0) p[i] = SAFE;
+      else if (byVerdict) p[i] = Math.min(codes[i] ?? 4, 4);
+      else p[i] = BUCKETS.indexOf(categoryOf(slice.names[i]));
     }
     return p;
+  });
+  /** Bucket holding most of each folder's bytes (its frame takes that tint). */
+  const dominant = $derived.by(() => {
+    const n = slice?.ids.length ?? 0;
+    const dom = new Uint8Array(n).fill(REST);
+    if (!slice) return dom;
+    const sums = new Float64Array(n * NB);
+    for (let i = n - 1; i >= 1; i--) {
+      const p = slice.parents[i];
+      if (p < 0) continue;
+      if (paint[i] === DIR) {
+        for (let b = 0; b < NB; b++) sums[p * NB + b] += sums[i * NB + b];
+      } else {
+        sums[p * NB + paint[i]] += slice.sizes[i];
+      }
+    }
+    for (let i = 0; i < n; i++) {
+      if (paint[i] !== DIR) continue;
+      let best: number = REST;
+      let max = 0;
+      for (let b = 0; b < NB; b++) {
+        if (b === REST || b === LINK) continue;
+        if (sums[i * NB + b] > max) {
+          max = sums[i * NB + b];
+          best = b;
+        }
+      }
+      dom[i] = best;
+    }
+    return dom;
   });
 
   // refetch when the directory, the data or the size changes
@@ -67,7 +105,8 @@
     let cancelled = false;
     const handle = setTimeout(async () => {
       try {
-        const s = await api.slice(id, 14, minBytesFor(total, w, h, 5), 60_000);
+        // tiles under ~5×5 px fold into "small items" (they only tint their folder)
+        const s = await api.slice(id, 14, minBytesFor(total, w, h, 30), 60_000);
         if (!cancelled) slice = s;
       } catch {
         if (!cancelled) slice = null;
@@ -89,6 +128,7 @@
   $effect(() => {
     void themeTick;
     void paint;
+    void dominant;
     if (slice && width && height) draw(slice, width, height);
   });
 
@@ -109,60 +149,170 @@
     return ctx;
   }
 
+  /** Styles per bucket for the current theme. */
+  function styles(): TileStyle[] {
+    const pal = readPalette();
+    const css = getComputedStyle(document.documentElement);
+    const v = (name: string) => css.getPropertyValue(name).trim() || pal.other;
+    const surface = v("--surface");
+    const dark = document.documentElement.dataset.theme !== "light";
+    const base = byVerdict
+      ? [...VERDICTS.map((x) => v(VERDICT_TOKEN[x])), ...Array(BUCKETS.length - VERDICTS.length).fill(pal.other)]
+      : BUCKETS.map((c) => pal[c]);
+    return [...base, pal.other, pal.link, v("--risk-safe")].map((c) => tileStyle(c, surface, dark));
+  }
+
+  function hatchPattern(ctx: CanvasRenderingContext2D, color: string): CanvasPattern | null {
+    const dpr = window.devicePixelRatio || 1;
+    const size = 7;
+    const c = document.createElement("canvas");
+    c.width = c.height = Math.round(size * dpr);
+    const g = c.getContext("2d");
+    if (!g) return null;
+    g.scale(dpr, dpr);
+    g.strokeStyle = color;
+    g.lineWidth = 1.4;
+    g.beginPath();
+    for (const o of [-size, 0, size]) {
+      g.moveTo(o, size);
+      g.lineTo(o + size, 0);
+    }
+    g.stroke();
+    const pat = ctx.createPattern(c, "repeat");
+    pat?.setTransform(new DOMMatrix([1 / dpr, 0, 0, 1 / dpr, 0, 0]));
+    return pat;
+  }
+
+  function radius(w: number, h: number): number {
+    return Math.max(0, Math.min(6, w / 5, h / 5));
+  }
+
   function draw(s: Slice, w: number, h: number) {
     const t0 = performance.now();
-    const l = layoutTreemap(s, { x: 0, y: 0, w, h });
+    const fs = app.settings.fontScale;
+    const l = layoutTreemap(s, { x: 0, y: 0, w, h }, { pad: 4, header: Math.round(22 * fs), minFrame: 8 });
     const t1 = performance.now();
     layout = l;
     const ctx = setup(base, w, h);
-    const pal = readPalette();
-    const textOn = new Map<string, string>();
-    const textFor = (c: string) => {
-      let v = textOn.get(c);
-      if (!v) textOn.set(c, (v = bestText(c)));
-      return v;
-    };
-    ctx.fillStyle = pal.border;
-    ctx.fillRect(0, 0, w, h);
-    // Paint in buckets of one color (fewer fillStyle switches: ~15 ms for 50k tiles).
-    // Directories first, in paint order, so nested frames land on their parents;
-    // leaves never overlap each other, so their order does not matter.
-    const css = getComputedStyle(document.documentElement);
-    const fills = byVerdict
-      ? [...VERDICTS.map((v) => css.getPropertyValue(VERDICT_TOKEN[v]).trim() || pal.other), ...Array(BUCKETS.length - VERDICTS.length).fill(pal.other), pal.rest, pal.link]
-      : [...BUCKETS.map((c) => pal[c]), pal.rest, pal.link];
-    const tile = (i: number) => {
-      const rw = l.w[i];
-      const rh = l.h[i];
-      if (rw > 3 && rh > 3) ctx.fillRect(l.x[i] + 0.5, l.y[i] + 0.5, rw - 1, rh - 1);
-      else if (rw > 0.6 && rh > 0.6) ctx.fillRect(l.x[i], l.y[i], rw, rh);
-    };
-    ctx.fillStyle = pal.dir;
-    for (let k = 0; k < l.count; k++) if (paint[l.order[k]] === DIR) tile(l.order[k]);
-    for (let b = 0; b < fills.length; b++) {
-      ctx.fillStyle = fills[b];
-      for (let k = 0; k < l.count; k++) if (paint[l.order[k]] === b) tile(l.order[k]);
+    const st = styles();
+    // Folder frames depth by depth (a deeper frame lands on its parent), batched by
+    // tint; then leaves batched by bucket (leaves never overlap each other). Tiles
+    // are inset by 1 px so the parent shows through as a thin gap.
+    //
+    // Only two levels are drawn, like a person reads a disk: the folders of the
+    // folder shown, and what is in them. A deeper folder is one tile in the tint of
+    // what it mostly holds (double-click zooms in), unless it is big enough on screen
+    // to open it too.
+    const n = s.ids.length;
+    const open = new Uint8Array(n);
+    const vis = new Uint8Array(n);
+    const bucket = new Uint8Array(n);
+    open[0] = 1;
+    vis[0] = 1;
+    const big = 0.1 * w * h;
+    const maxDepth = s.depths.reduce((m, d) => Math.max(m, d), 0);
+    const frames: number[][] = Array.from({ length: maxDepth + 1 }, () => []);
+    const leaves: number[][] = Array.from({ length: NB }, () => []);
+    for (let k = 1; k < l.count; k++) {
+      const i = l.order[k];
+      if (!open[s.parents[i]] || !(l.w[i] > 0.6 && l.h[i] > 0.6)) continue;
+      vis[i] = 1;
+      const d = s.depths[i] - s.depths[0];
+      const room = l.head[i] && (d < 2 || (d < 6 && l.w[i] * l.h[i] >= big));
+      if (paint[i] === DIR && room) {
+        open[i] = 1;
+        frames[s.depths[i]].push(i);
+      } else {
+        bucket[i] = paint[i] === DIR ? dominant[i] : paint[i];
+        leaves[bucket[i]].push(i);
+      }
     }
-    // labels only where they can be read: the first two folder levels and big tiles
-    // (hover shows the rest)
-    ctx.font = `${12 * app.settings.fontScale}px "Segoe UI", sans-serif`;
+    shown = vis;
+    const shape = (list: number[], big: boolean) => {
+      ctx.beginPath();
+      for (const i of list) {
+        const rw = l.w[i];
+        const rh = l.h[i];
+        const isBig = rw >= 8 && rh >= 8;
+        if (isBig !== big) continue;
+        if (big) ctx.roundRect(l.x[i] + 1, l.y[i] + 1, rw - 2, rh - 2, radius(rw, rh));
+        else if (rw > 2.5 && rh > 2.5) ctx.rect(l.x[i] + 0.5, l.y[i] + 0.5, rw - 1, rh - 1);
+        else ctx.rect(l.x[i], l.y[i], rw, rh);
+      }
+    };
+    ctx.lineWidth = 1;
+    for (const list of frames) {
+      if (!list.length) continue;
+      for (let b = 0; b < NB; b++) {
+        const mine = list.filter((i) => dominant[i] === b);
+        if (!mine.length) continue;
+        ctx.fillStyle = st[b].frame;
+        ctx.strokeStyle = st[b].frameEdge;
+        shape(mine, true);
+        ctx.fill();
+        ctx.stroke();
+        shape(mine, false);
+        ctx.fill();
+      }
+    }
+    for (let b = 0; b < NB; b++) {
+      const list = leaves[b];
+      if (!list.length) continue;
+      ctx.fillStyle = st[b].fill;
+      ctx.strokeStyle = st[b].edge;
+      shape(list, true);
+      ctx.fill();
+      ctx.stroke();
+      const pat = b === SAFE ? hatchPattern(ctx, st[b].hatch) : null;
+      if (pat) {
+        ctx.fillStyle = pat;
+        ctx.fill();
+      }
+      ctx.fillStyle = st[b].fill;
+      shape(list, false);
+      ctx.fill();
+    }
+    // labels where they can be read (hover shows the rest): a folder's name and size
+    // in its label strip; a tile's name top-left and its size big bottom-left
     ctx.textBaseline = "middle";
+    const font = (px: number, weight = 400) => `${weight} ${px * fs}px "Segoe UI Variable Text", "Segoe UI", sans-serif`;
     for (let k = 1; k < l.count; k++) {
       const i = l.order[k];
       const x = l.x[i];
       const y = l.y[i];
       const rw = l.w[i];
       const rh = l.h[i];
-      if (paint[i] === DIR) {
-        if (s.depths[i] <= 2 && rw > 110 && rh > 56) {
-          ctx.fillStyle = pal.text;
-          label(ctx, `${s.names[i]}  ${formatSize(s.sizes[i], loc)}`, x + 5, y + 9, rw - 10);
+      if (!vis[i]) continue;
+      if (open[i]) {
+        if (rw < 70) continue;
+        const sty = st[dominant[i]];
+        const mid = y + 4 + 9 * fs;
+        const size = formatSize(s.sizes[i], loc);
+        ctx.font = font(11);
+        const sw = ctx.measureText(size).width;
+        const room = rw - 18 - sw;
+        ctx.font = font(12, 600);
+        ctx.fillStyle = sty.frameInk;
+        label(ctx, s.names[i], x + 9, mid, room > 40 ? room - 8 : rw - 18);
+        if (room > 40) {
+          ctx.font = font(11);
+          ctx.globalAlpha = 0.8;
+          ctx.fillText(size, x + rw - 9 - sw, mid);
+          ctx.globalAlpha = 1;
         }
-      } else if (rw > 96 && rh > 30) {
-        ctx.fillStyle = textFor(fills[paint[i]]);
+      } else if (rw > 52 && rh > 26) {
+        const sty = st[bucket[i]];
+        ctx.fillStyle = sty.ink;
+        ctx.font = font(12, 600);
         const name = s.kinds[i] === 3 ? t("analyze-small-items") : s.names[i];
-        label(ctx, name, x + 5, y + 10, rw - 10);
-        if (rh > 46) label(ctx, formatSize(s.sizes[i], loc), x + 5, y + 25, rw - 10);
+        label(ctx, name, x + 9, y + 6 + 8 * fs, rw - 18);
+        if (rh > 50) {
+          const px = Math.max(13, Math.min(rw / 6, rh / 3.2, 30));
+          ctx.font = font(px, 700);
+          ctx.textBaseline = "alphabetic";
+          label(ctx, formatSize(s.sizes[i], loc), x + 9, y + rh - 9, rw - 18);
+          ctx.textBaseline = "middle";
+        }
       }
     }
     stats = { nodes: s.ids.length, layoutMs: t1 - t0, drawMs: performance.now() - t1 };
@@ -185,26 +335,33 @@
     if (!layout || !slice) return;
     const pal = readPalette();
     const sel = new Set(selected);
-    ctx.lineWidth = 2;
+    const l = layout;
+    const ring = (i: number, inset: number) => {
+      ctx.beginPath();
+      ctx.roundRect(l.x[i] + inset, l.y[i] + inset, Math.max(0, l.w[i] - 2 * inset), Math.max(0, l.h[i] - 2 * inset), radius(l.w[i], l.h[i]));
+      ctx.stroke();
+    };
+    ctx.lineWidth = 2.5;
     ctx.strokeStyle = pal.selected;
-    for (let k = 0; k < layout.count; k++) {
-      const i = layout.order[k];
-      if (i > 0 && sel.has(slice.ids[i])) {
-        ctx.strokeRect(layout.x[i] + 1, layout.y[i] + 1, layout.w[i] - 2, layout.h[i] - 2);
-      }
+    for (let k = 0; k < l.count; k++) {
+      const i = l.order[k];
+      if (i > 0 && shown[i] && sel.has(slice.ids[i])) ring(i, 1.5);
     }
     if (hover > 0) {
-      ctx.strokeStyle = pal.hover;
-      ctx.globalAlpha = 0.85;
+      ctx.strokeStyle = pal.text;
+      ctx.globalAlpha = 0.7;
       ctx.lineWidth = 1.5;
-      ctx.strokeRect(layout.x[hover] + 0.75, layout.y[hover] + 0.75, layout.w[hover] - 1.5, layout.h[hover] - 1.5);
+      ring(hover, 1);
     }
   }
 
   function at(e: MouseEvent): number {
-    if (!layout) return -1;
+    if (!layout || !slice) return -1;
     const r = overlay.getBoundingClientRect();
-    return hitTest(layout, e.clientX - r.left, e.clientY - r.top);
+    let i = hitTest(layout, e.clientX - r.left, e.clientY - r.top);
+    // what is inside a folder drawn as one tile belongs to that tile
+    while (i > 0 && !shown[i]) i = slice.parents[i];
+    return i;
   }
 
   function move(e: MouseEvent) {
@@ -290,8 +447,6 @@
     width: 100%;
     height: 100%;
     overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: var(--bg);
   }
   canvas {
     position: absolute;
@@ -307,8 +462,8 @@
     flex-direction: column;
     gap: 2px;
     max-width: 230px;
-    padding: 6px 10px;
-    background: var(--surface-2);
+    padding: 8px 12px;
+    background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow);

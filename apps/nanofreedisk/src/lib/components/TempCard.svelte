@@ -63,27 +63,30 @@
 <style>
   .temps {
     display: grid;
-    grid-template-columns: auto repeat(3, 1fr);
-    align-items: center;
-    gap: 18px;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    gap: 10px 16px;
     width: 100%;
-    padding: 14px 18px;
+    padding: 16px 18px;
     margin-bottom: 22px;
     text-align: left;
     color: inherit;
+    font: inherit;
     transition: border-color 0.12s;
   }
   .temps:hover {
-    border-color: var(--accent);
+    border-color: var(--text-muted);
   }
   .head {
+    grid-column: 1 / -1;
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--accent);
+    color: var(--text-muted);
   }
   .head strong {
     color: var(--text);
+    font-size: 1.06em;
   }
   .cell {
     display: flex;
@@ -97,7 +100,9 @@
     font-size: 0.85em;
   }
   .v {
-    font-size: 1.35em;
+    font-size: 1.5em;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     font-variant-numeric: tabular-nums;
   }
   .v.ok {
