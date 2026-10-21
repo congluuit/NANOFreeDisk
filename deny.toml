@@ -42,6 +42,13 @@ ignore = [
   # setup (egui 0.32, the last release for Rust 1.85). It only parses Segoe UI and
   # other fonts from C:\Windows\Fonts, never untrusted files.
   { id = "RUSTSEC-2026-0192", reason = "unmaintained; ttf-parser via egui 0.32 (setup), newer egui needs Rust 1.88 > MSRV 1.85" },
+  # Unmaintained (no vulnerability): zvariant/zbus_names folded into zbus 6.0
+  # (needs Rust 1.89). Linux-only D-Bus stack reached through zbus 5 from
+  # notify-rust/tauri-plugin-opener/tauri-plugin-single-instance and
+  # accesskit_unix (egui 0.32, setup). Goes away once those move to zbus 6.
+  { id = "RUSTSEC-2026-0370", reason = "unmaintained; zvariant via zbus 5 (tauri plugins, egui 0.32), zbus 6 needs Rust 1.89 > MSRV 1.85" },
+  { id = "RUSTSEC-2026-0371", reason = "unmaintained; zbus_names via zbus 5 (tauri plugins, egui 0.32), zbus 6 needs Rust 1.89 > MSRV 1.85" },
+  { id = "RUSTSEC-2026-0372", reason = "unmaintained; zvariant_derive via zbus 5 (tauri plugins, egui 0.32), zbus 6 needs Rust 1.89 > MSRV 1.85" },
 ]
 
 [licenses]
