@@ -20,7 +20,7 @@ name = "nanofreedisk-setup-pack"
 path = "src/bin/pack.rs"
 
 [dependencies]
-zstd = { version = "0.13", default-features = false }
+zstd = { version = "0.14", default-features = false }
 
 [target.'cfg(windows)'.dependencies]
 eframe = { version = "0.32", default-features = false, features = ["accesskit", "wgpu"] }
