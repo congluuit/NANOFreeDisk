@@ -6,6 +6,11 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-10-21
+
+### Fixed
+- A rule path compared against a folder name with accents (Vietnamese "Tài liệu", "Bên"…) could cut a character in half and crash the scan — seen in Programs → Software junk; paths are now compared on character boundaries.
+
 ## [0.2.0] - 2026-10-21
 
 First release with a macOS build (preview), the Programs view and a new, clearer look.
@@ -23,7 +28,6 @@ First release with a macOS build (preview), the Programs view and a new, clearer
 - **A clearer look**, modeled on a read-only "disk map": every view starts with a short header and a row of stat cards (big number, small label). **Analyze** shows *Free right now*, *Safe to remove*, *Needs review* and *Not in this scan*; an **Explorer** card holds the treemap (or the folder list) colored by file type or by cleanup verdict, safe-to-clear blocks hatched, with a legend; the suggestions become a **Recommendations** panel — grouped tick boxes (*Safe to remove*, *Review first*) with the path under each item, the selected total, *Select safe*, *Copy list* and *Clean N selected*. Home, the sidebar and the other views use the same cards, panels and tab rows, in the light and dark themes. AI conversation history stays 🔒 Protected and is never offered.
 
 ### Fixed
-- A rule path compared against a folder name with accents (Vietnamese "Tài liệu", "Bên"…) could cut a character in half and crash the scan — seen in Programs → Software junk; paths are now compared on character boundaries.
 - Wrong CPU numbers right after opening a sensor view: load, power, effective clocks, network and GPU rates were computed over a few milliseconds on the first sample (e.g. 58 % CPU load at 20 %, inflated power maxima). Rate sources now wait 500 ms after discovery.
 - The Home card no longer shows an ACPI thermal zone (often a fixed firmware value) as the CPU temperature; it says why the CPU value is missing and links to the setup instead.
 - The estimated CPU clock is named "Average clock while busy" and is hidden once Advanced sensors report measured clocks.
@@ -143,7 +147,8 @@ First preview release for Windows 10/11 (x64): branded setup, MSI, classic EXE a
 - **Drive health's administrator reads use the shared elevated helper**: if Advanced sensors or the disk monitor's file detail already started it, there is no second UAC prompt (and the other way round); the helper stays until the app closes.
 - **AI conversation history is never deleted** (PLAN §5.1): the SafetyGate protects the session / conversation folders of Claude Code and Claude Desktop, Codex, Gemini CLI, Antigravity, Copilot (VS Code and CLI), Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Qwen Code, LM Studio and Jan, plus Aider chat logs and `.specstory` folders inside projects, against every origin — rules of any level, DevCache, Duplicates and items picked by hand — and refuses the folders that contain them. The rules that used to offer old transcripts (🟡 Claude Code / Codex sessions, Gemini CLI `tmp` and history, Copilot chat, Cursor and VS Code `workspaceStorage`, Windsurf Cascade, Continue, Cline, Roo Code) are now 🔴 Keep rules, and new Keep rules list the other agents' history in DevCache.
 
-[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/congluuit/NANOFreeDisk/releases/tag/v0.1.0
