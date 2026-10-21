@@ -39,6 +39,14 @@ export interface Program {
   broken: boolean;
 }
 
+/** A program's icon (`programs_icons`). */
+export interface ProgramIcon {
+  /** `data:image/png;base64,…` */
+  src: string;
+  /** Show it on a colored plate (Store logos made for one, often a white glyph). */
+  plate: boolean;
+}
+
 export type LeftoverKind = "folder" | "file" | "shortcut" | "registry-key" | "registry-value" | "service";
 
 export interface Leftover {

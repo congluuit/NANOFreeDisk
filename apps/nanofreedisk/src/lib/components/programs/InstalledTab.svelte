@@ -8,10 +8,11 @@
   import { intlLocale, t } from "../../i18n.svelte";
   import { expert, fail } from "../../state.svelte";
   import { programsApi } from "../../programs/api";
-  import { hue, initial, removable, uninstallCommand, visiblePrograms, type ProgramFilter, type ProgramSort } from "../../programs/model";
+  import { removable, uninstallCommand, visiblePrograms, type ProgramFilter, type ProgramSort } from "../../programs/model";
   import { loadPrograms, pg } from "../../programs/state.svelte";
   import type { Program } from "../../programs/types";
   import type { SelItem } from "../../selection";
+  import AppIcon from "./AppIcon.svelte";
   import CliHint from "../CliHint.svelte";
   import Icon from "../Icon.svelte";
   import SelectionBar from "../SelectionBar.svelte";
@@ -80,7 +81,7 @@
           onchange={() => toggle(p.id)}
           aria-label={t("pg-pick", { name: p.name })}
         />
-        <span class="avatar" style="--h: {hue(p.name)}" aria-hidden="true">{initial(p.name)}</span>
+        <AppIcon id={p.id} name={p.name} />
         <div class="who">
           <div class="name ellipsis" title={p.name}>{p.name}</div>
           <div class="muted pg-small ellipsis">
@@ -189,16 +190,6 @@
   }
   .prog.picked {
     background: var(--accent-soft);
-  }
-  .avatar {
-    width: 34px;
-    height: 34px;
-    display: grid;
-    place-items: center;
-    border-radius: 9px;
-    font-weight: 700;
-    color: var(--text);
-    background: color-mix(in srgb, hsl(var(--h) 60% 50%) 35%, var(--surface-2));
   }
   .who {
     min-width: 0;

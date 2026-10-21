@@ -5,6 +5,7 @@
 //! Lives in the history database (tables `operations` and `operation_items`, schema
 //! 2) but is independent of the scan snapshots: clearing the scan history keeps it.
 
+use std::io;
 use std::path::{Path, PathBuf};
 
 use nfd_core::exec::{
@@ -14,7 +15,6 @@ use nfd_core::plan::DeleteMode;
 use rusqlite::{OptionalExtension, params};
 use serde::Serialize;
 
-use crate::uninstall::QUARANTINE_MODES;
 use crate::{History, HistoryError, Result, to_i64, to_u64};
 
 pub(crate) const SCHEMA: &str = "
@@ -49,19 +49,45 @@ CREATE TABLE operation_items (
 ) WITHOUT ROWID;
 ";
 
-/// Add `operation_items.message` (what a command ran, how to undo it) when missing.
-/// Additive: older versions select and insert their columns by name and keep
-/// working with the same database, so the schema version stays.
-pub(crate) fn add_message_column(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
-    let has: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM pragma_table_info('operation_items') WHERE name = 'message'",
-        [],
-        |r| r.get(0),
-    )?;
-    if has == 0 {
-        conn.execute_batch("ALTER TABLE operation_items ADD COLUMN message TEXT;")?;
+/// Add the item columns that came later when missing: `message` (what a command
+/// ran, how to undo it) and `purged` (deleted for good from the quarantine by
+/// the user). Additive: older versions select and insert their columns by name
+/// and keep working with the same database, so the schema version stays.
+pub(crate) fn add_item_columns(conn: &rusqlite::Connection) -> rusqlite::Result<()> {
+    for (name, ddl) in [
+        (
+            "message",
+            "ALTER TABLE operation_items ADD COLUMN message TEXT;",
+        ),
+        (
+            "purged",
+            "ALTER TABLE operation_items ADD COLUMN purged INTEGER NOT NULL DEFAULT 0;",
+        ),
+    ] {
+        let has: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('operation_items') WHERE name = ?1",
+            [name],
+            |r| r.get(0),
+        )?;
+        if has == 0 {
+            conn.execute_batch(ddl)?;
+        }
     }
     Ok(())
+}
+
+/// Journal modes whose items the quarantine holds on disk: the files themselves
+/// (`<root>\<op id>\<n>\<name>`) or the `.reg` backup of a registry leftover.
+pub(crate) const HELD_MODES: [&str; 4] = ["quarantine", "hardlink", "clone", "registry"];
+
+/// Items still held in the quarantine, as SQL on `operation_items i` joined with
+/// `operations o` (the same test as [`ItemRow::in_quarantine`]).
+macro_rules! held {
+    () => {
+        "i.restored = 0 AND i.purged = 0 AND i.status IN ('done', 'partial')
+         AND i.stored IS NOT NULL AND i.mode IN ('quarantine', 'hardlink', 'clone', 'registry')
+         AND o.state != 'purged'"
+    };
 }
 
 /// One operation as the Activity log shows it.
@@ -83,6 +109,15 @@ pub struct OperationRow {
     pub state: String,
     /// Items that can still be put back.
     pub restorable: u64,
+    /// Of those, the items the quarantine holds (files, or `.reg` backups of
+    /// registry leftovers): they can also be deleted for good. The others are in
+    /// the Recycle Bin.
+    pub quarantined: u64,
+    /// Bytes those items keep on the disk until they are deleted for good.
+    pub held: u64,
+    /// When the quarantine deletes its files by itself (Unix seconds; `.reg`
+    /// backups alone are kept).
+    pub expires_at: Option<i64>,
 }
 
 /// One item of an operation.
@@ -103,6 +138,8 @@ pub struct ItemRow {
     pub restored: bool,
     /// What a command ran and how to undo it (`git worktree add …`).
     pub message: Option<String>,
+    /// Deleted for good from the quarantine (by the user, before it expired).
+    pub purged: bool,
 }
 
 impl ItemRow {
@@ -121,10 +158,44 @@ impl ItemRow {
     #[must_use]
     pub fn restorable(&self, state: &str) -> bool {
         !self.restored
+            && !self.purged
             && state != "purged"
             && matches!(self.status.as_str(), "done" | "partial")
             && self.mode != "permanent"
     }
+
+    /// Held in the quarantine: restorable, and its copy (or `.reg` backup) is in
+    /// the app's quarantine rather than the Recycle Bin.
+    #[must_use]
+    pub fn in_quarantine(&self, state: &str) -> bool {
+        self.restorable(state) && self.stored.is_some() && HELD_MODES.contains(&self.mode.as_str())
+    }
+}
+
+/// Outcome of deleting quarantined items for good.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PurgeResult {
+    /// Items deleted for good.
+    pub items: u64,
+    /// Bytes given back to the disk.
+    pub bytes: u64,
+    /// Items that could not be deleted (`path: error`); they stay in the quarantine.
+    pub failed: Vec<String>,
+}
+
+/// What the quarantine holds, according to the journal.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuarantineSummary {
+    pub items: u64,
+    /// Bytes kept on the disk until the items are deleted for good.
+    pub bytes: u64,
+    pub operations: u64,
+    /// When the quarantine next deletes files by itself (Unix seconds).
+    pub next_expiry: Option<i64>,
+    /// Days a quarantined operation is kept.
+    pub ttl_days: i64,
 }
 
 /// Result of restoring one item.
@@ -137,16 +208,29 @@ pub struct RestoreResult {
     pub message: Option<String>,
 }
 
-const OP_COLUMNS: &str =
+const OP_COLUMNS: &str = concat!(
     "id, kind, started_at, finished_at, items, done, bytes, freed, cancelled, state,
      (SELECT COUNT(*) FROM operation_items i WHERE i.op_id = o.id AND i.restored = 0
-        AND i.status IN ('done', 'partial') AND i.mode != 'permanent' AND o.state != 'purged')";
+        AND i.purged = 0 AND i.status IN ('done', 'partial') AND i.mode != 'permanent'
+        AND o.state != 'purged'),
+     (SELECT COUNT(*) FROM operation_items i WHERE i.op_id = o.id AND ",
+    held!(),
+    "),
+     (SELECT COALESCE(SUM(i.freed), 0) FROM operation_items i WHERE i.op_id = o.id AND ",
+    held!(),
+    "),
+     (SELECT COUNT(*) FROM operation_items i WHERE i.op_id = o.id AND i.mode != 'registry' AND ",
+    held!(),
+    ")"
+);
 
 fn op_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<OperationRow> {
+    let started_at: i64 = r.get(2)?;
+    let files_held: i64 = r.get(13)?;
     Ok(OperationRow {
         id: r.get(0)?,
         kind: r.get(1)?,
-        started_at: r.get(2)?,
+        started_at,
         finished_at: r.get(3)?,
         items: to_u64(r.get(4)?),
         done: to_u64(r.get(5)?),
@@ -155,6 +239,9 @@ fn op_row(r: &rusqlite::Row<'_>) -> rusqlite::Result<OperationRow> {
         cancelled: r.get::<_, i64>(8)? != 0,
         state: r.get(9)?,
         restorable: to_u64(r.get(10)?),
+        quarantined: to_u64(r.get(11)?),
+        held: to_u64(r.get(12)?),
+        expires_at: (files_held > 0).then(|| started_at + QUARANTINE_TTL_DAYS * 86_400),
     })
 }
 
@@ -250,7 +337,7 @@ impl History {
             .ok_or_else(|| HistoryError::UnknownOperation(id.to_owned()))?;
         let mut stmt = self.conn.prepare(
             "SELECT n, path, rule_id, mode, is_dir, bytes, files, freed, status, reason, stored, restored,
-                    message
+                    message, purged
              FROM operation_items WHERE op_id = ?1 ORDER BY n",
         )?;
         let items = stmt
@@ -269,6 +356,7 @@ impl History {
                     stored: r.get(10)?,
                     restored: r.get::<_, i64>(11)? != 0,
                     message: r.get(12)?,
+                    purged: r.get::<_, i64>(13)? != 0,
                 })
             })?
             .collect::<rusqlite::Result<Vec<_>>>()?;
@@ -336,7 +424,7 @@ impl History {
     /// anything came back).
     fn settle(&mut self, id: &str, items: &[ItemRow]) -> Result<()> {
         let left: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM operation_items WHERE op_id = ?1 AND restored = 0
+            "SELECT COUNT(*) FROM operation_items WHERE op_id = ?1 AND restored = 0 AND purged = 0
              AND status IN ('done', 'partial') AND mode != 'permanent'",
             [id],
             |r| r.get(0),
@@ -366,26 +454,163 @@ impl History {
         Ok(())
     }
 
-    /// Delete the quarantine folders of operation `id` for good and mark it `purged`.
-    /// Recycle Bin items are left to Windows.
+    /// Delete the quarantine folders (and `.reg` backups) of operation `id` for
+    /// good. Recycle Bin items are left to Windows: the operation becomes `purged`
+    /// once nothing restorable is left.
     ///
     /// # Errors
     /// SQLite failure; folders that cannot be removed are reported as an I/O error
-    /// after the others were removed.
+    /// after the others were removed (the items still on disk stay restorable).
     pub fn purge_operation(&mut self, id: &str) -> Result<()> {
-        let (_, items) = self.operation(id)?;
+        let (row, items) = self.operation(id)?;
         let mut first_err = None;
         for dir in op_dirs(&items, id) {
             if let Err(e) = exec::purge_op_dir(&dir) {
                 first_err.get_or_insert(e);
             }
         }
-        self.conn
-            .execute("UPDATE operations SET state = 'purged' WHERE id = ?1", [id])?;
+        for item in items.iter().filter(|i| i.in_quarantine(&row.state)) {
+            let gone = item
+                .stored
+                .as_deref()
+                .is_none_or(|s| std::fs::symlink_metadata(s).is_err());
+            if gone {
+                self.mark_purged(id, item.n)?;
+            }
+        }
+        self.settle_purge(id, &items)?;
         match first_err {
             Some(e) => Err(e.into()),
             None => Ok(()),
         }
+    }
+
+    /// Delete quarantined items of operation `id` for good: all of them, or only
+    /// `only`. Each item's own `<op id>\<n>` folder (or `.reg` backup) goes;
+    /// Recycle Bin items are left to Windows. The operation becomes `purged` once
+    /// nothing restorable is left.
+    ///
+    /// # Errors
+    /// Unknown id or SQLite failure (file-system failures are listed in
+    /// [`PurgeResult::failed`]).
+    pub fn purge_items(&mut self, id: &str, only: Option<&[u64]>) -> Result<PurgeResult> {
+        let (row, items) = self.operation(id)?;
+        let mut out = PurgeResult::default();
+        for item in items
+            .iter()
+            .filter(|i| i.in_quarantine(&row.state))
+            .filter(|i| only.is_none_or(|o| o.contains(&i.n)))
+        {
+            let removed = match item_slot(item, id) {
+                Some(slot) => remove_slot(&slot),
+                None => Err(io::Error::other("not where the quarantine keeps items")),
+            };
+            match removed {
+                Ok(()) => {
+                    self.mark_purged(id, item.n)?;
+                    out.items += 1;
+                    out.bytes += item.freed;
+                }
+                Err(e) => out.failed.push(format!("{}: {e}", item.path)),
+            }
+        }
+        self.settle_purge(id, &items)?;
+        Ok(out)
+    }
+
+    /// Delete everything the quarantine holds for good: every operation's
+    /// quarantined items and `.reg` backups, plus operation folders the journal
+    /// does not know (a cleared database). Recycle Bin items are left to Windows.
+    ///
+    /// # Errors
+    /// SQLite failure (operations whose folders could not be removed are listed
+    /// in [`PurgeResult::failed`]).
+    pub fn empty_quarantine(&mut self, roots: &QuarantineRoots, now: i64) -> Result<PurgeResult> {
+        let before = self.quarantine_summary()?;
+        let ids: Vec<String> = {
+            let mut stmt = self.conn.prepare(concat!(
+                "SELECT DISTINCT o.id FROM operations o
+                 JOIN operation_items i ON i.op_id = o.id WHERE ",
+                held!()
+            ))?;
+            stmt.query_map([], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        let mut failed = Vec::new();
+        for id in ids {
+            if let Err(e) = self.purge_operation(&id) {
+                failed.push(format!("{id}: {e}"));
+            }
+        }
+        // folders nobody remembers: a cutoff in the future catches them all
+        self.purge_expired(roots, now + 2 * 86_400, Some(0))?;
+        let after = self.quarantine_summary()?;
+        Ok(PurgeResult {
+            items: before.items.saturating_sub(after.items),
+            bytes: before.bytes.saturating_sub(after.bytes),
+            failed,
+        })
+    }
+
+    /// What the quarantine holds.
+    ///
+    /// # Errors
+    /// SQLite failure.
+    pub fn quarantine_summary(&self) -> Result<QuarantineSummary> {
+        let (items, bytes, operations, oldest) = self.conn.query_row(
+            concat!(
+                "SELECT COUNT(*), COALESCE(SUM(i.freed), 0), COUNT(DISTINCT o.id),
+                        MIN(CASE WHEN i.mode != 'registry' THEN o.started_at END)
+                 FROM operation_items i JOIN operations o ON o.id = i.op_id WHERE ",
+                held!()
+            ),
+            [],
+            |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, Option<i64>>(3)?,
+                ))
+            },
+        )?;
+        Ok(QuarantineSummary {
+            items: to_u64(items),
+            bytes: to_u64(bytes),
+            operations: to_u64(operations),
+            next_expiry: oldest.map(|t| t + QUARANTINE_TTL_DAYS * 86_400),
+            ttl_days: QUARANTINE_TTL_DAYS,
+        })
+    }
+
+    fn mark_purged(&mut self, id: &str, n: u64) -> Result<()> {
+        self.conn.execute(
+            "UPDATE operation_items SET purged = 1 WHERE op_id = ?1 AND n = ?2",
+            params![id, to_i64(n)],
+        )?;
+        Ok(())
+    }
+
+    /// After items were deleted for good: `purged` once nothing restorable is left
+    /// (the operation's folders, by then only the manifest, go too).
+    fn settle_purge(&mut self, id: &str, items: &[ItemRow]) -> Result<()> {
+        let (left, purged): (i64, i64) = self.conn.query_row(
+            "SELECT
+                COUNT(CASE WHEN restored = 0 AND purged = 0 AND status IN ('done', 'partial')
+                           AND mode != 'permanent' THEN 1 END),
+                COUNT(CASE WHEN purged = 1 THEN 1 END)
+             FROM operation_items WHERE op_id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )?;
+        if left == 0 && purged > 0 {
+            for dir in op_dirs(items, id) {
+                let _ = exec::purge_op_dir(&dir);
+            }
+            self.conn
+                .execute("UPDATE operations SET state = 'purged' WHERE id = ?1", [id])?;
+        }
+        Ok(())
     }
 
     /// Purge every operation whose quarantine is older than `ttl_days` (default
@@ -405,7 +630,7 @@ impl History {
             let mut stmt = self.conn.prepare(
                 "SELECT DISTINCT o.id FROM operations o JOIN operation_items i ON i.op_id = o.id
                  WHERE o.state != 'purged' AND o.started_at < ?1 AND i.mode IN ('quarantine', 'hardlink', 'clone')
-                   AND i.restored = 0 AND i.stored IS NOT NULL",
+                   AND i.restored = 0 AND i.purged = 0 AND i.stored IS NOT NULL",
             )?;
             stmt.query_map([cutoff], |r| r.get(0))?
                 .collect::<rusqlite::Result<_>>()?
@@ -467,20 +692,22 @@ impl History {
         let n = self.conn.execute(
             "DELETE FROM operations WHERE started_at < ?1 AND (state IN ('purged', 'restored')
              OR NOT EXISTS (SELECT 1 FROM operation_items i WHERE i.op_id = operations.id
-                 AND i.mode IN ('quarantine', 'hardlink', 'clone') AND i.restored = 0 AND i.stored IS NOT NULL))",
+                 AND i.mode IN ('quarantine', 'hardlink', 'clone') AND i.restored = 0 AND i.purged = 0
+                 AND i.stored IS NOT NULL))",
             [now - days * 86_400],
         )?;
         Ok(n)
     }
 }
 
-/// The `<root>\<op id>` folders that hold an operation's quarantined items.
+/// The `<root>\<op id>` folders that hold an operation's quarantined items (and
+/// `registry-backup\<op id>` with its `.reg` backups).
 fn op_dirs(items: &[ItemRow], id: &str) -> Vec<PathBuf> {
     let mut dirs: Vec<PathBuf> = items
         .iter()
         // only the quarantine: a Recycle Bin item's `stored` is its place in the
         // macOS Trash, never purged from here
-        .filter(|i| QUARANTINE_MODES.contains(&i.mode.as_str()))
+        .filter(|i| HELD_MODES.contains(&i.mode.as_str()))
         .filter_map(|i| i.stored.as_deref())
         .filter_map(|s| {
             Path::new(s)
@@ -492,4 +719,40 @@ fn op_dirs(items: &[ItemRow], id: &str) -> Vec<PathBuf> {
     dirs.sort();
     dirs.dedup();
     dirs
+}
+
+/// What holds one quarantined item on disk: its `<root>\<op id>\<n>` folder (the
+/// item and nothing else), or the `.reg` backup of a registry leftover
+/// (`registry-backup\<op id>\<n>.reg`). `None` when `stored` is laid out
+/// differently: nothing is deleted then.
+fn item_slot(item: &ItemRow, id: &str) -> Option<PathBuf> {
+    let stored = Path::new(item.stored.as_deref()?);
+    let in_op = |p: &Path| {
+        p.parent()
+            .and_then(Path::file_name)
+            .is_some_and(|n| n == id)
+    };
+    if item.mode == "registry" {
+        let is_reg = stored
+            .extension()
+            .is_some_and(|e| e.eq_ignore_ascii_case("reg"));
+        return (is_reg && in_op(stored)).then(|| stored.to_path_buf());
+    }
+    let n = item.n.to_string();
+    stored
+        .ancestors()
+        .find(|a| a.file_name().is_some_and(|f| f == n.as_str()) && in_op(a))
+        .map(Path::to_path_buf)
+}
+
+fn remove_slot(slot: &Path) -> io::Result<()> {
+    let removed = match std::fs::symlink_metadata(slot) {
+        Ok(m) if m.is_dir() => std::fs::remove_dir_all(slot),
+        Ok(_) => std::fs::remove_file(slot),
+        Err(e) => Err(e),
+    };
+    match removed {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
+        r => r,
+    }
 }

@@ -3,6 +3,7 @@
 //!
 //! * [`inventory`] — installed programs: the registry's `Uninstall` keys and the
 //!   Store packages, as "Apps & features" lists them.
+//! * [`icons`] — each program's icon (read as data, local drives only).
 //! * [`command`] — the vendor's uninstall command, split and checked.
 //! * [`leftovers`] — what an uninstalled program left behind: folders, shortcuts,
 //!   registry keys and values, each with the evidence that ties it to the program.
@@ -19,6 +20,7 @@
 pub mod command;
 pub mod elevated;
 pub mod fsutil;
+pub mod icons;
 pub mod inventory;
 pub mod junk;
 pub mod leftovers;

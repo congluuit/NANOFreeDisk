@@ -8,7 +8,7 @@ import { formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
 import { app, fail, toast } from "../state.svelte";
 import { programsApi } from "./api";
-import type { JunkReport, LeftoverReport, Program, UninstallOutcome, UninstallProgress } from "./types";
+import type { JunkReport, LeftoverReport, Program, ProgramIcon, UninstallOutcome, UninstallProgress } from "./types";
 import type { ProgramFilter, ProgramSort } from "./model";
 
 export type ProgramsTab = "installed" | "junk";
@@ -17,6 +17,8 @@ export const pg = $state({
   tab: "installed" as ProgramsTab,
   list: null as Program[] | null,
   loading: false,
+  /** Icons read so far, by program id (programs without one stay out). */
+  icons: {} as Record<string, ProgramIcon>,
   store: true,
   query: "",
   filter: "all" as ProgramFilter,
@@ -55,6 +57,7 @@ export function loadPrograms(): Promise<void> {
     .then((l) => {
       pg.list = l;
       pg.picked = pg.picked.filter((id) => l.some((p) => p.id === id));
+      void loadIcons(l.map((p) => p.id));
     })
     .catch(fail)
     .finally(() => {
@@ -65,6 +68,26 @@ export function loadPrograms(): Promise<void> {
 }
 
 export const programOf = (id: string): Program | undefined => pg.list?.find((p) => p.id === id);
+
+/** Programs whose icon was asked for (with or without one). */
+const iconsAsked = new Set<string>();
+/** Icons are read in batches so the first rows show theirs quickly. */
+const ICON_BATCH = 24;
+
+/** Read the icons of `ids` not asked for yet, a batch at a time (a missing icon
+ *  only means the letter stays). */
+async function loadIcons(ids: string[]): Promise<void> {
+  const todo = ids.filter((id) => !iconsAsked.has(id));
+  todo.forEach((id) => iconsAsked.add(id));
+  for (let i = 0; i < todo.length; i += ICON_BATCH) {
+    try {
+      const got = await programsApi.icons(todo.slice(i, i + ICON_BATCH));
+      if (Object.keys(got).length) pg.icons = { ...pg.icons, ...got };
+    } catch {
+      return;
+    }
+  }
+}
 
 let progressOff: (() => void) | null = null;
 

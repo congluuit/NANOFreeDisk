@@ -27,6 +27,7 @@ Người dùng muốn một chỗ để: (1) xem phần mềm đã cài và dung
 | `junk` | Rác phần mềm theo cấu trúc (§2.5), gán về phần mềm. |
 | `runner` (Windows) | `ShellExecuteExW` trình gỡ (UAC do manifest của trình gỡ), chờ cây tiến trình con; Store: `Remove-AppxPackage`. |
 | `registry` | Trait `Registry` (thật: `nfd_platform::registry`; test: bộ nhớ). |
+| `icons` | Biểu tượng của phần mềm (PNG 48 px): `DisplayIcon` (giữ chỉ số icon, kể cả id âm) → icon sản phẩm của Windows Installer (`Installer\Products\<mã MSI dạng packed>\ProductIcon`) → exe trong thư mục cài mang tên phần mềm (hoặc exe duy nhất, bỏ trình gỡ/cập nhật); Store: logo `Square44x44Logo` trong manifest, chọn biến thể `altform-unplated` gần 48 px nhất (logo chỉ có bản "plated" thì vẽ trên nền màu nhấn). `PrivateExtractIconsW` chỉ mở file như dữ liệu, không bao giờ chạy; chỉ đọc ổ cục bộ (không ổ mạng, không `\\server`). |
 
 ### 2.2 `nfd-core` / `nfd-platform`
 
@@ -90,10 +91,10 @@ nfd programs leftovers <id|tên> [--json]      # mục hỏng (trình gỡ đã 
 
 ### 2.7 GUI — view **Phần mềm** (`programs`, nhóm "Giải phóng dung lượng")
 
-- Tab **Đã cài**: tìm kiếm, lọc (Tất cả / Win32 / Store / Chỉ tôi / Lớn), sắp xếp (tên, dung lượng, ngày cài); mỗi dòng: chữ cái đầu làm biểu tượng, tên, nhà phát hành · phiên bản, dung lượng, ngày cài, nhãn (Store, Mọi người dùng 🛡, Runtime, Driver, Hỏng), "rác X MB"; nút Gỡ; chọn nhiều → "Gỡ N phần mềm".
-- Luồng gỡ: dialog xác nhận → thẻ tiến trình ("Đang chạy trình gỡ của X — làm theo cửa sổ của nó") → kết quả → **Leftovers**: nhóm Tệp & thư mục / Registry / Shortcut / Dịch vụ (thông tin); 🛡 = cần quyền quản trị (một lời nhắc); "Xóa leftovers đã chọn (X MB)".
+- Tab **Đã cài**: tìm kiếm, lọc (Tất cả / Win32 / Store / Chỉ tôi / Lớn), sắp xếp (tên, dung lượng, ngày cài); mỗi dòng: biểu tượng thật của phần mềm (lệnh `programs_icons`, đọc từng lô 24, nhớ trong phiên; không có thì chữ cái đầu), tên, nhà phát hành · phiên bản, dung lượng, ngày cài, nhãn (Store, Mọi người dùng 🛡, Runtime, Driver, Hỏng), "rác X MB"; nút Gỡ; chọn nhiều → "Gỡ N phần mềm".
+- Luồng gỡ: dialog xác nhận → thẻ tiến trình (vòng xoay quanh biểu tượng phần mềm, 3 bước Trình gỡ → Tìm leftovers → Bạn xem lại, thời gian đã chạy, số tiến trình của trình gỡ còn sống, phần mềm tiếp theo trong hàng đợi; nút "Đã gỡ xong") → kết quả → **Leftovers**: nhóm Tệp & thư mục / Registry / Shortcut / Dịch vụ (thông tin); 🛡 = cần quyền quản trị (một lời nhắc); "Xóa leftovers đã chọn (X MB)".
 - Tab **Rác phần mềm**: quét, nhóm theo phần mềm, ô chọn nhóm, `SelectionBar`, "Dọn an toàn (chỉ 🟢)", `ConfirmTotals`.
-- Activity: kind `uninstall`, `software-junk`; mục registry hiện như khóa; "Khôi phục với quyền quản trị" cho mục máy.
+- Activity: kind `uninstall`, `software-junk`; mục registry hiện như khóa; "Khôi phục với quyền quản trị" cho mục máy. Bảng **Khu cách ly** (dung lượng còn chiếm, số mục, ngày tự xóa, mở thư mục) và **Xóa vĩnh viễn** từng mục / từng lần dọn / toàn bộ (có xác nhận; `.reg` backup cũng bị xóa, mục trong Thùng rác không bị động tới).
 - Bảng lệnh (Ctrl+K): "Gỡ phần mềm", "Rác phần mềm". Expert: lệnh `nfd programs …` tương đương.
 
 ## 3. Kiểm thử
@@ -116,7 +117,6 @@ nfd programs leftovers <id|tên> [--json]      # mục hỏng (trình gỡ đã 
 - Theo dõi cài đặt (Install Monitor), gỡ plugin trình duyệt, winget.
 - "Leftovers của phần mềm đã gỡ từ lâu" (thư mục mồ côi không thuộc phần mềm nào) — dễ nhầm với ứng dụng portable / công cụ dev.
 - Rác trong `ProgramData` (cần admin), xóa dịch vụ / scheduled task.
-- Biểu tượng thật của phần mềm (trích `DisplayIcon`).
 
 ## 6. Rủi ro
 

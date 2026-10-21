@@ -81,14 +81,25 @@ activity-freed = { $size } freed
 activity-state-active = kept
 activity-state-restored = restored
 activity-state-partly-restored = partly restored
-activity-state-purged = quarantine emptied
+activity-state-purged = deleted for good
 activity-details = Details
 activity-restore = Restore ({ $count })
 activity-restore-hint = If you click: the items go back where they were, with their original dates. Nothing that exists there now is overwritten.
 activity-restore-one = Restore this item
-activity-purge-hint = Empty this quarantine now (cannot be undone)
-activity-purge-confirm = Delete { $size } from the quarantine for good? This cannot be undone.
-activity-purged = Quarantine emptied.
+activity-purge = Delete for good
+activity-purge-hint = Delete what the quarantine holds of this operation now, to get the space back (cannot be undone)
+activity-purge-one = Delete this item for good
+activity-purge-title = Delete for good?
+activity-purge-body = { $count } item(s) of this operation ({ $size }) will be deleted for good. They cannot be restored afterwards.
+activity-purge-one-body = This item ({ $size }) will be deleted for good. It cannot be restored afterwards.
+activity-purged = Deleted { $count } item(s) for good: { $size } back on the disk.
+activity-purge-failed = { $count } item(s) could not be deleted and stay in the quarantine.
+activity-in-quarantine = { $count } in the quarantine · { $size } still on the disk
+activity-expires = { $days ->
+    [0] deleted by itself today
+    [one] deleted by itself tomorrow
+   *[other] deleted by itself in { $days } days
+}
 activity-restored = Restored { $done } item(s){ $failed ->
     [0] .
    *[other] ; { $failed } could not be restored.
@@ -98,9 +109,29 @@ activity-restore-conflicts = something with the same name is there again; kept i
 activity-restore-missing = no longer in the quarantine or the Recycle Bin
 activity-restore-not-restorable = deleted permanently
 activity-item-restored = restored
+activity-item-purged = deleted for good
 activity-mode-recycle-bin = Recycle Bin
 activity-mode-quarantine = quarantine
 activity-mode-permanent = permanent
+
+## Quarantine (Activity)
+quarantine-title = Quarantine
+quarantine-intro = Cleaned items are moved here, not deleted, so you can put them back. They still use their space until NANOFreeDisk deletes them for good after { $days } days — or now, if you need the space.
+quarantine-held = still on the disk
+quarantine-items = { $ops ->
+    [one] items, from 1 operation
+   *[other] items, from { $ops } operations
+}
+quarantine-next = next deletion by itself
+quarantine-none = The quarantine is empty: nothing is waiting to be deleted.
+quarantine-recycle-note = Items sent to the Recycle Bin are not in the quarantine: Windows keeps them until the Recycle Bin is emptied.
+quarantine-open = Open folder
+quarantine-open-hint = Show the quarantine folder in Explorer (restore from here, not by hand)
+quarantine-empty = Empty quarantine
+quarantine-empty-hint = Delete everything in the quarantine for good, to get the space back now
+quarantine-empty-title = Empty the quarantine?
+quarantine-empty-body = { $count } item(s) ({ $size }) will be deleted for good. They cannot be restored afterwards. Items in the Recycle Bin are not touched.
+quarantine-only = Only operations with items in the quarantine
 
 ## Home and Health Score
 home-free-checking = Looking for junk…

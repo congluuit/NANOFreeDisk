@@ -7,6 +7,7 @@
   import { expert } from "../../state.svelte";
   import { pg, programOf, runUninstalls } from "../../programs/state.svelte";
   import type { Program } from "../../programs/types";
+  import AppIcon from "./AppIcon.svelte";
   import Icon from "../Icon.svelte";
 
   let { ids }: { ids: string[] } = $props();
@@ -40,7 +41,7 @@
     <ul class="list">
       {#each list as p (p.id)}
         <li>
-          <span class="ellipsis"><strong>{p.name}</strong>{#if p.version}<span class="muted"> · {p.version}</span>{/if}</span>
+          <span class="who"><AppIcon id={p.id} name={p.name} size={24} /><span class="ellipsis"><strong>{p.name}</strong>{#if p.version}<span class="muted"> · {p.version}</span>{/if}</span></span>
           <span class="num">{p.size ? formatSize(p.size, loc) : ""}</span>
           {#if expert()}<code class="mono ellipsis cmd muted" title={command(p)}>{command(p)}</code>{/if}
         </li>
@@ -113,6 +114,12 @@
     gap: 2px 10px;
     align-items: center;
     padding: 4px;
+  }
+  .who {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    min-width: 0;
   }
   .cmd {
     grid-column: 1 / -1;

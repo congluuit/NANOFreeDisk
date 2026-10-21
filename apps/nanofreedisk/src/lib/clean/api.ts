@@ -10,6 +10,8 @@ import type {
   DeleteOutcome,
   OperationResult,
   OperationRow,
+  PurgeResult,
+  QuarantineInfo,
   RestoreResult,
 } from "./types";
 
@@ -25,5 +27,9 @@ export const cleanApi = {
   activityItems: (id: string) => call<ActivityDetail>("activity_items", { id }),
   restore: (id: string, items?: number[]) =>
     call<RestoreResult[]>("activity_restore", { id, items: items ?? null }),
-  purge: (id: string) => call<void>("activity_purge", { id }),
+  /** Delete what the quarantine holds of operation `id` for good (all, or `items`). */
+  purge: (id: string, items?: number[]) => call<PurgeResult>("activity_purge", { id, items: items ?? null }),
+  quarantine: () => call<QuarantineInfo>("quarantine_summary"),
+  emptyQuarantine: () => call<PurgeResult>("quarantine_empty"),
+  revealQuarantine: (index: number) => call<void>("quarantine_reveal", { index }),
 };

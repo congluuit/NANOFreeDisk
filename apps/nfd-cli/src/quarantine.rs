@@ -46,14 +46,20 @@ pub enum QuarantineAction {
         #[arg(long)]
         db: Option<PathBuf>,
     },
-    /// Delete quarantined items for good: one operation, or everything older than
-    /// --older-than (default 7d).
+    /// Delete quarantined items for good: one operation (or some of its items),
+    /// everything older than --older-than (default 7d), or --all.
     Purge {
         /// Operation id (omit to purge by age).
         id: Option<String>,
+        /// Only these item numbers of the operation (see `show`).
+        #[arg(long, value_delimiter = ',', requires = "id")]
+        item: Vec<u64>,
         /// Age like `7d`, `12h` or `30d`.
         #[arg(long, default_value = "7d")]
         older_than: String,
+        /// Empty the whole quarantine.
+        #[arg(long, conflicts_with = "id")]
+        all: bool,
         #[arg(long)]
         db: Option<PathBuf>,
     },
@@ -290,6 +296,15 @@ pub fn run(action: QuarantineAction) -> anyhow::Result<ExitCode> {
             if ops.is_empty() {
                 println!("No clean or delete operations yet.");
             }
+            let q = h.quarantine_summary()?;
+            if q.items > 0 {
+                println!(
+                    "Quarantine: {} item(s), {} on disk until deleted ({} operation(s)).",
+                    q.items,
+                    format_size(q.bytes),
+                    q.operations
+                );
+            }
             for o in ops {
                 let (y, m, d, hh, mm, _) = exec::civil(o.started_at);
                 println!(
@@ -372,8 +387,41 @@ pub fn run(action: QuarantineAction) -> anyhow::Result<ExitCode> {
                 ExitCode::FAILURE
             })
         }
-        QuarantineAction::Purge { id, older_than, db } => {
+        QuarantineAction::Purge {
+            id,
+            item,
+            older_than,
+            all,
+            db,
+        } => {
             let mut h = crate::diff::open_history(db)?;
+            if all || !item.is_empty() {
+                let out = match &id {
+                    Some(id) => h.purge_items(id, Some(&item))?,
+                    None => h.empty_quarantine(&roots(), exec::unix_now())?,
+                };
+                println!(
+                    "Deleted {} item(s) for good ({}).",
+                    out.items,
+                    format_size(out.bytes)
+                );
+                for f in &out.failed {
+                    eprintln!("  could not delete {f}");
+                }
+                if let Some(dir) = nfd_history::audit::default_dir() {
+                    let what = id.as_deref().unwrap_or("quarantine	empty");
+                    let _ = nfd_history::audit::note(
+                        &dir,
+                        exec::unix_now(),
+                        &format!("{what}	purge	{} item(s)", out.items),
+                    );
+                }
+                return Ok(if out.failed.is_empty() {
+                    ExitCode::SUCCESS
+                } else {
+                    ExitCode::FAILURE
+                });
+            }
             let purged = match id {
                 Some(id) => {
                     h.purge_operation(&id)?;

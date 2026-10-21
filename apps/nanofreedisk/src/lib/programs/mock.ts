@@ -3,7 +3,7 @@
 // and some software junk. Nothing touches a real disk or registry.
 
 import type { OperationResult } from "../clean/types";
-import type { JunkGroup, JunkReport, Leftover, LeftoverReport, Program } from "./types";
+import type { JunkGroup, JunkReport, Leftover, LeftoverReport, Program, ProgramIcon } from "./types";
 
 const MB = 2 ** 20;
 const GB = 2 ** 30;
@@ -187,17 +187,52 @@ function op(freed: number, done: number): OperationResult {
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Events reach the UI through the main mock (set by it). */
+let emit: (event: string, payload: unknown) => void = () => {};
+export function setProgramsEmit(f: (event: string, payload: unknown) => void): void {
+  emit = f;
+}
+
+/** A flat sample icon: a tile of `color` with a white glyph. */
+function svgIcon(color: string, glyph: string, plate = false): ProgramIcon {
+  const tile = plate ? "" : `<rect width="48" height="48" rx="11" fill="${color}"/>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48">${tile}<text x="24" y="33" font-family="Segoe UI,sans-serif" font-size="24" font-weight="700" text-anchor="middle" fill="#fff">${glyph}</text></svg>`;
+  return { src: `data:image/svg+xml;base64,${btoa(svg)}`, plate };
+}
+
+const ICONS: Record<string, ProgramIcon> = {
+  "hklm:Steam": svgIcon("#1b2838", "S"),
+  "hkcu:Discord": svgIcon("#5865f2", "D"),
+  "hklm:Zalo": svgIcon("#0068ff", "Z"),
+  "hklm:{AC76BA86}": svgIcon("#d7262c", "A"),
+  "hklm:NVIDIA": svgIcon("#76b900", "N"),
+  "appx:Microsoft.WindowsCalculator": svgIcon("#000", "=", true),
+};
+
+/** "It is finished" pressed while the mock uninstaller runs. */
+let stopped = false;
+
 export const programsHandlers: Record<string, (a: Record<string, any>) => unknown> = {
   programs_list: ({ store }) => programs.filter((p) => store || p.source !== "store"),
+  programs_icons: ({ ids }) => Object.fromEntries((ids as string[]).filter((id) => ICONS[id]).map((id) => [id, ICONS[id]])),
   programs_uninstall: async ({ id }) => {
     const p = programs.find((x) => x.id === id);
     if (!p) throw { code: "not-found", message: id };
-    await wait(1200);
+    if (!p.broken) {
+      // the uninstaller's window, then a helper it started, then nothing
+      stopped = false;
+      for (let tick = 0; tick < 10 && !stopped; tick++) {
+        emit("uninstall-progress", { id, phase: tick < 6 ? "running" : "waiting", alive: tick < 6 ? 2 : 1 });
+        await wait(250);
+      }
+    }
     reports[id] = leftoversOf(p);
     programs = programs.filter((x) => x.id !== id);
     return { id, status: p.broken ? "broken" : "removed", waited: p.broken ? null : "done", message: null };
   },
-  programs_stop_waiting: () => undefined,
+  programs_stop_waiting: () => {
+    stopped = true;
+  },
   programs_leftovers: ({ id }) => reports[id] ?? (() => {
     const p = programs.find((x) => x.id === id);
     if (!p) throw { code: "not-found", message: id };

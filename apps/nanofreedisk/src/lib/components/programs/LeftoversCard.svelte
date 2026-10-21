@@ -12,6 +12,7 @@
   import { dismissLeftovers, pg, removeLeftovers } from "../../programs/state.svelte";
   import type { Leftover, LeftoverReport } from "../../programs/types";
   import { summarize, toggle as toggleId } from "../../selection";
+  import AppIcon from "./AppIcon.svelte";
   import CliHint from "../CliHint.svelte";
   import GroupCheck from "../GroupCheck.svelte";
   import Icon from "../Icon.svelte";
@@ -39,7 +40,7 @@
 
 <div class="card pg-card left" bind:this={scope} data-pg-leftovers={id}>
   <div class="pg-row head">
-    <Icon name="search" size={20} />
+    <AppIcon id={id} name={report.program.name} size={30} />
     <div class="pg-grow">
       <strong>{t(`pg-left-title-${report.mode}`, { name: report.program.name })}</strong>
       <p class="muted pg-small">{report.items.length ? t("pg-left-intro") : t("pg-left-none")}</p>

@@ -235,3 +235,151 @@ fn command_messages_are_kept() {
     );
     assert_eq!(items[1].message, None);
 }
+
+#[test]
+fn quarantined_items_can_be_deleted_for_good_one_by_one() {
+    let f = fixture();
+    let a = f.dir.path().join("a.tmp");
+    let b = f.dir.path().join("cache");
+    fs::write(&a, b"aaa").expect("write");
+    fs::create_dir(&b).expect("mkdir");
+    fs::write(b.join("x"), b"x").expect("write");
+    let now = exec::unix_now();
+    let op = run(&f, "20261021-000001-0001", now, &[a.clone(), b.clone()]);
+    let mut h = History::open_in_memory().expect("db");
+    h.record_operation(&op).expect("record");
+
+    let sum = h.quarantine_summary().expect("summary");
+    assert_eq!((sum.items, sum.operations), (2, 1));
+    assert!(sum.bytes > 0);
+    assert_eq!(
+        sum.next_expiry,
+        Some(now + exec::QUARANTINE_TTL_DAYS * 86_400)
+    );
+    let row = &h.operations(5).expect("list")[0];
+    assert_eq!((row.quarantined, row.restorable), (2, 2));
+    assert_eq!(row.expires_at, sum.next_expiry);
+
+    let op_dir = f.roots.system.clone().expect("root").join(&op.id);
+    assert!(op_dir.join("0").exists() && op_dir.join("1").exists());
+    let one = h.purge_items(&op.id, Some(&[0])).expect("purge one");
+    assert_eq!(one.items, 1);
+    assert!(one.failed.is_empty(), "{:?}", one.failed);
+    assert!(!op_dir.join("0").exists());
+    assert!(op_dir.join("1").exists(), "the other item stays");
+    let (row, items) = h.operation(&op.id).expect("op");
+    assert_eq!(
+        (row.state.as_str(), row.restorable, row.quarantined),
+        ("active", 1, 1)
+    );
+    assert!(items[0].purged && !items[0].restorable(&row.state));
+    assert!(!items[1].purged);
+    // a purged item is not put back
+    assert!(
+        h.restore_operation(&op.id, Some(&[0]))
+            .expect("noop")
+            .is_empty()
+    );
+    assert!(!a.exists());
+
+    let rest = h.purge_items(&op.id, None).expect("purge rest");
+    assert_eq!(rest.items, 1);
+    assert!(!op_dir.exists(), "the manifest goes with the last item");
+    let row = &h.operations(5).expect("list")[0];
+    assert_eq!(
+        (row.state.as_str(), row.restorable, row.quarantined),
+        ("purged", 0, 0)
+    );
+    assert_eq!(row.expires_at, None);
+    assert_eq!(h.quarantine_summary().expect("summary").items, 0);
+    assert!(!b.exists(), "deleting for good never puts anything back");
+}
+
+#[test]
+fn emptying_the_quarantine_takes_every_operation_and_orphan() {
+    let f = fixture();
+    let a = f.dir.path().join("a.log");
+    let b = f.dir.path().join("b.log");
+    fs::write(&a, b"a").expect("write");
+    fs::write(&b, b"b").expect("write");
+    let now = exec::unix_now();
+    let op1 = run(&f, "20261021-000002-0001", now - 86_400, &[a]);
+    let op2 = run(&f, "20261021-000003-0002", now, &[b]);
+    let root = f.roots.system.clone().expect("root");
+    let orphan = root.join("20261020-000000-0009");
+    fs::create_dir_all(orphan.join("0")).expect("mkdir");
+    let mut h = History::open_in_memory().expect("db");
+    h.record_operation(&op1).expect("record");
+    h.record_operation(&op2).expect("record");
+    assert_eq!(h.quarantine_summary().expect("summary").operations, 2);
+
+    let out = h.empty_quarantine(&f.roots, now).expect("empty");
+    assert_eq!(out.items, 2);
+    assert!(out.failed.is_empty(), "{:?}", out.failed);
+    assert!(!root.join(&op1.id).exists() && !root.join(&op2.id).exists());
+    assert!(!orphan.exists());
+    assert_eq!(h.quarantine_summary().expect("summary").items, 0);
+    for o in h.operations(5).expect("list") {
+        assert_eq!(o.state, "purged");
+    }
+}
+
+/// Registry leftovers: their `.reg` backup is what the quarantine holds; a backup
+/// laid out unexpectedly is never deleted, and Recycle Bin items stay restorable.
+#[test]
+fn registry_backups_and_recycle_bin_items_when_purging() {
+    use nfd_core::exec::{ItemResult, ItemStatus, Operation};
+    let dir = tempfile::tempdir().expect("tmp");
+    let id = "20261021-000004-0001";
+    let backups = dir.path().join("registry-backup").join(id);
+    fs::create_dir_all(&backups).expect("mkdir");
+    let good = backups.join("0.reg");
+    let odd = dir.path().join("elsewhere.reg");
+    fs::write(&good, b"REGEDIT").expect("write");
+    fs::write(&odd, b"REGEDIT").expect("write");
+    let item = |n: usize, mode: DeleteMode, stored: Option<PathBuf>| ItemResult {
+        n,
+        path: dir.path().join(format!("item{n}")),
+        rule_id: None,
+        mode,
+        is_dir: false,
+        bytes: 1,
+        files: 1,
+        freed: 1,
+        status: ItemStatus::Done,
+        reason: None,
+        message: None,
+        stored,
+        warnings: Vec::new(),
+    };
+    let op = Operation {
+        id: id.into(),
+        kind: "uninstall".into(),
+        started_at: exec::unix_now(),
+        finished_at: exec::unix_now(),
+        items: vec![
+            item(0, DeleteMode::Registry, Some(good.clone())),
+            item(1, DeleteMode::Registry, Some(odd.clone())),
+            item(2, DeleteMode::RecycleBin, None),
+        ],
+        cancelled: false,
+    };
+    let mut h = History::open_in_memory().expect("db");
+    h.record_operation(&op).expect("record");
+    let row = &h.operations(5).expect("list")[0];
+    assert_eq!((row.restorable, row.quarantined), (3, 2));
+    assert_eq!(row.expires_at, None, ".reg backups alone never expire");
+
+    let out = h.purge_items(id, None).expect("purge");
+    assert_eq!(out.items, 1);
+    assert_eq!(out.failed.len(), 1, "{:?}", out.failed);
+    assert!(!good.exists());
+    assert!(
+        odd.exists(),
+        "a backup outside its operation folder is left alone"
+    );
+    let (row, items) = h.operation(id).expect("op");
+    assert!(items[0].purged && !items[1].purged && !items[2].purged);
+    assert_eq!(row.state, "active");
+    assert_eq!(row.restorable, 2, "the odd backup and the Recycle Bin item");
+}

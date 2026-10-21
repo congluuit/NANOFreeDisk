@@ -8,6 +8,13 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ### Added
 - **One-click update for every copy** (Settings → Updates → **Update now**): copies installed with NANOFreeDisk Setup, the portable zip and the macOS app now update in place like the NSIS / MSI packages, with a download progress. Setup copies are updated by the new Setup in their own folder with the same options (one Windows prompt when installed for everyone); portable copies get the new files next to the exe and their `data` folder is never touched; the app closes and starts again. Every package is verified with the release's signing key. Copies of 0.2.1 and earlier installed with Setup or portable need one manual update to get this.
+- **Program icons** (Programs): each program shows its own icon — read from the vendor's `DisplayIcon`, the Windows Installer's product icon or the program file in its install folder, and Store apps their manifest's logo. Program files are only opened as data (never run) and only on local drives, never on a network share; a program without an icon keeps its letter.
+- **A livelier uninstall**: while the vendor's uninstaller runs, a spinning ring around the program's icon, the three steps (uninstaller → leftovers → your review) with the current one lit, the time it has been running, how many of the uninstaller's processes are still alive and which programs come next.
+- **The quarantine, in plain sight** (Cleanup history): its own panel says what it holds, how much space that still takes, where it is (Open folder), when it deletes things by itself, and that Recycle Bin items are not in it. Each operation shows how many of its items are in the quarantine and how many days are left. **Delete for good** — one item, one operation, or *Empty quarantine* — frees the space now, after a confirmation; Recycle Bin items are never touched and the operation stays restorable for whatever is left. `nfd quarantine purge <id> --item N` and `nfd quarantine purge --all` do the same from the command line, and `nfd quarantine list` prints what the quarantine holds.
+
+### Fixed
+- Programs → Installed could not be scrolled: a long program list was cut off at the bottom of the window.
+- Deleting an operation's quarantine for good also removes the `.reg` backups of its registry leftovers, and no longer makes its Recycle Bin items unrestorable.
 
 ## [0.2.1] - 2026-10-21
 

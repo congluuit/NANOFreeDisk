@@ -12,7 +12,7 @@ import type { AdviceReason, DeleteItem, Filter, Node, NodeAdvice, Slice } from "
 import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
 import { monitorHandlers } from "./monitor/mock";
-import { programsHandlers } from "./programs/mock";
+import { programsHandlers, setProgramsEmit } from "./programs/mock";
 
 interface E {
   id: number;
@@ -262,6 +262,7 @@ function matches(id: number, f: Filter): boolean {
 let scanTimer: ReturnType<typeof setInterval> | undefined;
 const listeners = new Map<string, Set<(p: unknown) => void>>();
 const emit = (event: string, payload: unknown) => listeners.get(event)?.forEach((cb) => cb(payload));
+setProgramsEmit(emit);
 
 const PROTECTED_TOP = ["windows", "program files", "program files (x86)", "programdata", "pagefile.sys", "hiberfil.sys"];
 

@@ -73,6 +73,8 @@ fn discord(f: &Fixture) -> Program {
         uninstall: None,
         quiet_uninstall: None,
         icon: Some(f.p("Local/Discord/app-1.0.9036/Discord.exe")),
+        icon_index: 0,
+        logo: None,
         installed_at: None,
         size: 0,
         size_measured: false,

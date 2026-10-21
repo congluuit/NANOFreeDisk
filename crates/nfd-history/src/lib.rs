@@ -42,7 +42,7 @@ pub mod monitor;
 pub mod uninstall;
 
 pub use hashes::{HashKey, HashRow};
-pub use journal::{ItemRow, OperationRow, RestoreResult};
+pub use journal::{ItemRow, OperationRow, PurgeResult, QuarantineSummary, RestoreResult};
 
 /// Application identifier: the desktop app keeps its data in a folder of this name.
 pub const APP_ID: &str = "vn.io.nanodev.nanofreedisk";
@@ -405,7 +405,7 @@ impl History {
                 journal::SCHEMA
             ))?;
         }
-        journal::add_message_column(&conn)?;
+        journal::add_item_columns(&conn)?;
         conn.execute_batch(hashes::SCHEMA)?;
         conn.execute_batch(monitor::SCHEMA)?;
         Ok(Self { conn })

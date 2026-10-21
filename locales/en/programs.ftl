@@ -83,6 +83,15 @@ pg-scanning-hint = Program folders, data folders, shortcuts and registry keys.
 pg-queue = { $count } more waiting
 pg-finished = It is finished
 pg-finished-hint = The uninstaller is done (or stuck): stop waiting and look for leftovers.
+pg-step-run = Uninstaller
+pg-step-scan = Leftovers
+pg-step-review = Your review
+pg-elapsed-hint = Time since the uninstaller started
+pg-alive = { $count ->
+    [one] 1 uninstaller process running
+   *[other] { $count } uninstaller processes running
+}
+pg-next = next: { $names }
 pg-declined = { $name } was not uninstalled: the administrator prompt was declined.
 pg-failed = { $name } could not be uninstalled: { $message }
 pg-still-installed = { $name } is still installed.

@@ -7,13 +7,14 @@
   import { formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app } from "../state.svelte";
-  import { forcedLeftovers, pg, programOf, stopWaiting, type ProgramsTab } from "../programs/state.svelte";
+  import { forcedLeftovers, pg, programOf, type ProgramsTab } from "../programs/state.svelte";
   import { expert } from "../state.svelte";
   import Icon from "../components/Icon.svelte";
   import InstalledTab from "../components/programs/InstalledTab.svelte";
   import JunkTab from "../components/programs/JunkTab.svelte";
   import LeftoversCard from "../components/programs/LeftoversCard.svelte";
   import UninstallDialog from "../components/programs/UninstallDialog.svelte";
+  import UninstallProgress from "../components/programs/UninstallProgress.svelte";
 
   const loc = $derived(intlLocale());
   const TABS: { id: ProgramsTab; icon: string }[] = [
@@ -45,24 +46,7 @@
   </div>
 
   {#if pg.current}
-    {@const c = pg.current}
-    <div class="card running" aria-live="polite" data-pg-running>
-      <div class="row">
-        <span class="spin"><Icon name="refresh" size={18} /></span>
-        <div class="grow">
-          <strong>{c.phase === "scanning" ? t("pg-scanning", { name: c.name }) : t("pg-running", { name: c.name })}</strong>
-          <p class="muted small">
-            {c.phase === "scanning" ? t("pg-scanning-hint") : t("pg-running-hint")}
-            {#if pg.queue.length}· {t("pg-queue", { count: pg.queue.length })}{/if}
-          </p>
-        </div>
-        {#if c.phase !== "scanning"}
-          <button class="btn" onclick={stopWaiting} data-pg-finished title={t("pg-finished-hint")}>
-            <Icon name="check" size={16} />{t("pg-finished")}
-          </button>
-        {/if}
-      </div>
-    </div>
+    <UninstallProgress />
   {/if}
 
   {#if pg.running && !pg.current}
@@ -112,6 +96,11 @@
     flex-direction: column;
     gap: 14px;
   }
+  /* the page scrolls, its cards never shrink to fit it (a long program list was
+     cut off at the window's bottom) */
+  .programs > :global(*) {
+    flex-shrink: 0;
+  }
   .programs > .page-head {
     margin-bottom: 0;
   }
@@ -152,16 +141,6 @@
   }
   .small {
     font-size: 0.86em;
-  }
-  .spin {
-    display: inline-flex;
-    color: var(--accent);
-    animation: spin 1.4s linear infinite;
-  }
-  @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
   }
 
   /* shared by the tab components */

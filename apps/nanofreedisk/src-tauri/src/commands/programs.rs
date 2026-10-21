@@ -47,6 +47,8 @@ pub struct ProgramsState {
     leftovers: Mutex<HashMap<String, Report>>,
     junk: Mutex<Option<JunkReport>>,
     stop: Mutex<Option<Arc<AtomicBool>>>,
+    /// Icons already read (`None`: the program has none).
+    icons: Mutex<HashMap<String, Option<IconDto>>>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> CmdResult<std::sync::MutexGuard<'_, T>> {
@@ -94,6 +96,63 @@ pub async fn programs_list(
     let list = blocking(move || runner::list_programs(own_dir(), store, SIZE_ENTRIES)).await?;
     *lock(&programs.list)? = Some(list.clone());
     Ok(list)
+}
+
+/// A program's icon for the list.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IconDto {
+    /// `data:image/png;base64,…`
+    src: String,
+    /// Show it on a colored plate (Store logos made for one).
+    plate: bool,
+}
+
+/// The icons of programs `ids` of the last listing (programs without one are
+/// left out). Read once per program and kept for the session.
+#[tauri::command]
+pub async fn programs_icons(
+    programs: State<'_, ProgramsState>,
+    ids: Vec<String>,
+) -> CmdResult<HashMap<String, IconDto>> {
+    let mut out = HashMap::new();
+    let todo: Vec<Program> = {
+        let cache = lock(&programs.icons)?;
+        let list = lock(&programs.list)?;
+        let mut todo = Vec::new();
+        for id in &ids {
+            match cache.get(id) {
+                Some(Some(icon)) => {
+                    out.insert(id.clone(), icon.clone());
+                }
+                Some(None) => {}
+                None => todo.extend(list.iter().flatten().find(|p| &p.id == id).cloned()),
+            }
+        }
+        todo
+    };
+    if todo.is_empty() {
+        return Ok(out);
+    }
+    let read = blocking(move || {
+        let found = nfd_apps::icons::program_icons(&todo);
+        (todo, found)
+    })
+    .await?;
+    let (asked, found) = read;
+    let mut cache = lock(&programs.icons)?;
+    for p in &asked {
+        cache.insert(p.id.clone(), None);
+    }
+    for (id, icon) in found {
+        let dto = IconDto {
+            src: format!("data:image/png;base64,{}", super::dupes::base64(&icon.png)),
+            plate: icon.plate,
+        };
+        cache.insert(id.clone(), Some(dto.clone()));
+        out.insert(id, dto);
+    }
+    Ok(out)
 }
 
 /// How an uninstall ended.

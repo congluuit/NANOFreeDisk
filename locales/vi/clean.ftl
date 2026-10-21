@@ -81,14 +81,25 @@ activity-freed = giải phóng { $size }
 activity-state-active = đang giữ
 activity-state-restored = đã khôi phục
 activity-state-partly-restored = đã khôi phục một phần
-activity-state-purged = đã dọn khu cách ly
+activity-state-purged = đã xóa vĩnh viễn
 activity-details = Chi tiết
 activity-restore = Khôi phục ({ $count })
 activity-restore-hint = Nếu bấm: các mục trở về chỗ cũ, giữ nguyên ngày giờ. Không ghi đè thứ gì đang có ở đó.
 activity-restore-one = Khôi phục mục này
-activity-purge-hint = Dọn trống khu cách ly này ngay (không hoàn tác được)
-activity-purge-confirm = Xóa vĩnh viễn { $size } khỏi khu cách ly? Không thể hoàn tác.
-activity-purged = Đã dọn trống khu cách ly.
+activity-purge = Xóa vĩnh viễn
+activity-purge-hint = Xóa ngay những gì khu cách ly đang giữ của lần dọn này để lấy lại dung lượng (không hoàn tác được)
+activity-purge-one = Xóa vĩnh viễn mục này
+activity-purge-title = Xóa vĩnh viễn?
+activity-purge-body = { $count } mục của lần dọn này ({ $size }) sẽ bị xóa vĩnh viễn. Sau đó không khôi phục được nữa.
+activity-purge-one-body = Mục này ({ $size }) sẽ bị xóa vĩnh viễn. Sau đó không khôi phục được nữa.
+activity-purged = Đã xóa vĩnh viễn { $count } mục: lấy lại { $size } trên ổ đĩa.
+activity-purge-failed = { $count } mục không xóa được, vẫn nằm trong khu cách ly.
+activity-in-quarantine = { $count } mục trong khu cách ly · vẫn chiếm { $size } trên ổ
+activity-expires = { $days ->
+    [0] tự xóa hôm nay
+    [one] tự xóa ngày mai
+   *[other] tự xóa sau { $days } ngày
+}
 activity-restored = Đã khôi phục { $done } mục{ $failed ->
     [0] .
    *[other] ; { $failed } mục không khôi phục được.
@@ -98,9 +109,29 @@ activity-restore-conflicts = đã có thứ cùng tên ở đó; vẫn giữ tro
 activity-restore-missing = không còn trong khu cách ly hay Thùng rác
 activity-restore-not-restorable = đã xóa vĩnh viễn
 activity-item-restored = đã khôi phục
+activity-item-purged = đã xóa vĩnh viễn
 activity-mode-recycle-bin = Thùng rác
 activity-mode-quarantine = khu cách ly
 activity-mode-permanent = vĩnh viễn
+
+## Khu cách ly (Hoạt động)
+quarantine-title = Khu cách ly
+quarantine-intro = Mục đã dọn được chuyển vào đây chứ chưa bị xóa, để bạn có thể khôi phục. Chúng vẫn chiếm dung lượng cho tới khi NANOFreeDisk xóa vĩnh viễn sau { $days } ngày — hoặc ngay bây giờ nếu bạn cần chỗ trống.
+quarantine-held = vẫn chiếm trên ổ đĩa
+quarantine-items = { $ops ->
+    [one] mục, từ 1 lần dọn
+   *[other] mục, từ { $ops } lần dọn
+}
+quarantine-next = lần tự xóa tiếp theo
+quarantine-none = Khu cách ly trống: không có gì đang chờ xóa.
+quarantine-recycle-note = Mục chuyển vào Thùng rác không nằm trong khu cách ly: Windows giữ chúng cho tới khi Thùng rác được dọn.
+quarantine-open = Mở thư mục
+quarantine-open-hint = Mở thư mục khu cách ly trong Explorer (khôi phục từ đây, đừng tự di chuyển)
+quarantine-empty = Dọn sạch khu cách ly
+quarantine-empty-hint = Xóa vĩnh viễn mọi thứ trong khu cách ly để lấy lại dung lượng ngay
+quarantine-empty-title = Dọn sạch khu cách ly?
+quarantine-empty-body = { $count } mục ({ $size }) sẽ bị xóa vĩnh viễn. Sau đó không khôi phục được nữa. Mục trong Thùng rác không bị động tới.
+quarantine-only = Chỉ hiện các lần dọn còn mục trong khu cách ly
 
 ## Trang chủ và Điểm sức khỏe
 home-free-checking = Đang tìm rác…

@@ -46,6 +46,13 @@ pub struct Program {
     pub quiet_uninstall: Option<String>,
     /// The program file of `DisplayIcon` (`,0` dropped).
     pub icon: Option<PathBuf>,
+    /// The icon's index in [`Self::icon`] (a resource id when negative).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub icon_index: i32,
+    /// A Store package's logo as its manifest names it (the file on disk carries
+    /// scale / size qualifiers, `crate::icons` picks one).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub logo: Option<PathBuf>,
     /// Install date (Unix seconds): `InstallDate`, else the entry's last write.
     pub installed_at: Option<i64>,
     /// Bytes: `EstimatedSize`, or the install folder measured.
@@ -175,23 +182,24 @@ pub fn parse_install_date(s: &str) -> Option<i64> {
     Some((era * 146_097 + doe - 719_468) * 86_400)
 }
 
-/// `"C:\x\app.exe",0` → `C:\x\app.exe`.
-fn icon_path(s: &str) -> Option<PathBuf> {
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde's skip_serializing_if
+fn is_zero(n: &i32) -> bool {
+    *n == 0
+}
+
+/// `"C:\x\app.exe",0` → (`C:\x\app.exe`, 0); `C:\x\app.dll,-101` → (…, -101).
+#[must_use]
+pub fn display_icon(s: &str) -> Option<(PathBuf, i32)> {
     let s = s.trim().trim_matches('"');
-    let s = match s.rsplit_once(',') {
-        Some((p, idx))
-            if idx
-                .trim()
-                .trim_start_matches('-')
-                .chars()
-                .all(|c| c.is_ascii_digit()) =>
-        {
-            p
-        }
-        _ => s,
+    let (s, index) = match s.rsplit_once(',') {
+        Some((p, idx)) => match idx.trim().parse::<i32>() {
+            Ok(i) => (p, i),
+            Err(_) => (s, 0),
+        },
+        None => (s, 0),
     };
     let p = PathBuf::from(s.trim().trim_matches('"'));
-    p.is_absolute().then_some(p)
+    p.is_absolute().then_some((p, index))
 }
 
 /// Updates, hotfixes and service packs of other products.
@@ -390,6 +398,8 @@ fn read_entry(
         .map(str::to_owned)
         .or_else(|| no_remove.then(|| "no-remove".to_owned()))
         .or_else(|| uninstall.is_none().then(|| "no-uninstaller".to_owned()));
+    let icon =
+        text(&values, "DisplayIcon").and_then(|s| display_icon(&command::expand_vars(s, env.env)));
     Some(Program {
         id: format!("{prefix}:{key_name}"),
         caution: caution_of(&name, publisher.as_deref()).map(str::to_owned),
@@ -401,8 +411,9 @@ fn read_entry(
         arch,
         install_location,
         quiet_uninstall: text(&values, "QuietUninstallString").map(str::to_owned),
-        icon: text(&values, "DisplayIcon")
-            .and_then(|s| icon_path(&command::expand_vars(s, env.env))),
+        icon_index: icon.as_ref().map_or(0, |i| i.1),
+        icon: icon.map(|i| i.0),
+        logo: None,
         installed_at,
         size,
         size_measured: false,
@@ -542,6 +553,25 @@ pub fn manifest_names(xml: &str) -> (Option<String>, Option<String>) {
     (tag("DisplayName"), tag("PublisherDisplayName"))
 }
 
+/// The logo an `AppxManifest.xml` names for its app list entry: the first
+/// application's `Square44x44Logo`, else the package `<Logo>` (relative to the
+/// install folder, without its scale / size qualifiers).
+#[must_use]
+pub fn manifest_logo(xml: &str) -> Option<String> {
+    let attr = "Square44x44Logo=\"";
+    let from_attr = xml.find(attr).and_then(|s| {
+        let s = s + attr.len();
+        xml[s..].find('"').map(|e| &xml[s..s + e])
+    });
+    let from_tag = || {
+        let s = xml.find("<Logo>")? + "<Logo>".len();
+        let e = xml[s..].find('<')?;
+        Some(&xml[s..s + e])
+    };
+    let v = xml_unescape(from_attr.or_else(from_tag)?.trim());
+    (!v.is_empty() && !v.contains("..") && !v.contains(':')).then_some(v)
+}
+
 fn xml_unescape(s: &str) -> String {
     s.replace("&amp;", "&")
         .replace("&lt;", "<")
@@ -607,11 +637,15 @@ pub fn store_programs(
             .as_deref()
             .map(PathBuf::from)
             .filter(|p| p.is_absolute());
-        let (display, publisher) = location
+        let manifest = location
             .as_deref()
-            .and_then(|l| read(&l.join("AppxManifest.xml")))
-            .map(|x| manifest_names(&x))
-            .unwrap_or_default();
+            .and_then(|l| read(&l.join("AppxManifest.xml")));
+        let (display, publisher) = manifest.as_deref().map(manifest_names).unwrap_or_default();
+        let logo = manifest.as_deref().and_then(manifest_logo).and_then(|rel| {
+            location
+                .as_deref()
+                .map(|l| l.join(rel.replace(['/', '\\'], std::path::MAIN_SEPARATOR_STR)))
+        });
         let resolve_text = |v: Option<String>| -> Option<String> {
             let v = v?;
             if v.starts_with("ms-resource:") {
@@ -639,6 +673,8 @@ pub fn store_programs(
             uninstall: None,
             quiet_uninstall: None,
             icon: None,
+            icon_index: 0,
+            logo,
             installed_at: None,
             size: 0,
             size_measured: false,
@@ -968,5 +1004,40 @@ mod tests {
         );
         assert_eq!(n.as_deref(), Some("Tom & Jerry"));
         assert_eq!(p.as_deref(), Some("Acme"));
+    }
+
+    #[test]
+    fn manifest_logo_prefers_the_app_list_icon() {
+        let xml = r#"<Properties><Logo>Assets\StoreLogo.png</Logo></Properties>
+            <Applications><Application><uap:VisualElements Square150x150Logo="Assets\Big.png"
+            Square44x44Logo="Assets\Square44x44Logo.png"/></Application></Applications>"#;
+        assert_eq!(
+            manifest_logo(xml).as_deref(),
+            Some(r"Assets\Square44x44Logo.png")
+        );
+        assert_eq!(
+            manifest_logo("<Properties><Logo> Images\\Logo.png </Logo></Properties>").as_deref(),
+            Some(r"Images\Logo.png")
+        );
+        assert_eq!(manifest_logo("<Logo>..\\..\\x.png</Logo>"), None);
+        assert_eq!(manifest_logo(r#"Square44x44Logo="C:\x.png""#), None);
+        assert_eq!(manifest_logo("<Properties/>"), None);
+    }
+
+    #[test]
+    fn display_icon_keeps_the_index() {
+        assert_eq!(
+            display_icon(r#""C:\Acme\app.exe",0"#),
+            Some((PathBuf::from(r"C:\Acme\app.exe"), 0))
+        );
+        assert_eq!(
+            display_icon(r"C:\Acme\res.dll,-101"),
+            Some((PathBuf::from(r"C:\Acme\res.dll"), -101))
+        );
+        assert_eq!(
+            display_icon(r"C:\Acme\app.ico"),
+            Some((PathBuf::from(r"C:\Acme\app.ico"), 0))
+        );
+        assert_eq!(display_icon("app.exe,0"), None);
     }
 }

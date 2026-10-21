@@ -84,6 +84,13 @@ export interface OperationRow {
   cancelled: boolean;
   state: "active" | "restored" | "partly-restored" | "purged" | string;
   restorable: number;
+  /** Of those, the items the quarantine holds (files, or `.reg` backups of
+   *  registry leftovers); the others are in the Recycle Bin. */
+  quarantined: number;
+  /** Bytes they keep on the disk until they are deleted for good. */
+  held: number;
+  /** When the quarantine deletes its files by itself (Unix seconds). */
+  expiresAt: number | null;
 }
 
 export interface OperationItem {
@@ -101,6 +108,28 @@ export interface OperationItem {
   restored: boolean;
   /** What a command ran and how to undo it (package stores, git worktrees). */
   message: string | null;
+  /** Deleted for good from the quarantine. */
+  purged: boolean;
+}
+
+/** Outcome of deleting quarantined items for good. */
+export interface PurgeResult {
+  items: number;
+  bytes: number;
+  /** `path: error` of items that stay in the quarantine. */
+  failed: string[];
+}
+
+/** What the quarantine holds (`quarantine_summary`). */
+export interface QuarantineInfo {
+  items: number;
+  bytes: number;
+  operations: number;
+  /** When the quarantine next deletes files by itself (Unix seconds). */
+  nextExpiry: number | null;
+  ttlDays: number;
+  /** The quarantine folders on this machine. */
+  roots: string[];
 }
 
 export interface ActivityDetail {

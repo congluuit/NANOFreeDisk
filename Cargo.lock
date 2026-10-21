@@ -3187,6 +3187,7 @@ dependencies = [
  "nfd-platform",
  "nfd-rules",
  "nfd-tasks",
+ "png 0.17.16",
  "proptest",
  "serde",
  "serde_json",

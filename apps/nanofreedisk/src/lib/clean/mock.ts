@@ -2,7 +2,8 @@
 // a few rules shaped like a real Windows PC, a quarantine that "restores", and the
 // delete of hand-picked entries delegated to the main mock's `recycle`.
 
-import type { CleanScan, OperationItem, OperationRow, RuleSummary } from "./types";
+import { HELD_MODES, heldItem, restorableItem } from "./quarantine.ts";
+import type { CleanScan, OperationItem, OperationRow, PurgeResult, QuarantineInfo, RuleSummary } from "./types";
 
 const MB = 2 ** 20;
 const GB = 2 ** 30;
@@ -85,10 +86,25 @@ function scan(): CleanScan {
   };
 }
 
-const ops: { row: OperationRow; items: OperationItem[] }[] = [];
+type MockOp = { row: OperationRow; items: OperationItem[] };
+const ops: MockOp[] = [];
+const DAY = 86_400;
+const TTL_DAYS = 7;
+const LOCAL = "C:\\Users\\nano\\AppData\\Local";
+const QUARANTINE_ROOT = `${LOCAL}\\vn.io.nanodev.nanofreedisk\\quarantine`;
 
-function record(kind: string, items: OperationItem[]): OperationRow {
-  const t = now();
+/** Recount what an operation can still restore and what the quarantine holds of it. */
+function derive(o: MockOp): void {
+  const r = o.row;
+  r.restorable = o.items.filter((i) => restorableItem(i, r.state)).length;
+  const held = o.items.filter((i) => heldItem(i, r.state));
+  r.quarantined = held.length;
+  r.held = held.reduce((s, i) => s + i.freed, 0);
+  r.expiresAt = held.some((i) => i.mode !== "registry") ? r.startedAt + TTL_DAYS * DAY : null;
+}
+
+function record(kind: string, items: OperationItem[], age = 0): OperationRow {
+  const t = now() - age;
   const row: OperationRow = {
     id: `mock-${t}-${ops.length}`,
     kind,
@@ -100,16 +116,72 @@ function record(kind: string, items: OperationItem[]): OperationRow {
     freed: items.reduce((s, i) => s + i.freed, 0),
     cancelled: false,
     state: "active",
-    restorable: items.length,
+    restorable: 0,
+    quarantined: 0,
+    held: 0,
+    expiresAt: null,
   };
-  ops.unshift({ row, items });
+  const o = { row, items };
+  derive(o);
+  ops.unshift(o);
+  ops.sort((a, b) => b.row.startedAt - a.row.startedAt);
   return row;
+}
+
+function item(n: number, path: string, mode: OperationItem["mode"], bytes: number, isDir = true): OperationItem {
+  const name = path.split("\\").pop();
+  const stored =
+    mode === "registry"
+      ? `${LOCAL}\\vn.io.nanodev.nanofreedisk\\registry-backup\\seed\\${n}.reg`
+      : HELD_MODES.includes(mode)
+        ? `${QUARANTINE_ROOT}\\seed\\${n}\\${name}`
+        : null;
+  return { n, path, ruleId: null, mode, isDir, bytes, files: isDir ? 40 : 1, freed: bytes, status: "done", reason: null, stored, restored: false, message: null, purged: false };
+}
+
+/** A few operations from the past days, so the Activity log and its quarantine
+ *  have something to show in a browser preview. */
+function seed(): void {
+  record(
+    "clean",
+    [
+      item(0, `${LOCAL}\\Google\\Chrome\\User Data\\Default\\Cache`, "quarantine", 1.4 * GB),
+      item(1, `${LOCAL}\\Temp`, "quarantine", 860 * MB),
+      item(2, `${LOCAL}\\npm-cache\\_cacache`, "quarantine", 2.1 * GB),
+    ],
+    2 * DAY,
+  );
+  record(
+    "uninstall",
+    [
+      item(0, `${LOCAL}\\Programs\\Old Chat`, "quarantine", 310 * MB),
+      item(1, "HKEY_CURRENT_USER\\Software\\Old Chat", "registry", 0, false),
+      item(2, "C:\\ProgramData\\Old Chat", "recycle-bin", 45 * MB),
+    ],
+    DAY,
+  );
+  record("manual", [item(0, "C:\\Users\\nano\\Downloads\\setup-old.exe", "recycle-bin", 120 * MB, false)], 5 * DAY);
+}
+seed();
+
+/** Delete held items of `o` for good (all, or `only`). */
+function purgeOp(o: MockOp, only?: number[] | null): PurgeResult {
+  const out: PurgeResult = { items: 0, bytes: 0, failed: [] };
+  for (const i of o.items.filter((x) => heldItem(x, o.row.state) && (!only || only.includes(x.n)))) {
+    i.purged = true;
+    out.items++;
+    out.bytes += i.freed;
+  }
+  derive(o);
+  if (!o.row.restorable && o.items.some((i) => i.purged)) o.row.state = "purged";
+  derive(o);
+  return out;
 }
 
 export function mockDeleted(kind: string, items: { path: string; bytes: number; isDir: boolean }[], mode: OperationItem["mode"]): void {
   record(
     kind,
-    items.map((x, n) => ({ n, path: x.path, ruleId: null, mode, isDir: x.isDir, bytes: x.bytes, files: 1, freed: x.bytes, status: "done", reason: null, stored: null, restored: false, message: null })),
+    items.map((x, n) => ({ n, path: x.path, ruleId: null, mode, isDir: x.isDir, bytes: x.bytes, files: 1, freed: x.bytes, status: "done", reason: null, stored: null, restored: false, message: null, purged: false })),
   );
 }
 
@@ -140,9 +212,10 @@ export const cleanHandlers: Record<string, (a: Record<string, any>) => unknown> 
       freed: r.running.length ? Math.round(r.bytes * 0.8) : r.bytes,
       status: r.running.length ? "partial" : "done",
       reason: r.running.length ? "in-use" : null,
-      stored: `quarantine\\${n}`,
+      stored: `${QUARANTINE_ROOT}\\new\\${n}\\Cache`,
       restored: false,
       message: null,
+      purged: false,
     }));
     const row = record("clean", items);
     for (const r of picked) {
@@ -164,7 +237,11 @@ export const cleanHandlers: Record<string, (a: Record<string, any>) => unknown> 
     };
   },
   clean_cancel: () => undefined,
-  activity_list: ({ limit }) => ops.slice(0, limit).map((o) => ({ ...o.row })),
+  activity_list: ({ limit }) =>
+    ops.slice(0, limit).map((o) => {
+      derive(o);
+      return { ...o.row };
+    }),
   activity_items: ({ id }) => {
     const o = ops.find((x) => x.row.id === id);
     if (!o) throw { code: "history", message: `unknown operation ${id}` };
@@ -174,23 +251,44 @@ export const cleanHandlers: Record<string, (a: Record<string, any>) => unknown> 
     const o = ops.find((x) => x.row.id === id);
     if (!o) throw { code: "history", message: `unknown operation ${id}` };
     const out = o.items
-      .filter((i) => !i.restored && (!items || items.includes(i.n)))
+      .filter((i) => restorableItem(i, o.row.state) && (!items || items.includes(i.n)))
       .map((i) => {
         i.restored = true;
         return { n: i.n, path: i.path, status: "restored", message: null };
       });
-    o.row.restorable = o.items.filter((i) => !i.restored).length;
+    derive(o);
     o.row.state = o.row.restorable ? "partly-restored" : "restored";
+    derive(o);
     if (o.row.kind === "clean") reset();
     return out;
   },
-  activity_purge: ({ id }) => {
+  activity_purge: ({ id, items }) => {
     const o = ops.find((x) => x.row.id === id);
-    if (o) {
-      o.row.state = "purged";
-      o.row.restorable = 0;
-    }
+    if (!o) throw { code: "history", message: `unknown operation ${id}` };
+    return purgeOp(o, items);
   },
+  quarantine_summary: (): QuarantineInfo => {
+    const held = ops.flatMap((o) => o.items.filter((i) => heldItem(i, o.row.state)).map((i) => ({ i, o })));
+    const files = held.filter((h) => h.i.mode !== "registry").map((h) => h.o.row.startedAt);
+    return {
+      items: held.length,
+      bytes: held.reduce((s, h) => s + h.i.freed, 0),
+      operations: new Set(held.map((h) => h.o.row.id)).size,
+      nextExpiry: files.length ? Math.min(...files) + TTL_DAYS * DAY : null,
+      ttlDays: TTL_DAYS,
+      roots: held.length ? [QUARANTINE_ROOT] : [],
+    };
+  },
+  quarantine_empty: (): PurgeResult => {
+    const out: PurgeResult = { items: 0, bytes: 0, failed: [] };
+    for (const o of ops) {
+      const r = purgeOp(o);
+      out.items += r.items;
+      out.bytes += r.bytes;
+    }
+    return out;
+  },
+  quarantine_reveal: () => undefined,
   activity_forget: ({ id }) => {
     const i = ops.findIndex((x) => x.row.id === id);
     if (i >= 0) ops.splice(i, 1);

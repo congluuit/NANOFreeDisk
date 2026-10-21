@@ -166,6 +166,8 @@ fn program(name: &str, publisher: Option<&str>, install: Option<PathBuf>) -> Pro
         install_location: install,
         quiet_uninstall: None,
         icon: None,
+        icon_index: 0,
+        logo: None,
         installed_at: None,
         size: 0,
         size_measured: false,

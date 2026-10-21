@@ -14,7 +14,7 @@ use nfd_core::RiskLevel;
 use nfd_core::exec::{self, ExecOptions, ItemStatus, Operation, QuarantineRoots};
 use nfd_core::plan::{self, CleanPlan, DeleteMode, PlanOptions};
 use nfd_core::safety::{LiveProbe, SafetyGate};
-use nfd_history::{ItemRow, OperationRow, RestoreResult};
+use nfd_history::{ItemRow, OperationRow, PurgeResult, QuarantineSummary, RestoreResult};
 use nfd_platform::Platform;
 use nfd_rules::matcher::{MatchOptions, MatchReport, Matcher, RuleSummary};
 use serde::Serialize;
@@ -571,18 +571,82 @@ pub async fn activity_restore(
     Ok(out)
 }
 
-/// Delete an operation's quarantine for good.
+/// Delete what the quarantine holds of operation `id` for good: everything, or
+/// only `items` (item numbers). Recycle Bin items are left to Windows.
 #[tauri::command]
 pub async fn activity_purge(
     app: AppHandle,
     state: State<'_, AppState>,
     id: String,
-) -> CmdResult<()> {
-    with_history(&app, &state, |h| h.purge_operation(&id))?;
+    items: Option<Vec<u64>>,
+) -> CmdResult<PurgeResult> {
+    let out = with_history(&app, &state, |h| h.purge_items(&id, items.as_deref()))?;
     if let Some(dir) = audit_dir(&app) {
-        let _ = nfd_history::audit::note(&dir, exec::unix_now(), &format!("{id}\tpurge"));
+        let _ = nfd_history::audit::note(
+            &dir,
+            exec::unix_now(),
+            &format!("{id}\tpurge\t{} item(s)", out.items),
+        );
     }
-    Ok(())
+    Ok(out)
+}
+
+/// What the quarantine holds, and where.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QuarantineDto {
+    #[serde(flatten)]
+    summary: QuarantineSummary,
+    /// The quarantine folders that exist on this machine.
+    roots: Vec<String>,
+}
+
+#[tauri::command]
+pub async fn quarantine_summary(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<QuarantineDto> {
+    let summary = with_history(&app, &state, |h| h.quarantine_summary())?;
+    let roots = roots(&app)
+        .existing()
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    Ok(QuarantineDto { summary, roots })
+}
+
+/// Delete everything the quarantine holds for good (the user confirmed it).
+#[tauri::command]
+pub async fn quarantine_empty(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> CmdResult<PurgeResult> {
+    let r = roots(&app);
+    let out = with_history(&app, &state, |h| h.empty_quarantine(&r, exec::unix_now()))?;
+    nfd_history::uninstall::remove_empty_volume_quarantines(&r);
+    if let Some(dir) = audit_dir(&app) {
+        let _ = nfd_history::audit::note(
+            &dir,
+            exec::unix_now(),
+            &format!("quarantine\tempty\t{} item(s)", out.items),
+        );
+    }
+    Ok(out)
+}
+
+/// Open quarantine folder `index` (of [`quarantine_summary`]'s `roots`) in
+/// Explorer.
+#[tauri::command]
+pub fn quarantine_reveal(app: AppHandle, index: usize) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let root = roots(&app)
+        .existing()
+        .into_iter()
+        .nth(index)
+        .ok_or_else(|| err("not-found", index))?;
+    app.opener()
+        .open_path(root.to_string_lossy(), None::<&str>)
+        .map_err(|e| err("os", e))
 }
 
 /// Remove an operation from the Activity log (its quarantine is purged first).

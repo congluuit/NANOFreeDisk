@@ -91,7 +91,7 @@ NANOFreeDisk is built around one rule: **a cleaner must never be the reason Wind
 - **Path canonicalization before every check** — junctions, symlinks, 8.3 names, `\\?\` prefixes and case tricks cannot route a delete into a protected folder.
 - **Files in use are never force-deleted** — the Windows Restart Manager tells you *which* process holds a file; the app never kills anything.
 - **Microsoft-signed and SYSTEM-attributed files** inside system folders are always protected, even if a rule matches.
-- **Recycle Bin by default, Quarantine for big caches** — large cache folders are *moved* (instant rename) into a quarantine with a 7-day TTL and a one-click *Restore*. Permanent deletion is only offered for 🟢 Safe items and requires typing `DELETE`.
+- **Recycle Bin by default, Quarantine for big caches** — large cache folders are *moved* (instant rename) into a quarantine with a 7-day TTL and a one-click *Restore*; Cleanup history shows what the quarantine holds and lets you delete it for good sooner (one item, one operation or everything) when you need the space. Permanent deletion is only offered for 🟢 Safe items and requires typing `DELETE`.
 - **Dry-run first, always** — every plan shows the complete file list and total before anything happens; plans over 50 GB or 20 % of the drive get a red warning.
 - **Undo journal + audit log** — every operation is recorded; `nfd quarantine restore <id>` brings it back.
 - **No telemetry.** The only network calls are the optional update check and documentation links.

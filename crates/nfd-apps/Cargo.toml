@@ -18,7 +18,9 @@ serde_json = { workspace = true }
 
 [target.'cfg(windows)'.dependencies]
 nfd-tasks = { workspace = true }
-windows-sys = { workspace = true, features = ["Win32_UI_WindowsAndMessaging"] }
+# program icons → PNG (the version the branded setup already uses)
+png = "0.17"
+windows-sys = { workspace = true, features = ["Win32_Graphics_Gdi", "Win32_UI_WindowsAndMessaging"] }
 
 [dev-dependencies]
 proptest = { workspace = true }
