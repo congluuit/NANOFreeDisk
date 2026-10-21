@@ -760,16 +760,18 @@ mod tests {
 
     #[test]
     fn full_match_never_cuts_inside_a_character() {
-        let p = compile_path("C:/Users/nano/AppData/Local/Acme/Cache").expect("path");
-        // the base is 38 bytes; byte 38 of this path falls inside "ê": no match, no panic
-        let text = "C:/Users/nano/AppData/Local/Acme/Cachê/x";
-        assert!(!text.is_char_boundary(38));
-        assert!(!full_match(&p, text));
-        assert!(!full_match(&p, "C:/Users/nano/AppData/Local/Acmê/Cache/x"));
-        assert!(full_match(
-            &p,
-            "C:/Users/nano/AppData/Local/Acme/Cache/Tài liệu"
-        ));
+        let base = if cfg!(windows) {
+            "C:/Users/nano/AppData/Local/Acme/Cache"
+        } else {
+            "/Users/nano/Library/Caches/Acme/Cache"
+        };
+        let p = compile_path(base).expect("path");
+        // "ê" takes the base's last byte and one more: the cut at base.len() falls
+        // inside it — no match, and no panic
+        let text = format!("{}ê/x", &base[..base.len() - 1]);
+        assert!(!text.is_char_boundary(base.len()));
+        assert!(!full_match(&p, &text));
+        assert!(full_match(&p, &format!("{base}/Tài liệu")));
     }
 
     fn pack(paths: &str, extra: &str) -> Pack {
