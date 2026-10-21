@@ -6,6 +6,9 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+### Added
+- **One-click update for every copy** (Settings → Updates → **Update now**): copies installed with NANOFreeDisk Setup, the portable zip and the macOS app now update in place like the NSIS / MSI packages, with a download progress. Setup copies are updated by the new Setup in their own folder with the same options (one Windows prompt when installed for everyone); portable copies get the new files next to the exe and their `data` folder is never touched; the app closes and starts again. Every package is verified with the release's signing key. Copies of 0.2.1 and earlier installed with Setup or portable need one manual update to get this.
+
 ## [0.2.1] - 2026-10-21
 
 ### Fixed

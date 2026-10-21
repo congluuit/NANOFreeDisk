@@ -100,7 +100,7 @@ export const api = {
   takeStartupPath: () => call<string | null>("take_startup_path"),
   shellMenuStatus: () => call<boolean>("shell_menu_status"),
   updateCheck: () => call<UpdateInfo>("update_check"),
-  updateInstall: () => call<void>("update_install"),
+  updateInstall: (lang: string) => call<void>("update_install", { lang }),
   updateOpenReleases: () => call<void>("update_open_releases"),
   shellMenuSet: (enabled: boolean, caption: string, dupesCaption: string) =>
     call<boolean>("shell_menu_set", { enabled, caption, dupesCaption }),

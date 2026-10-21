@@ -28,7 +28,7 @@ rỗng), DevCache, Activity (hoàn tác), Settings, bảng lệnh ⌘K, EN/VI, t
 | Hardware (cảm biến, Tasks, PawnIO, nhiệt độ 24 h) | WMI / PawnIO / Toolhelp. |
 | Monitor (hoạt động đĩa) | ETW + bộ đếm I/O của Windows. |
 | Programs (gỡ cài đặt, phần sót lại, rác phần mềm) | Registry Uninstall, trình gỡ của Windows, gói Store (`nfd-apps`; test của crate chỉ chạy trên Windows). |
-| Menu Explorer, cập nhật tại chỗ | Registry / NSIS–MSI; trên macOS Settings → Updates chỉ mở trang Releases. |
+| Menu Explorer | Registry. (Cập nhật tại chỗ có trên macOS: `.app.tar.gz` có chữ ký updater.) |
 
 Các lệnh Rust của những tính năng trên vẫn được đăng ký (để `generate_handler!` không
 đổi) nhưng trả lỗi `unsupported` ngoài Windows; giao diện không gọi tới chúng
@@ -170,7 +170,8 @@ thân (container): `~`, `~/Library`, `~/Library/Application Support`, `~/Library
   (Actions → CI → Run workflow) và để lại artifact `NANOFreeDisk-macos-universal`.
 - **Release** (`release.yml`): job `build-macos` (sau `release-check`, vẫn chạy trên
   Windows và vẫn chặn) đưa `.dmg` và `.app.zip` vào release; `release-notes.sh` thêm dòng
-  tải cho macOS. `latest.json` chưa có mục `darwin-*`: app macOS không tự cập nhật.
+  tải cho macOS. Có khóa updater thì thêm `.app.tar.gz` + `.sig` và mục `darwin-x86_64` /
+  `darwin-aarch64` trong `latest.json`: Settings → Updates → "Cập nhật ngay".
 - **Kiểm tra trên máy Windows** (không có Mac): `scripts/…` không chạy được, nhưng có
   thể type-check: `rustup target add x86_64-apple-darwin` rồi `cargo clippy --target
   x86_64-apple-darwin` với một `cc`/`ar` giả (các build script C chỉ cần tạo ra tệp).
@@ -200,8 +201,6 @@ chịu chạy, **không notarize**. Gatekeeper sẽ chặn lần đầu: chuột
 
 - Notarize + Developer ID (cần tài khoản Apple Developer 99 USD/năm), rồi bật hardened
   runtime.
-- Updater cho macOS: build `.app.tar.gz` có chữ ký updater và thêm `darwin-x86_64`,
-  `darwin-aarch64` vào `latest.json`.
 - Rule pack cho macOS (Clean): `~/Library/Caches/*`, log, Xcode DerivedData /
   Archives / simulator, Homebrew (`brew cleanup`), bản tải dở của Safari… rồi bật lại
   Clean trên macOS.

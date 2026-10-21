@@ -14,7 +14,10 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET=universal-apple-darwin
 NAME="NANOFreeDisk-$VERSION-macos-universal"
 
-(cd "$ROOT/apps/nanofreedisk" && pnpm tauri build --target "$TARGET" --ci)
+# with the updater key: also NANOFreeDisk.app.tar.gz + .sig for in-app updates
+UPDATER=()
+[[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] && UPDATER=(--config src-tauri/tauri.updater.conf.json)
+(cd "$ROOT/apps/nanofreedisk" && pnpm tauri build --target "$TARGET" --ci "${UPDATER[@]}")
 
 BUNDLE="$ROOT/target/$TARGET/release/bundle"
 APP="$BUNDLE/macos/NANOFreeDisk.app"
@@ -40,4 +43,8 @@ dmg=$(ls "$BUNDLE"/dmg/*.dmg | head -1)
 cp "$dmg" "$OUT/$NAME.dmg"
 # ditto keeps the signature, symlinks and extended attributes of the bundle
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$OUT/$NAME.app.zip"
+if [[ -f "$BUNDLE/macos/NANOFreeDisk.app.tar.gz.sig" ]]; then
+  cp "$BUNDLE/macos/NANOFreeDisk.app.tar.gz" "$OUT/$NAME.app.tar.gz"
+  cp "$BUNDLE/macos/NANOFreeDisk.app.tar.gz.sig" "$OUT/$NAME.app.tar.gz.sig"
+fi
 (cd "$OUT" && shasum -a 256 "$NAME.dmg" "$NAME.app.zip")

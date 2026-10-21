@@ -9,7 +9,9 @@
   dist\NANOFreeDisk-<v>-x64-setup.exe      NSIS (per user)
   dist\NANOFreeDisk-Setup-<v>-x64.exe      branded setup (egui)
   dist\NANOFreeDisk-<v>-x64-portable.zip   portable zip
-  plus the updater signatures (*.sig) when TAURI_SIGNING_PRIVATE_KEY is set.
+  plus the updater signatures (*.sig) when TAURI_SIGNING_PRIVATE_KEY is set: NSIS
+  and MSI from Tauri, the branded setup and the portable zip signed here (their
+  copies update from them, see apps/nanofreedisk/src-tauri/src/commands/update.rs).
 
 .PARAMETER Out        Output folder (created; existing package files are replaced).
 .PARAMETER Version    Defaults to workspace.package.version in Cargo.toml.
@@ -79,6 +81,12 @@ try {
     Compress-Archive -Path "$stage\*" -DestinationPath $zip
 } finally {
     Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
+}
+if ($env:TAURI_SIGNING_PRIVATE_KEY) {
+    foreach ($f in @("$Out\$app-Setup-$Version-x64.exe", $zip)) {
+        Remove-Item "$f.sig" -ErrorAction SilentlyContinue
+        Native pnpm @("tauri", "signer", "sign", $f) "$root\apps\nanofreedisk"
+    }
 }
 
 Get-ChildItem $Out | Format-Table Name, Length -AutoSize

@@ -29,6 +29,7 @@ describe() {
     *-portable.zip) echo "Portable: unzip and run, data stays next to the exe" ;;
     *-macos-universal.dmg) echo "macOS 11+ (Intel and Apple silicon): open, drag to Applications" ;;
     *-macos-universal.app.zip) echo "macOS 11+: the same app, zipped" ;;
+    *-macos-universal.app.tar.gz) echo "macOS app for in-app updates" ;;
     SHA256SUMS.txt) echo "SHA-256 checksums of every file" ;;
     *.minisig) echo "minisign signature of SHA256SUMS.txt" ;;
     *.cdx.json) echo "Software bill of materials (CycloneDX)" ;;

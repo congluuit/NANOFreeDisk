@@ -415,6 +415,29 @@ fn register(plan: &Plan, entries: &[Entry]) -> io::Result<()> {
     Ok(())
 }
 
+/// The plan that installs a new version over the copy in `dir` with the options it
+/// was installed with: all users or not from the manifest, the shortcuts that are
+/// still there, the Explorer menu if it points to this copy. `None` when `dir` holds
+/// no installation of this setup.
+#[must_use]
+pub fn update_plan(dir: &Path, lang: Lang) -> Option<Plan> {
+    let m = Manifest::read(dir)?;
+    let has = |folder: Option<PathBuf>| {
+        folder.is_some_and(|f| m.shortcuts.iter().any(|l| l.starts_with(&f) && l.exists()))
+    };
+    let exe = dir.join(APP_EXE).display().to_string().to_lowercase();
+    let shell_menu = nfd_platform::shell_menu::registered_command()
+        .is_some_and(|c| c.to_lowercase().contains(&exe));
+    Some(Plan {
+        dir: dir.to_path_buf(),
+        all_users: m.all_users,
+        start_menu: has(sys::programs_dir(m.all_users)),
+        desktop: has(sys::desktop_dir(m.all_users)),
+        shell_menu,
+        lang,
+    })
+}
+
 /// Our own installation (from Apps & features), if any.
 #[must_use]
 pub fn ours() -> Option<Existing> {

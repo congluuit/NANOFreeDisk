@@ -36,7 +36,7 @@
 - Zip gồm `nanofreedisk.exe`, `nfd.exe`, `rules/`, `LICENSE`, `README.md`, `portable.flag`.
 - Khi `portable.flag` nằm cạnh exe đang chạy: mọi dữ liệu (lịch sử, settings, nhật ký, quarantine ổ hệ thống, hồ sơ WebView2 `data\EBWebView`) vào `<thư mục exe>\data\`. Một hàm duy nhất `nfd_history::portable_dir()` cho cả app và CLI; app gom mọi đường dẫn dữ liệu vào `paths.rs`. Cửa sổ chính được tạo trong `setup` (`"create": false` trong `tauri.conf.json`) với `data_directory`, vì Tauri luôn tạo `%LOCALAPPDATA%\<identifier>` cho WebView2 nếu không chỉ định — smoke test bắt được lỗi này.
 - Quarantine của ổ khác vẫn là `<ổ>\.nfd-quarantine` (đổi tên không vượt volume — đã có trong `QuarantineRoots`): khi exe nằm trên USB, tệp ổ `C:` vào `C:\.nfd-quarantine`.
-- Portable không ghi registry, không tự đăng ký menu Explorer (bật tay trong Settings thì tắt tay trước khi xóa thư mục), updater chỉ **thông báo** có bản mới.
+- Portable không ghi registry, không tự đăng ký menu Explorer (bật tay trong Settings thì tắt tay trước khi xóa thư mục); updater thay tệp ngay trong thư mục portable (§2.5).
 
 ### 2.3 Dọn dữ liệu khi gỡ: `nanofreedisk.exe --uninstall-cleanup`
 
@@ -66,7 +66,11 @@ Một đường duy nhất cho NSIS, MSI và bộ cài thương hiệu (không l
 ### 2.5 Updater
 
 - `tauri-plugin-updater` (bản hợp MSRV 1.85 / Tauri 2.11) kiểm tra `https://github.com/congluuit/NANOFreeDisk/releases/latest/download/latest.json`; chữ ký minisign với **public key trong `tauri.conf.json`** (`plugins.updater.pubkey`).
-- Cài tự động chỉ cho bản NSIS / MSI (Tauri biết loại gói); bản thương hiệu và portable: chỉ thông báo + nút mở trang Release. Settings → "Kiểm tra cập nhật" (thủ công; không tự kiểm khi chưa bật).
+- **Cập nhật một chạm cho mọi kiểu cài** (Settings → "Kiểm tra cập nhật" → "Cập nhật ngay"; thủ công, không tự kiểm khi chưa bật). Mỗi kiểu cập nhật từ chính gói của nó, không bao giờ sinh bản cài thứ hai ở chỗ khác (`src-tauri/src/commands/update.rs`):
+  - NSIS / MSI và app macOS: plugin tải, kiểm chữ ký, cài, khởi động lại (`windows-x86_64[-nsis|-msi]`, `darwin-x86_64` / `darwin-aarch64` → `.app.tar.gz`).
+  - Bộ cài thương hiệu (`install.manifest` cạnh exe): tải `NANOFreeDisk-Setup-x.y.z-x64.exe` (`windows-x86_64-setup`, có `.sig`) vào `%TEMP%\nfd-update-<ver>`, chạy `--update --relaunch --wait-pid=<pid> /LANG=xx /D=<thư mục>` rồi app thoát. Setup chờ app đóng, cài đè với đúng tùy chọn cũ (mọi người/riêng tôi từ manifest, lối tắt còn tồn tại, menu Explorer nếu trỏ về bản này), rồi mở lại app (không từ tiến trình elevated). Cài cho mọi người → một hộp thoại UAC. Lỗi → hộp thoại báo lỗi.
+  - Portable (`portable.flag`): tải zip (`windows-x86_64-portable`, có `.sig`), giải nén bằng `tar.exe` của Windows (không thêm thư viện zip — zip 4.x có RUSTSEC), đổi tên các tệp đang dùng thành `*.nfd-old` rồi chép tệp mới (lỗi → trả lại hết); `data\` không bao giờ bị ghi; app mở lại sau ~2 s (tránh single-instance); lần chạy sau xóa `*.nfd-old` và `%TEMP%\nfd-update-*`.
+  - Bản 0.2.1 trở về trước của Setup / portable chưa có cơ chế này: cập nhật tay một lần.
 - `bundle.createUpdaterArtifacts` bật trong `tauri.bundle.conf.json` **chỉ khi** CI có `TAURI_SIGNING_PRIVATE_KEY` (không có → build không tạo `.sig`, không có `latest.json`, release vẫn chạy).
 - Khóa sinh **ngoài repo** (`%USERPROFILE%\.nanofreedisk-keys\updater.key`), không commit, không in. Tác giả tự đưa lên GitHub:
 
@@ -119,7 +123,7 @@ Một đường duy nhất cho NSIS, MSI và bộ cài thương hiệu (không l
 
 ## 7. Kết quả kiểm tra (2026-10-17, laptop tham chiếu, Windows 10 Pro 19045, người dùng thường)
 
-- `scripts/build-packages.ps1` dựng đủ 4 gói (+ MSI tiếng Việt): Setup ≈ 18 MB (stub egui ≈ 8 MB + payload zstd gồm chính stub làm `uninstall.exe`), MSI ≈ 9,7 MB, NSIS ≈ 6,8 MB, portable ≈ 9,4 MB; có khóa updater thì thêm `.sig` cho NSIS và MSI.
+- `scripts/build-packages.ps1` dựng đủ 4 gói (+ MSI tiếng Việt): Setup ≈ 18 MB (stub egui ≈ 8 MB + payload zstd gồm chính stub làm `uninstall.exe`), MSI ≈ 9,7 MB, NSIS ≈ 6,8 MB, portable ≈ 9,4 MB; có khóa updater thì thêm `.sig` cho NSIS, MSI, Setup và zip portable (macOS: `.app.tar.gz` + `.sig`).
 - `scripts/smoke-test.ps1` (dữ liệu và menu Explorer thật của người dùng được cất sang chỗ khác rồi trả lại): portable (CLI, `nfd scan --save` ghi vào `data\`, app mở được, không ghi gì vào hồ sơ người dùng), NSIS per-user (cài silent → `nfd --version` → mở app → gỡ `/S /REMOVEDATA`), bộ cài thương hiệu per-user (cài `/S /DESKTOP /SHELLMENU` → kiểm Apps & features, shortcut, menu Explorer → mở app → gỡ `--uninstall /S /REMOVEDATA`): **pass**, không sót tệp / registry / shortcut / menu / thư mục dữ liệu. Lỗi tìm ra và đã sửa nhờ smoke test: portable tạo thư mục rỗng `%LOCALAPPDATA%\<identifier>` (WebView2), NSIS để lại `HKCU\Software\NANO (nanodev.io.vn)\NANOFreeDisk`.
 - Wizard egui: xem từng trang EN/VI qua `NFD_SETUP_SHOTS` (splash, chào mừng, giấy phép, kiểu cài, tùy chọn, tiến trình, hoàn tất, lỗi "đã có bản MSI/NSIS", gỡ cài đặt). Bấm tay qua wizard và hộp thoại khu cách ly khi gỡ có UI: chưa tự động hóa được (không điều khiển được cửa sổ native) — người dùng kiểm khi thử bản dry run.
 - MSI và bộ cài thương hiệu "Mọi người" (cần admin, không chạy được cục bộ): `release.yml` dry run (`workflow_dispatch`, run 38949675585, `windows-latest` = Windows Server) — portable, NSIS, MSI, Setup per-user và "Mọi người" đều cài → chạy → gỡ silent, không sót gì. Lần chạy đầu bắt được lỗi: tiến trình `msedgewebview2.exe` còn giữ hồ sơ WebView2 vài giây sau khi app bị tắt → smoke test chờ chúng, `--uninstall-cleanup` thử xóa lại tới 5 s.

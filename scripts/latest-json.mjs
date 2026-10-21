@@ -5,8 +5,11 @@
 //   node scripts/latest-json.mjs <dist> <version> <owner/repo> [notes.md]
 //
 // Platforms: `windows-x86_64` and `windows-x86_64-nsis` -> the per-user NSIS
-// package, `windows-x86_64-msi` -> the MSI. Without signatures nothing is written
-// (exit 0): a release without the signing key simply has no in-place updates.
+// package, `windows-x86_64-msi` -> the MSI, `windows-x86_64-setup` -> the branded
+// setup and `windows-x86_64-portable` -> the portable zip (copies installed by
+// those update from them, see src-tauri/src/commands/update.rs), `darwin-x86_64`
+// and `darwin-aarch64` -> the universal .app.tar.gz. Without signatures nothing is
+// written (exit 0): a release without the signing key has no in-place updates.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -37,6 +40,15 @@ if (nsis) {
 }
 if (msi) platforms["windows-x86_64-msi"] = msi;
 if (!platforms["windows-x86_64"]) platforms["windows-x86_64"] = msi;
+const setup = pkg(`NANOFreeDisk-Setup-${version}-x64.exe`);
+if (setup) platforms["windows-x86_64-setup"] = setup;
+const portable = pkg(`NANOFreeDisk-${version}-x64-portable.zip`);
+if (portable) platforms["windows-x86_64-portable"] = portable;
+const mac = pkg(`NANOFreeDisk-${version}-macos-universal.app.tar.gz`);
+if (mac) {
+  platforms["darwin-x86_64"] = mac;
+  platforms["darwin-aarch64"] = mac;
+}
 
 const notes = notesFile && existsSync(notesFile) ? readFileSync(notesFile, "utf8").trim() : `NANOFreeDisk ${version}`;
 const out = { version, notes, pub_date: new Date().toISOString(), platforms };

@@ -118,6 +118,8 @@ pub fn run() {
             // the main window comes from tauri.conf.json ("create": false) so
             // portable mode can keep the WebView2 profile next to the exe
             paths::main_window(app.handle())?;
+            // downloads and replaced files of an earlier in-app update
+            commands::update::clean_leftovers();
             // the notification-area icon (G5); the app works without it
             let _ = tray::create(app.handle());
             Ok(())

@@ -195,7 +195,7 @@ jobs:
           # the updater signature must cover the Authenticode-signed bytes
           if ($env:TAURI_SIGNING_PRIVATE_KEY) {
             Push-Location apps/nanofreedisk
-            foreach ($f in Get-ChildItem ../../dist -Include *-x64-setup.exe, *-x64.msi -Recurse) {
+            foreach ($f in Get-ChildItem ../../dist -Include *-x64-setup.exe, *-Setup-*-x64.exe, *-x64.msi -Recurse) {
               Remove-Item "$($f.FullName).sig" -ErrorAction SilentlyContinue
               pnpm tauri signer sign $f.FullName
             }
@@ -240,8 +240,12 @@ jobs:
       - name: Install UI dependencies
         working-directory: apps/nanofreedisk
         run: pnpm install --frozen-lockfile
-      # ad-hoc signed (no Apple Developer ID): not notarized, see README "macOS"
+      # ad-hoc signed (no Apple Developer ID): not notarized, see README "macOS";
+      # with the updater key also the signed .app.tar.gz for in-app updates
       - name: Build the universal app
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: ./scripts/build-macos.sh dist "$VERSION"
       - uses: actions/upload-artifact@v4
         with:

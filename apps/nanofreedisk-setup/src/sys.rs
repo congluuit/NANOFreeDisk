@@ -155,6 +155,19 @@ pub fn shell_execute(exe: &Path, params: &str, verb: &str, wait: bool) -> io::Re
     }
 }
 
+/// Wait up to `timeout` for process `pid` to end (at once if it is already gone).
+pub fn wait_for_exit(pid: u32, timeout: std::time::Duration) {
+    use windows::Win32::System::Threading::{OpenProcess, PROCESS_SYNCHRONIZE};
+    let ms = u32::try_from(timeout.as_millis()).unwrap_or(u32::MAX);
+    // SAFETY: a synchronize-only handle to another process, closed after the wait.
+    unsafe {
+        if let Ok(h) = OpenProcess(PROCESS_SYNCHRONIZE, false, pid) {
+            WaitForSingleObject(h, ms);
+            let _ = CloseHandle(h);
+        }
+    }
+}
+
 /// Create (or replace) a `.lnk` at `link` pointing to `target`.
 ///
 /// # Errors

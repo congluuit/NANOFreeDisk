@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { api, inTauri, pickOpenFile, pickSaveFile } from "../api";
+  import { api, inTauri, on, pickOpenFile, pickSaveFile } from "../api";
   import type { HistoryInfo, UpdateInfo } from "../types";
-  import { LOCALES, t } from "../i18n.svelte";
+  import { LOCALES, i18n, t } from "../i18n.svelte";
   import { DEFAULT_SETTINGS, app, fail, toast } from "../state.svelte";
   import {
     EDITABLE_TOKENS,
@@ -17,7 +17,7 @@
   import Icon from "../components/Icon.svelte";
   import { currentOs, hasFeature } from "../platform";
 
-  // macOS has no Explorer menu, Monitor, Drive health or in-place updater
+  // macOS has no Explorer menu, Monitor or Drive health
   const os = $derived(currentOs(app.info?.os));
 
   const MODES: { id: ThemeMode; icon: string }[] = [
@@ -125,13 +125,23 @@
       updateBusy = false;
     }
   }
+  // download progress of "Update now" ("" until the first bytes arrive)
+  let updatePercent = $state<string | null>(null);
   async function installUpdate() {
     updateBusy = true;
+    updatePercent = "";
+    const stop = await on<{ done: number; total: number | null }>("update-progress", (p) => {
+      updatePercent = p.total ? `${Math.min(100, Math.round((p.done / p.total) * 100))}%` : "";
+    });
     try {
-      await api.updateInstall();
+      // the app closes and starts again when the update is installed
+      await api.updateInstall(i18n.locale);
     } catch (e) {
       fail(e);
       updateBusy = false;
+      updatePercent = null;
+    } finally {
+      stop();
     }
   }
 
@@ -387,39 +397,29 @@
     </div>
   </div>
 
-  {#if !hasFeature(os, "updater")}
-  <div class="block panel" data-settings="update">
-    <h2>{t("update-title")}</h2>
-    <p class="muted small">{t("update-mac-hint")}</p>
-    <div class="row">
-      <span class="grow"></span>
-      <button class="btn" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
-    </div>
-  </div>
-  {:else}
   <div class="block panel" data-settings="update">
     <h2>{t("update-title")}</h2>
     <p class="muted small">{t("update-hint")}</p>
     <div class="row">
-      {#if update?.available}
+      {#if updatePercent !== null}
+        <span>{t("update-downloading", { percent: updatePercent })}</span>
+      {:else if update?.available}
         <span>{t("update-available", { version: update.available })}</span>
       {:else if update}
         <span class="muted small">{t("update-latest", { version: update.current })}</span>
       {/if}
       <span class="grow"></span>
       <button class="btn" onclick={checkUpdate} disabled={updateBusy || !inTauri} data-effect title={t("hint-update-check")}>{t("update-check")}</button>
-      {#if update?.available && update.kind === "installer"}
+      {#if update?.available}
+        <button class="btn" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
         <button class="btn primary" onclick={installUpdate} disabled={updateBusy} data-effect title={t("hint-update-install")}>{t("update-install")}</button>
-      {:else if update?.available}
-        <button class="btn primary" onclick={() => api.updateOpenReleases().catch(fail)} data-effect title={t("hint-update-download")}>{t("update-download")}</button>
       {/if}
     </div>
-    {#if update?.available && update.kind !== "installer"}
-      <p class="muted small">{t(update.kind === "portable" ? "update-portable" : "update-setup")}</p>
+    {#if update?.available}
+      <p class="muted small">{t(update.kind === "portable" ? "update-portable" : update.kind === "setup" ? "update-setup" : os === "macos" ? "update-mac" : "hint-update-install")}</p>
     {/if}
     {#if update?.notes}<pre class="notes small">{update.notes}</pre>{/if}
   </div>
-  {/if}
 
   <div class="block panel about">
     <img src="/icon.png" alt="" width="56" height="56" />

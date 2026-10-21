@@ -160,6 +160,9 @@ mod app {
             }
             return gui(Wizard::uninstaller(lang, dir));
         }
+        if a.update {
+            return update(a, lang);
+        }
         if a.silent {
             let plan = plan_from(a, lang);
             if plan.all_users && !sys::is_elevated() {
@@ -175,6 +178,62 @@ mod app {
             };
         }
         gui(Wizard::installer(lang, a))
+    }
+
+    /// The app's "Update now" (`--update`): wait for the app to close, install over
+    /// its folder with the options it was installed with, start it again. No wizard;
+    /// a failure is shown in a message box because nothing else is on screen.
+    fn update(a: &Args, lang: Lang) -> i32 {
+        let t = lang.text();
+        let fail = |detail: &str| {
+            message_box(t.window_title, &format!("{}\n\n{detail}", t.update_failed));
+        };
+        let Some(dir) = a
+            .dir
+            .clone()
+            .or_else(|| install::ours().and_then(|e| e.dir))
+        else {
+            fail(t.error_payload);
+            return FAILED;
+        };
+        let Some(plan) = install::update_plan(&dir, lang) else {
+            fail(&format!("{} ({})", install::MANIFEST, dir.display()));
+            return FAILED;
+        };
+        if let Some(pid) = a.wait_pid {
+            sys::wait_for_exit(pid, Duration::from_secs(60));
+        }
+        // the app's helper processes may need a moment longer
+        let deadline = Instant::now() + Duration::from_secs(30);
+        while !sys::running_in(&dir).is_empty() && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(300));
+        }
+        let code = if plan.all_users && !sys::is_elevated() {
+            // one Windows prompt; the elevated copy neither waits nor relaunches
+            let params = vec![
+                "--update".to_owned(),
+                format!("/LANG={}", lang.code()),
+                format!("/D={}", dir.display()),
+            ];
+            let code = relaunch_elevated(&params).map_or(NEEDS_ADMIN, |c| c as i32);
+            if code == NEEDS_ADMIN {
+                fail(t.error_admin);
+            }
+            code
+        } else {
+            match load_payload().and_then(|e| install::install(&plan, &e, &mut |_| {})) {
+                Ok(_) => OK,
+                Err(p) => {
+                    fail(&describe(t, &p));
+                    code_for(&p)
+                }
+            }
+        };
+        // not from the elevated copy: the app must not run as administrator
+        if a.relaunch {
+            let _ = sys::shell_execute(&dir.join(APP_EXE), "", "open", false);
+        }
+        code
     }
 
     fn gui(wizard: Wizard) -> i32 {

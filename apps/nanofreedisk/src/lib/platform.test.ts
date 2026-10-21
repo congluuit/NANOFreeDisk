@@ -14,7 +14,6 @@ test("macOS hides the Windows-only views, Windows and the mock keep everything",
     assert.equal(viewAvailable("macos", view), true, view);
   }
   assert.equal(hasFeature("macos", "shell-menu"), false);
-  assert.equal(hasFeature("macos", "updater"), false);
   assert.equal(hasFeature("windows", "sensors"), true);
 });
 

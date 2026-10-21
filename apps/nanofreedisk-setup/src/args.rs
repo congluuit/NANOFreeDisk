@@ -2,6 +2,8 @@
 //! `/S` silent, `/D=<dir>` install folder (last, may contain spaces, no quotes),
 //! `/ALLUSERS` for everyone (needs admin), `/NOSHORTCUTS`, `/NOSTARTMENU`, `/DESKTOP`,
 //! `/SHELLMENU` (Explorer menu), `/LANG=en|vi`; `--uninstall [/S] [/REMOVEDATA]`.
+//! In-app update: `--update [--wait-pid=N] [--relaunch] /D=<install dir>` installs
+//! over the copy in that folder with the options it was installed with, silently.
 
 use std::path::PathBuf;
 
@@ -22,6 +24,12 @@ pub struct Args {
     /// Started elevated by the wizard for an all-users install: go straight to the
     /// progress page with these options.
     pub elevated: bool,
+    /// Started by the app's "Update now": silent, keeps the installed options.
+    pub update: bool,
+    /// The app process to wait for before files are replaced.
+    pub wait_pid: Option<u32>,
+    /// Start the app again once the update is done.
+    pub relaunch: bool,
 }
 
 impl Default for Args {
@@ -37,6 +45,9 @@ impl Default for Args {
             remove_data: false,
             lang: None,
             elevated: false,
+            update: false,
+            wait_pid: None,
+            relaunch: false,
         }
     }
 }
@@ -76,9 +87,13 @@ pub fn parse(args: &[String]) -> Args {
             "/SHELLMENU" => out.shell_menu = true,
             "/REMOVEDATA" | "--REMOVE-DATA" => out.remove_data = true,
             "--ELEVATED" => out.elevated = true,
+            "--UPDATE" => out.update = true,
+            "--RELAUNCH" => out.relaunch = true,
             _ => {
                 if let Some(code) = upper.strip_prefix("/LANG=") {
                     out.lang = Lang::from_code(code);
+                } else if let Some(pid) = upper.strip_prefix("--WAIT-PID=") {
+                    out.wait_pid = pid.parse().ok();
                 }
             }
         }
@@ -138,6 +153,18 @@ mod tests {
 
         let a = p(&["--uninstall", "/S", "/REMOVEDATA"]);
         assert!(a.uninstall && a.silent && a.remove_data);
+
+        let a = p(&[
+            "--update",
+            "--wait-pid=4242",
+            "--relaunch",
+            "/LANG=en",
+            r"/D=D:\Apps\NANOFreeDisk",
+        ]);
+        assert!(a.update && a.relaunch && !a.silent);
+        assert_eq!(a.wait_pid, Some(4242));
+        assert_eq!(a.lang, Some(Lang::En));
+        assert_eq!(a.dir, Some(PathBuf::from(r"D:\Apps\NANOFreeDisk")));
 
         let a = p(&["/s", "/NOSHORTCUTS", "/LANG=vi"]);
         assert!(a.silent && !a.start_menu && !a.desktop);

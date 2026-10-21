@@ -358,7 +358,7 @@ export interface UpdateInfo {
   available: string | null;
   notes: string | null;
   date: string | null;
-  /** installer = NSIS/MSI (updates in place); setup / portable = release page. */
+  /** How "Update now" installs: NSIS/MSI or the macOS app, the branded setup, or the portable zip. */
   kind: "installer" | "setup" | "portable";
   releases: string;
 }
