@@ -26,7 +26,8 @@ use std::path::{Component, Path, PathBuf, Prefix};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    AGENT_HISTORY_TEMPLATES, Blocked, CONTAINER_TEMPLATES, PROTECTED_TEMPLATES,
+    AGENT_HISTORY_TEMPLATES, Blocked, CONTAINER_TEMPLATES, LEFTOVER_PROGRAM_DATA_DENY,
+    LEFTOVER_PROGRAM_FILES_DENY, LEFTOVER_START_MENU_DENY, PROTECTED_TEMPLATES,
     USER_DATA_TEMPLATES, VOLUME_ROOT_PROTECTED, agent_history_name, comparable, contains_pattern,
     expand_template, is_within, within_pattern,
 };
@@ -46,6 +47,12 @@ pub enum Origin {
     Duplicate { group: u32 },
     /// Proposed by a rule of the given level.
     Rule { level: RiskLevel },
+    /// What an uninstalled program left behind (`docs/UNINSTALLER.md` §2.4), ticked
+    /// by the user: held to the hand-picked standard, except that a folder strictly
+    /// *inside* `Program Files`, `ProgramData` or the all-users Start Menu may go
+    /// (never those folders themselves, nor what Windows keeps there), and cloud
+    /// placeholders are always refused.
+    Leftover,
 }
 
 /// Why an allowed item still deserves the user's attention.
@@ -177,6 +184,10 @@ const DEVICE_NAMES: &[&str] = &[
 pub struct SafetyGate {
     system_root: Option<String>,
     program_data: Option<String>,
+    /// `ProgramData\Microsoft\Windows\Start Menu\Programs` (leftover shortcuts).
+    start_menu_common: Option<String>,
+    /// `Program Files`, `Program Files (x86)` as this machine names them.
+    program_files: Vec<String>,
     /// Folders where SYSTEM-attributed entries are refused.
     system_dirs: Vec<String>,
     /// Protected templates except the user-data ones: (template, comparable path).
@@ -205,6 +216,14 @@ impl SafetyGate {
             .collect();
         Self {
             program_data: expand_template("${PROGRAMDATA}", resolve),
+            start_menu_common: expand_template(
+                "${PROGRAMDATA}/Microsoft/Windows/Start Menu/Programs",
+                resolve,
+            ),
+            program_files: ["${PROGRAMFILES}", "${PROGRAMFILES_X86}"]
+                .iter()
+                .filter_map(|t| expand_template(t, resolve))
+                .collect(),
             system_root,
             system_dirs,
             subtree: resolved(PROTECTED_TEMPLATES, USER_DATA_TEMPLATES),
@@ -263,11 +282,19 @@ impl SafetyGate {
             .as_deref()
             .is_some_and(|root| is_within(&cand, root) && cand != root);
         let top = parts[volume_depth];
+        // An uninstalled program's leftovers may sit inside the machine-wide folders
+        // (never those folders themselves, nor what Windows keeps there).
+        let leftover_root = if matches!(origin, Origin::Leftover) {
+            self.leftover_root(&cand, &parts, volume_depth)?
+        } else {
+            None
+        };
         // A rule may reach into %SystemRoot% and %ProgramData% (the templates below
         // still protect what matters there); anything else named like a Windows
         // folder at the root of any volume is off limits.
-        let exempt = rule
-            && ((in_system_root && top == "windows") || (in_program_data && top == "programdata"));
+        let exempt = (rule
+            && ((in_system_root && top == "windows") || (in_program_data && top == "programdata")))
+            || leftover_root.is_some();
         if VOLUME_ROOT_PROTECTED.contains(&top) && !exempt {
             return Err(Blocked::Protected {
                 template: format!("<volume>/{top}"),
@@ -281,6 +308,15 @@ impl SafetyGate {
 
         for (template, root) in &self.subtree {
             if is_within(&cand, root) {
+                // `Program Files` itself, or `ProgramData\Microsoft` for the
+                // all-users Start Menu: the leftover check above already refused
+                // what Windows keeps there
+                if leftover_root
+                    .as_deref()
+                    .is_some_and(|lr| is_within(lr, root))
+                {
+                    continue;
+                }
                 return Err(Blocked::Protected {
                     template: (*template).to_owned(),
                 });
@@ -330,6 +366,87 @@ impl SafetyGate {
             }
         }
         Ok(())
+    }
+
+    /// For [`Origin::Leftover`]: the machine-wide folder `cand` lies strictly inside
+    /// — `Program Files` / `Program Files (x86)` of any volume, `ProgramData`, the
+    /// all-users Start Menu — or `None` (then the hand-picked rules apply).
+    ///
+    /// # Errors
+    /// `cand` is (inside) a folder Windows keeps there.
+    fn leftover_root(
+        &self,
+        cand: &str,
+        parts: &[&str],
+        volume_depth: usize,
+    ) -> Result<Option<String>, Blocked> {
+        let first_below = |root: &str| -> String {
+            cand[root.len()..]
+                .trim_start_matches('/')
+                .split('/')
+                .next()
+                .unwrap_or_default()
+                .to_owned()
+        };
+        if let Some(sm) = self.start_menu_common.as_deref() {
+            if is_within(cand, sm) && cand != sm {
+                let child = first_below(sm);
+                if LEFTOVER_START_MENU_DENY.contains(&child.as_str()) {
+                    return Err(Blocked::Protected {
+                        template: format!(
+                            "${{PROGRAMDATA}}/Microsoft/Windows/Start Menu/Programs/{child}"
+                        ),
+                    });
+                }
+                return Ok(Some(sm.to_owned()));
+            }
+        }
+        let program_files_child = |child: &str, template: String| {
+            if LEFTOVER_PROGRAM_FILES_DENY.contains(&child) || child.starts_with("windows") {
+                Err(Blocked::Protected { template })
+            } else {
+                Ok(())
+            }
+        };
+        // this machine's Program Files, wherever they are…
+        for pf in &self.program_files {
+            if is_within(cand, pf) && cand != pf {
+                let child = first_below(pf);
+                program_files_child(&child, format!("{pf}/{child}"))?;
+                return Ok(Some(pf.clone()));
+            }
+        }
+        // …and a `Program Files` folder at the top of any volume
+        let top = parts[volume_depth];
+        if matches!(top, "program files" | "program files (x86)") && parts.len() > volume_depth + 1
+        {
+            let child = parts[volume_depth + 1];
+            if LEFTOVER_PROGRAM_FILES_DENY.contains(&child) || child.starts_with("windows") {
+                return Err(Blocked::Protected {
+                    template: format!("<volume>/{top}/{child}"),
+                });
+            }
+            let lead = if cand.starts_with("//") {
+                "//"
+            } else if cand.starts_with('/') {
+                "/"
+            } else {
+                ""
+            };
+            return Ok(Some(format!("{lead}{}", parts[..=volume_depth].join("/"))));
+        }
+        if let Some(pd) = self.program_data.as_deref() {
+            if is_within(cand, pd) && cand != pd {
+                let child = first_below(pd);
+                if LEFTOVER_PROGRAM_DATA_DENY.contains(&child.as_str()) {
+                    return Err(Blocked::Protected {
+                        template: format!("${{PROGRAMDATA}}/{child}"),
+                    });
+                }
+                return Ok(Some(pd.to_owned()));
+            }
+        }
+        Ok(None)
     }
 
     fn check_system_root_rule(&self, cand: &str) -> Result<(), Blocked> {
@@ -398,7 +515,7 @@ impl SafetyGate {
         }
         let mut warnings = Vec::new();
         if facts.cloud {
-            if rule || matches!(origin, Origin::Duplicate { .. }) {
+            if rule || matches!(origin, Origin::Duplicate { .. } | Origin::Leftover) {
                 return Err(Blocked::CloudFile);
             }
             warnings.push(Warning::CloudPlaceholder);

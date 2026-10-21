@@ -4,7 +4,8 @@
 //! `plan explain` (Phase 3), `devcache`, `toolchains`, `repos`, `stores`, `ai-leftovers` (Phase 4), `browsers`
 //! (per-website browser caches),
 //! `dupes` (Phase 5), `rules list` / `rules validate`, and the Hardware Monitor's
-//! `hw` / `sensors` / `ps`, and `monitor` (Phase 6). Watch and health commands arrive with their phases (see
+//! `hw` / `sensors` / `ps`, `monitor` (Phase 6), and `programs` (uninstaller,
+//! leftovers, software junk). Watch and health commands arrive with their phases (see
 //! `docs/PLAN.md` §4.7).
 
 mod advise;
@@ -17,6 +18,7 @@ mod dupes;
 mod health;
 mod hw;
 mod monitor;
+mod programs;
 mod ps;
 mod quarantine;
 mod repos;
@@ -108,6 +110,9 @@ enum Command {
     Ps(ps::PsArgs),
     /// Live disk activity: which processes (and, with ETW, which files) read and write.
     Monitor(monitor::MonitorArgs),
+    /// Installed programs, their own uninstallers and the leftovers they leave, and
+    /// software junk (logs, caches, crash dumps, old updates of installed programs).
+    Programs(programs::ProgramsArgs),
     /// Drive health: SMART / NVMe verdict per drive and volume checks (read-only).
     /// Exit code 1 = a drive needs attention, 2 = a drive is bad.
     Health(health::HealthArgs),
@@ -173,6 +178,7 @@ fn run() -> anyhow::Result<ExitCode> {
         Command::Ps(args) => ps::run(args),
         Command::Monitor(args) => monitor::run(args),
         Command::Health(args) => health::run(args),
+        Command::Programs(args) => programs::run(args),
     }
 }
 

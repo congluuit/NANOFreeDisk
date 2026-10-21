@@ -222,3 +222,73 @@ proptest! {
         }
     }
 }
+
+/// Templates a leftover may reach *inside* (docs/UNINSTALLER.md §2.2): the program
+/// folders and the all-users Start Menu inside `ProgramData\Microsoft`.
+const LEFTOVER_OPEN: &[&str] = &[
+    "${SYSTEMDRIVE}/Program Files",
+    "${SYSTEMDRIVE}/Program Files (x86)",
+    "${PROGRAMFILES}",
+    "${PROGRAMFILES_X86}",
+    "${PROGRAMDATA}/Microsoft",
+];
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(512))]
+
+    #[test]
+    fn leftovers_never_reach_other_protected_roots(
+        idx in 0..PROTECTED_TEMPLATES.len(),
+        segs in prop::collection::vec(segment(), 0..6),
+        flips in prop::collection::vec(any::<bool>(), 16),
+        backslash in prop::collection::vec(any::<bool>(), 16),
+    ) {
+        let template = PROTECTED_TEMPLATES[idx];
+        prop_assume!(!LEFTOVER_OPEN.contains(&template));
+        let user_data = USER_DATA_TEMPLATES.contains(&template);
+        prop_assume!(!(user_data && segs.iter().any(|s| s != ".")));
+        let path = render(&expand(template), &segs, &flips, &backslash);
+        prop_assert!(
+            gate().check_path(&path, Origin::Leftover).is_err(),
+            "{} accepted for a leftover", path.display()
+        );
+    }
+
+    #[test]
+    fn leftovers_stay_out_of_the_windows_folder(
+        segs in prop::collection::vec(segment(), 0..5),
+    ) {
+        let path = render(&expand("${SYSTEMROOT}"), &segs, &[], &[]);
+        prop_assert!(gate().check_path(&path, Origin::Leftover).is_err(), "{}", path.display());
+    }
+
+    #[test]
+    fn leftovers_inside_program_data_microsoft_only_reach_the_start_menu(
+        first in "[A-Za-z0-9 ]{1,12}",
+        segs in prop::collection::vec(segment(), 0..4),
+    ) {
+        prop_assume!(!first.trim().eq_ignore_ascii_case("windows"));
+        let mut all = vec![first];
+        all.extend(segs);
+        let path = render(&expand("${PROGRAMDATA}/Microsoft"), &all, &[], &[]);
+        prop_assert!(gate().check_path(&path, Origin::Leftover).is_err(), "{}", path.display());
+    }
+
+    #[test]
+    fn leftovers_never_take_a_windows_folder_of_program_files(
+        x86 in any::<bool>(),
+        name in prop_oneof![
+            Just("Common Files".to_owned()),
+            Just("WindowsApps".to_owned()),
+            Just("Internet Explorer".to_owned()),
+            "Windows[A-Za-z ]{0,10}",
+        ],
+        segs in prop::collection::vec(segment(), 0..4),
+    ) {
+        let base = if x86 { "${PROGRAMFILES_X86}" } else { "${PROGRAMFILES}" };
+        let mut all = vec![name];
+        all.extend(segs);
+        let path = render(&expand(base), &all, &[], &[]);
+        prop_assert!(gate().check_path(&path, Origin::Leftover).is_err(), "{}", path.display());
+    }
+}

@@ -111,6 +111,7 @@ impl ItemRow {
             "permanent" => DeleteMode::Permanent,
             "hardlink" => DeleteMode::Hardlink,
             "clone" => DeleteMode::Clone,
+            "registry" => DeleteMode::Registry,
             _ => DeleteMode::RecycleBin,
         }
     }
@@ -310,6 +311,29 @@ impl History {
                 message,
             });
         }
+        self.settle(id, &items)?;
+        Ok(out)
+    }
+
+    /// Mark items of operation `id` as put back by someone else (the elevated step
+    /// restores all-users leftovers) and update the operation's state.
+    ///
+    /// # Errors
+    /// Unknown id or SQLite failure.
+    pub fn mark_restored(&mut self, id: &str, numbers: &[u64]) -> Result<()> {
+        let (_, items) = self.operation(id)?;
+        for n in numbers {
+            self.conn.execute(
+                "UPDATE operation_items SET restored = 1 WHERE op_id = ?1 AND n = ?2",
+                params![id, to_i64(*n)],
+            )?;
+        }
+        self.settle(id, &items)
+    }
+
+    /// `restored` when nothing restorable is left, else `partly-restored` (once
+    /// anything came back).
+    fn settle(&mut self, id: &str, items: &[ItemRow]) -> Result<()> {
         let left: i64 = self.conn.query_row(
             "SELECT COUNT(*) FROM operation_items WHERE op_id = ?1 AND restored = 0
              AND status IN ('done', 'partial') AND mode != 'permanent'",
@@ -329,7 +353,7 @@ impl History {
             };
             if left == 0 {
                 // only the manifest and empty slots are left
-                for dir in op_dirs(&items, id) {
+                for dir in op_dirs(items, id) {
                     let _ = exec::purge_op_dir(&dir);
                 }
             }
@@ -338,7 +362,7 @@ impl History {
                 params![id, state],
             )?;
         }
-        Ok(out)
+        Ok(())
     }
 
     /// Delete the quarantine folders of operation `id` for good and mark it `purged`.

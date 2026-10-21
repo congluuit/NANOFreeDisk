@@ -95,7 +95,9 @@ pub fn restore_all(h: &mut History) -> Result<Restored> {
                 exec::RestoreStatus::Restored => out.restored += 1,
                 // nothing left to keep for these
                 exec::RestoreStatus::Missing | exec::RestoreStatus::NotRestorable => {}
-                exec::RestoreStatus::Conflicts | exec::RestoreStatus::Failed => {
+                exec::RestoreStatus::Conflicts
+                | exec::RestoreStatus::Failed
+                | exec::RestoreStatus::NeedsAdmin => {
                     out.failed.push(r.path);
                 }
             }

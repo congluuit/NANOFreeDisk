@@ -30,6 +30,7 @@ nfd-monitor = { path = "crates/nfd-monitor", version = "0.1.1" }
 nfd-health = { path = "crates/nfd-health", version = "0.1.1" }
 nfd-browsers = { path = "crates/nfd-browsers", version = "0.1.1" }
 nfd-advice = { path = "crates/nfd-advice", version = "0.1.1" }
+nfd-apps = { path = "crates/nfd-apps", version = "0.1.1" }
 
 # external
 serde = { version = "1", features = ["derive"] }

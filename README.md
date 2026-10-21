@@ -32,7 +32,7 @@
   <a href="docs/PLAN.md">Development plan (vi)</a>
 </p>
 
-> **Status:** 🧪 preview (v0.1.x) — everything below works on Windows 10/11: scan & **suggestions** (what can go, what must stay, and why), safe cleaning with quarantine and undo, DevCache + AI leftovers, duplicates, disk activity monitor, drive health, hardware sensors, EN/VI, themes, four installer packages. Still to come before 1.0: the NTFS MFT fast scan, code signing, profiles & onboarding. Star/watch the repo to follow releases — and [☕ buy the author a coffee](#-support-the-author) if it helps you.
+> **Status:** 🧪 preview (v0.1.x) — everything below works on Windows 10/11: scan & **suggestions** (what can go, what must stay, and why), safe cleaning with quarantine and undo, DevCache + AI leftovers, duplicates, an uninstaller with leftover cleanup and software junk, disk activity monitor, drive health, hardware sensors, EN/VI, themes, four installer packages. Still to come before 1.0: the NTFS MFT fast scan, code signing, profiles & onboarding. Star/watch the repo to follow releases — and [☕ buy the author a coffee](#-support-the-author) if it helps you.
 
 ---
 
@@ -44,9 +44,10 @@
 | 🧹 | **Clean** | Rule-based junk detection: Windows temp & logs, crash dumps, thumbnail caches, browser caches, GPU shader caches, build artifacts (`target/`, `node_modules/`, `Library/`, `DerivedDataCache/`…). Every item carries a **risk level** and a plain-language **"if you delete this…"** note. |
 | 🤖 | **DevCache** | A curated catalog of the temp/cache/session folders left behind by **Claude Code, Claude Desktop, OpenAI Codex, ChatGPT, Gemini CLI, GitHub Copilot, Cursor, Windsurf, Cline/Roo, Continue, Zed, Kiro, Trae, Ollama, LM Studio, Hugging Face, VS Code, JetBrains, Visual Studio, npm/pnpm/pip/uv/cargo/go/NuGet/Gradle, Unity, Unreal, Godot**… Shows what is safe, what costs you history or a re-download, and what is deliberately kept (configs, credentials, memory). |
 | ⧉ | **Duplicates** | Size → partial BLAKE3 → full BLAKE3 pipeline with a hash cache, gentle on the PC (background I/O priority, one file at a time on hard disks), never downloads cloud placeholders. Identical files and identical folders; keep the oldest / newest / a preferred folder, send the rest to the Recycle Bin, or replace them with NTFS hard links / ReFS block clones — every copy re-checked byte for byte right before it moves, and everything restorable. |
+| 🧩 | **Programs** | Every installed program (desktop, MSI and Store) with its size and install date; **uninstall with the vendor's own uninstaller** (one or many, one after the other), then **remove what it left behind** — its install folder, data folders in AppData/ProgramData, dead shortcuts, its registry keys and Run entries — each with the evidence that ties it to the program, never a folder another program uses. **Software junk**: app caches (Electron/Chromium), crash dumps, logs and old update packages of the programs you keep. Files go to the quarantine, registry keys to a `.reg` backup, everything restorable ([`docs/UNINSTALLER.md`](docs/UNINSTALLER.md)). |
 | 📈 | **Monitor** | Real-time disk activity: which process reads and writes, how fast, IOPS, each disk's throughput, queue length, latency and busy time, a 60 s / 10 min chart and a 24-hour history. Without admin rights it uses each process's I/O counters; with one UAC prompt a private kernel trace session (ETW) adds the files being read and written and **"who touched this folder?"**. Spots runaway loggers, indexers and sync clients (optional alert) — and never stops anything by itself. |
 | ♥ | **Health** | S.M.A.R.T. (ATA) and NVMe health log, temperature, wear, reallocated/pending sectors, TRIM status, dirty volumes, free-space trend with "disk full in N days" forecast, tray alerts, exportable report. |
-| ⌨ | **CLI** | Everything above as `nfd` for scripts and CI: `nfd scan`, `nfd advise`, `nfd clean --dry-run`, `nfd devcache`, `nfd ai-leftovers`, `nfd dupes`, `nfd monitor`, `nfd health`. |
+| ⌨ | **CLI** | Everything above as `nfd` for scripts and CI: `nfd scan`, `nfd advise`, `nfd clean --dry-run`, `nfd devcache`, `nfd ai-leftovers`, `nfd dupes`, `nfd programs`, `nfd monitor`, `nfd health`. |
 
 ### Also in v1.0 — the "easy to use" layer
 
@@ -176,6 +177,7 @@ nfd stores [--json]   ·   nfd stores run npm-cache-clean
 nfd ai-leftovers [list|clean] [--root <dir>] [--keep-recent 7] [--apply] [--json]
 nfd browsers sites [--browser chrome] [--search tube] [--json]   ·   nfd browsers clean-site <host> [--exact] [--apply]
 nfd dupes <path...> [--min-size 1MB] [--folders] [--keep auto|oldest|newest|prefer:<dir>] [--action list|recycle|quarantine|hardlink] [--apply]
+nfd programs [list|junk|uninstall <name>|leftovers <name>] [--remove-leftovers|--apply] [--json]
 nfd monitor [--seconds 10] [--top 10] [--json] [--source auto|etw|counters] [--watch <dir>]   ·   nfd monitor --history
 nfd health [--json] [--raw] [--disk N]          # exit code 1 = caution, 2 = bad
 nfd quarantine [list|restore <id>|purge --older 7d]
@@ -199,6 +201,7 @@ nfd clean --rules ai-tools --level safe --dry-run
 - **`nfd-advice`** — the verdict of every path of a scan (safe / needs care / guide only / keep / unknown), bytes by verdict per folder, suggestions and the right action, combining everything below.
 - **`nfd-rules`** — TOML rule-pack loader, glob matcher, risk levels, Folder Encyclopedia.
 - **`nfd-devtools`** — DevCache grouping, unknown caches, toolchains, Repo Finder + build-artifact policy, package-store commands, AI leftovers (sessions, git worktrees).
+- **`nfd-apps`** — installed programs, the vendors' uninstallers, leftovers after uninstalling (folders, shortcuts, registry with `.reg` backups, one elevated step for all-users items) and software junk.
 - **`nfd-dupes`** · **`nfd-browsers`** · **`nfd-history`** — duplicate finder (BLAKE3, hash cache), per-website browser caches, scan history + undo journal (SQLite).
 - **`nfd-monitor`** — ETW consumers, per-process I/O counters, PDH disk counters.
 - **`nfd-health`** · **`nfd-hwinfo`** · **`nfd-sensors`** · **`nfd-tasks`** · **`nfd-helper`** — SMART/NVMe via IOCTL (NVMe without admin rights), hardware inventory, sensors, processes, and the small elevated helper (one UAC prompt).
@@ -271,7 +274,7 @@ NANOFreeDisk targets Windows only: CI lints and tests on Windows runners (format
 - **Privacy cleaner** — browser history/cookies/cache with a keep-list for signed-in sites, Recent items, Jump Lists, DNS cache, clipboard & activity history.
 - **Docker & WSL** — `docker system df`, prune by type, orphaned volumes; WSL distro sizes and `ext4.vhdx` compaction; Hyper-V/VirtualBox/VMware disks and snapshots.
 - **Game Library Manager** — Steam, Epic, GOG, Xbox, Battle.net, Riot, EA, Ubisoft: size, last played, shader cache per game, leftovers of uninstalled games, move games between libraries. Capture-folder cleanup (ShadowPlay, Game Bar, OBS).
-- **Uninstaller + leftover scan** — Win32, MSIX/Store and winget apps sorted by size/last used, batch uninstall, then AppData/ProgramData/registry leftovers to quarantine.
+- ~~Uninstaller + leftover scan~~ — ✅ done early: the **Programs** view. Still to come: winget-managed apps, "last used", a restore point before uninstalling.
 - **Startup Manager** — Run keys, Startup folders, scheduled tasks, non-Microsoft auto-start services, UWP startup tasks, measured startup impact; enable/disable with undo, never delete.
 - **App Mover & storage relocation** — move apps/games to another drive with junctions; relocate default save locations, libraries, temp, pagefile, hibernation, restore-point quota — each with a plain explanation.
 - **Disk Benchmark** — sequential and random 4K like CrystalDiskMark, with a per-drive baseline over time to spot SSD degradation.
@@ -286,7 +289,7 @@ NANOFreeDisk targets Windows only: CI lints and tests on Windows runners (format
 
 | Not doing | Why |
 |---|---|
-| Registry cleaner | Nearly useless on modern Windows, high risk, no reliable undo |
+| Registry cleaner | Nearly useless on modern Windows, high risk, no reliable undo — the uninstaller only removes the keys of the program you just uninstalled, after a `.reg` backup |
 | Driver updater | Untrusted driver sources cause blue screens; leave it to Windows Update and vendors |
 | "RAM optimizer", "game booster", "internet booster" | Placebo features that would damage trust |
 | Antivirus / malware removal | Out of scope; we only flag suspicious file-system behaviour and suggest a Defender scan |

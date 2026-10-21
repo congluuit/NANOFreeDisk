@@ -52,6 +52,10 @@ pub fn run() {
     if args.iter().any(|a| a == uninstall::FLAG) {
         std::process::exit(uninstall::run(&args));
     }
+    // the uninstaller's one elevated step (all-users leftovers): no window, one request file
+    if args.iter().any(|a| a == nfd_apps::elevated::FLAG) {
+        std::process::exit(nfd_apps::elevated::run(&args));
+    }
     // elevated helper (Advanced sensors, Monitor detail): no window, only the pipe protocol
     #[cfg(windows)]
     if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
@@ -97,6 +101,7 @@ pub fn run() {
         .manage(commands::hwmon::HwState::default())
         .manage(commands::monitor::MonitorState::default())
         .manage(commands::diskhealth::HealthState::default())
+        .manage(commands::programs::ProgramsState::default())
         .setup(|app| {
             // the main window comes from tauri.conf.json ("create": false) so
             // portable mode can keep the WebView2 profile next to the exe
@@ -223,6 +228,15 @@ pub fn run() {
             commands::diskhealth::health_elevated,
             commands::diskhealth::health_export,
             commands::diskhealth::health_watch_set,
+            commands::programs::programs_list,
+            commands::programs::programs_uninstall,
+            commands::programs::programs_stop_waiting,
+            commands::programs::programs_leftovers,
+            commands::programs::programs_leftovers_remove,
+            commands::programs::programs_junk_scan,
+            commands::programs::programs_junk_clean,
+            commands::programs::programs_reveal,
+            commands::programs::activity_restore_admin,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

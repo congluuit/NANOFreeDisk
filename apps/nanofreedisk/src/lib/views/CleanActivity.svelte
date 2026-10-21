@@ -5,6 +5,7 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail, toast } from "../state.svelte";
   import { cleanApi } from "../clean/api";
+  import { programsApi } from "../programs/api";
   import { reasonText } from "../clean/state.svelte";
   import type { ActivityDetail, OperationRow } from "../clean/types";
   import Icon from "../components/Icon.svelte";
@@ -54,9 +55,16 @@
   async function restore(o: OperationRow, items?: number[]) {
     busy = o.id;
     try {
-      const out = await cleanApi.restore(o.id, items);
+      let out = await cleanApi.restore(o.id, items);
+      // all-users leftovers (Program Files, ProgramData, HKLM) go back with one
+      // administrator prompt
+      const admin = out.filter((r) => r.status === "needs-admin").map((r) => r.n);
+      if (admin.length && confirm(t("activity-restore-admin-confirm", { count: admin.length }))) {
+        const again = await programsApi.restoreAdmin(o.id, admin);
+        out = [...out.filter((r) => r.status !== "needs-admin"), ...again];
+      }
       const ok = out.filter((r) => r.status === "restored").length;
-      const bad = out.filter((r) => r.status === "failed" || r.status === "conflicts");
+      const bad = out.filter((r) => r.status === "failed" || r.status === "conflicts" || r.status === "needs-admin");
       toast(t("activity-restored", { done: ok, failed: bad.length }), bad.length ? "error" : "ok");
       for (const r of bad.slice(0, 3)) toast(`${r.path}: ${r.message ?? t(`activity-restore-${r.status}`)}`, "error");
       if (open?.operation.id === o.id) open = await cleanApi.activityItems(o.id);
@@ -102,7 +110,7 @@
       {#each d.rows as o (o.id)}
         <li class="card op {o.state}">
           <div class="line">
-            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : o.kind === "ai-leftovers" || o.kind === "worktree" ? "agent" : "trash"} size={18} /></span>
+            <span class="kind"><Icon name={o.kind === "clean" ? "clean" : o.kind === "tidy" ? "folder" : o.kind === "dupes" ? "duplicates" : o.kind === "devcache" ? "devcache" : o.kind === "ai-leftovers" || o.kind === "worktree" ? "agent" : o.kind === "uninstall" || o.kind === "software-junk" ? "apps" : "trash"} size={18} /></span>
             <div class="what">
               <strong>{t(`activity-kind-${o.kind}`)}</strong>
               <span class="muted small">
@@ -126,7 +134,7 @@
             <ul class="items">
               {#each open.items as i (i.n)}
                 <li class="small">
-                  <Icon name={i.isDir ? "folder" : "file"} size={14} />
+                  <Icon name={i.mode === "registry" ? "data" : i.isDir ? "folder" : "file"} size={14} />
                   <span class="mono ellipsis" title={i.path}>{i.path}</span>
                   <span class="muted">{t(`activity-mode-${i.mode}`)}</span>
                   <span class="num">{formatSize(i.freed, loc)}</span>

@@ -1,0 +1,28 @@
+[package]
+name = "nfd-apps"
+description = "NANOFreeDisk Programs: installed programs, the vendors' uninstallers, leftovers after uninstalling, and software junk (logs, caches, crash dumps, old updates)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+homepage.workspace = true
+
+[dependencies]
+nfd-core = { workspace = true }
+nfd-platform = { workspace = true }
+nfd-rules = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+nfd-tasks = { workspace = true }
+windows-sys = { workspace = true, features = ["Win32_UI_WindowsAndMessaging"] }
+
+[dev-dependencies]
+proptest = { workspace = true }
+tempfile = { workspace = true }
+
+[lints]
+workspace = true

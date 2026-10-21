@@ -12,6 +12,7 @@ import type { AdviceReason, DeleteItem, Filter, Node, NodeAdvice, Slice } from "
 import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
 import { monitorHandlers } from "./monitor/mock";
+import { programsHandlers } from "./programs/mock";
 
 interface E {
   id: number;
@@ -563,6 +564,7 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   ...devHandlers,
   ...dupeHandlers,
   ...healthHandlers,
+  ...programsHandlers,
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
     { root: "C:\\", label: "Windows", fs: "NTFS", kind: "fixed", total: 4e12, available: 1.45e12, free: 1.45e12, ready: true, system: true },
