@@ -17,7 +17,7 @@ NAME="NANOFreeDisk-$VERSION-macos-universal"
 # with the updater key: also NANOFreeDisk.app.tar.gz + .sig for in-app updates
 UPDATER=()
 [[ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ]] && UPDATER=(--config src-tauri/tauri.updater.conf.json)
-(cd "$ROOT/apps/nanofreedisk" && pnpm tauri build --target "$TARGET" --ci "${UPDATER[@]}")
+(cd "$ROOT/apps/nanofreedisk" && pnpm tauri build --target "$TARGET" --ci ${UPDATER[@]+"${UPDATER[@]}"})
 
 BUNDLE="$ROOT/target/$TARGET/release/bundle"
 APP="$BUNDLE/macos/NANOFreeDisk.app"
