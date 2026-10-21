@@ -281,6 +281,7 @@ nfd rules [list|validate <file>]
 
 - `%SystemRoot%\**` (trừ các rule explicit: `Temp`, `Logs\CBS\*.log` cũ, `SoftwareDistribution\Download` ở mức Advanced, `Minidump`, `MEMORY.DMP`).
 - `%ProgramFiles%`, `%ProgramFiles(x86)%`, `%ProgramData%\Microsoft\**`, `%ProgramData%\Package Cache` (Advanced only).
+  - Ngoại lệ duy nhất (2026-10-21, `docs/UNINSTALLER.md`): **leftover của phần mềm vừa gỡ** (`Origin::Leftover`, người dùng tick) được vào *bên trong* Program Files / ProgramData / Start Menu chung — không bao giờ chính các gốc đó, thư mục của Windows (`Common Files`, `Windows*`, `WindowsApps`, `ProgramData\Microsoft` trừ Start Menu Programs, `Package Cache`…), thư mục chứa phần mềm khác; qua một bước UAC tự kiểm tra lại, vào Thùng rác.
 - `System Volume Information`, `$Recycle.Bin` (chỉ qua API Empty Recycle Bin), `$MFT`, `$LogFile`, `$Extend`, `pagefile.sys`, `hiberfil.sys`, `swapfile.sys`, `DumpStack.log.tmp`.
 - `Windows\WinSxS`, `Windows\Installer`, `Windows\servicing`, `Windows\System32`, `SysWOW64`, `Boot`, `EFI`, `Recovery`.
 - Thư mục user data: `Documents`, `Desktop`, `Pictures`, `Videos`, `Music`, `Downloads` (chỉ được xóa khi **người dùng chọn tay từng file** trong Analyze, không bao giờ qua rule).
@@ -603,6 +604,14 @@ NANOFreeDisk/
 - [x] **Vẫn xóa…** (0.1.1): "nên giữ" của ứng dụng chỉ là đánh giá → người dùng ghi đè được (tick xác nhận; worktree git sạch → `git worktree remove`, còn lại → quarantine, kind `override`); bảo vệ cứng (SafetyGate, lịch sử hội thoại) không bao giờ — badge "Nên giữ" vs 🔒 "Bảo vệ", `Advice::override_block`, `ai_leftovers::prepare_forced` / `SOFT_BLOCKS`, `advice_override`
 - [x] CLI `nfd advise <path> [--json] [--lang vi] [--no-git]` (schema `nanofreedisk.advice.v1`), `nfd scan --advice`; test engine (fixture `.claude` worktree, thư mục hội thoại, đường dẫn hệ thống), `advice.test.ts`, `gui-smoke`
 
+**Gỡ phần mềm + leftovers + rác phần mềm (E1, làm sớm)** (chi tiết: `docs/UNINSTALLER.md`; xong 4 lát cắt 2026-10-21)
+
+- [x] SafetyGate `Origin::Leftover` (thư mục *bên trong* Program Files / ProgramData / Start Menu chung, không bao giờ chính các gốc đó hay thư mục của Windows: Common Files, WindowsApps, `ProgramData\Microsoft`, Package Cache…) + proptest; `DeleteMode::Registry` (khóa / giá trị registry, sao lưu `.reg`, khôi phục `reg import`, `needs-admin` cho HKLM); `nfd_platform::registry`
+- [x] Crate `nfd-apps`: inventory (Uninstall HKLM 64/32 + HKCU, Store qua `Get-AppxPackage` + manifest), tách `UninstallString` (MSI `/I` → `/X`), chuẩn hóa tên, leftovers (snapshot trước khi gỡ; thư mục cài, cùng tên, nhà phát hành chỉ khi rỗng, shortcut chết, `Software\…`, App Paths, Run, mục ARP, dịch vụ chỉ thông tin), rác phần mềm (cache Chromium/Electron, crash, log, Temp, Squirrel / electron-updater), không trùng rule pack
+- [x] Thực thi: trình gỡ chính chủ qua `ShellExecuteExW`, chờ cả cây tiến trình; mục của người dùng → quarantine + `.reg`; mục của máy → **một** UAC (`nanofreedisk.exe --elevated-leftovers`, tự kiểm tra lại mọi mục, `.reg` chỉ được import khi đúng khóa / giá trị đã ghi); một operation Activity (kind `uninstall`), "khôi phục với quyền quản trị"
+- [x] View **Gỡ phần mềm** (Đã cài / Rác phần mềm), CLI `nfd programs [list|junk|uninstall|leftovers]`, `locales/{en,vi}/programs.ftl`, `programs.test.ts`, `gui-smoke` (chỉ đọc); CI gỡ thật một phần mềm giả per-user trên runner Windows → 4 leftovers dọn rồi khôi phục đủ
+- [ ] Kiểm trên máy thật (người dùng): `gui-smoke` + gỡ một phần mềm "mọi người dùng" (UAC) — máy tham chiếu đang thiếu bộ công cụ C++ (link.exe / Windows SDK bị gỡ 2026-10-21) nên chưa build được app cục bộ
+
 **Kế hoạch ban đầu: lịch sử quét (nền cho A1 và F1)** — đã làm theo kế hoạch này (xem các mục ở trên), khác biệt: lưu thư mục theo ngưỡng kích thước thay vì độ sâu 6, khóa đường dẫn là chuỗi chữ thường (không cần hash), thêm giới hạn 300 snapshot tổng.
 
 1. *Lưu trữ*: crate mới `nfd-history` (SQLite qua `rusqlite` feature `bundled`; kiểm tra MSRV 1.85 và `cargo deny` trước khi thêm). DB ở `%LOCALAPPDATA%\NANOFreeDisk\history.db`. Bảng `scans(id, root, volume_serial, started_at, elapsed_ms, files, dirs, on_disk, free_bytes, total_bytes)`, `dir_sizes(scan_id, path_hash, path, depth, on_disk, files)` — **chỉ thư mục tới độ sâu 6 + mọi thư mục ≥ 50 MB** (không lưu từng tệp: 1 triệu tệp → vài chục nghìn dòng) — và `top_files(scan_id, path, on_disk, mtime)` top 500. Đường dẫn chuẩn hóa chữ thường + `path_hash` (xxh3) để join nhanh. Giữ 30 snapshot / root (cấu hình được), tự xóa cũ; có tùy chọn tắt lưu lịch sử.
@@ -685,7 +694,7 @@ Ký hiệu phiên bản: **①** = v1.0 · **②** = v1.x · **③** = v2+. Cộ
 
 | ID | Tính năng | Giá trị | Rủi ro | Ver |
 |----|-----------|---------|--------|-----|
-| E1 | **Uninstaller**: Win32 (registry Uninstall), MSIX/Store (`Get-AppxPackage`), winget-managed; sort theo size/last used/ngày cài; gỡ hàng loạt (chạy uninstaller chính chủ, silent nếu hỗ trợ); **Leftover scan** sau gỡ (AppData/ProgramData/Start Menu/HKCU\Software) → đề xuất Quarantine, không tự xóa | Thay Revo/BCUninstaller | 🟡/🟠 | ② |
+| E1 ✅ | **Uninstaller** (xong sớm 2026-10-21, `docs/UNINSTALLER.md`; còn winget, "last used", điểm khôi phục): Win32 (registry Uninstall), MSIX/Store (`Get-AppxPackage`), winget-managed; sort theo size/last used/ngày cài; gỡ hàng loạt (chạy uninstaller chính chủ, silent nếu hỗ trợ); **Leftover scan** sau gỡ (AppData/ProgramData/Start Menu/HKCU\Software) → đề xuất Quarantine, không tự xóa | Thay Revo/BCUninstaller | 🟡/🟠 | ② |
 | E2 | **Startup Manager**: Run/RunOnce (HKCU/HKLM/WOW6432), Startup folders, Task Scheduler trigger logon/boot, Services auto-start (chỉ non-Microsoft), UWP StartupTask; đo **startup impact** (Diagnostics-Performance Event 100/101, boot trace); **bật/tắt có undo** (dùng `StartupApproved` key như Task Manager), **không bao giờ xóa** | Máy boot nhanh hơn, ít "updater" chạy ngầm | 🟡 | ② |
 | E3 | **Scheduled tasks & updaters viewer**: ai chạy lúc nào, bao nhiêu lần/ngày, ghi ổ bao nhiêu (ghép Monitor) | Thấy thứ ẩn | Đọc/🟡 | ② |
 | E4 | **App Mover**: chuyển thư mục app/game sang ổ khác + junction; kiểm tra app đang chạy (Restart Manager), dịch vụ, shortcut; undo | SSD nhỏ + HDD lớn | 🟠 | ② |

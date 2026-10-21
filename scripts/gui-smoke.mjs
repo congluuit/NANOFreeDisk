@@ -1249,6 +1249,25 @@ try {
   check("monitor: 24-hour history reads", Array.isArray((await invoke("monitor_history")).minutes));
   check("monitor: pause", (await invoke("monitor_pause", { paused: true })) === true && (await invoke("monitor_snapshot")).paused === true);
   await invoke("monitor_pause", { paused: false });
+  // Programs (docs/UNINSTALLER.md): the machine's programs and software junk, read
+  // only; nothing is uninstalled here (CI uninstalls a throw-away program with `nfd`)
+  const programs = await invoke("programs_list", { store: false });
+  check("programs: the machine's programs are listed", Array.isArray(programs) && programs.length > 0 && programs.every((p) => p.id && p.name), `${programs.length ?? programs.__error?.message}`);
+  check("programs: the WebView2 Runtime is never removable", programs.filter((p) => /webview2 runtime/i.test(p.name)).every((p) => p.blocked === "webview2"));
+  await nav("programs");
+  for (let i = 0; i < 60 && !(await evaluate("document.querySelectorAll('[data-pg-program]').length > 0")); i++) await sleep(250);
+  check("Programs view lists the programs", await evaluate("document.querySelectorAll('[data-pg-program]').length > 0 && !!document.querySelector('[data-pg-summary]')"));
+  await evaluate("(() => { const s = document.querySelector('[data-pg-search]'); s.value = 'zzzz-no-such-program'; s.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await sleep(200);
+  check("Programs: the search filters the list", await evaluate("document.querySelectorAll('[data-pg-program]').length === 0"));
+  await evaluate("(() => { const s = document.querySelector('[data-pg-search]'); s.value = ''; s.dispatchEvent(new Event('input', { bubbles: true })); })()");
+  await shot("14b-programs");
+  const swJunk = await invoke("programs_junk_scan");
+  const profile = (process.env.USERPROFILE ?? "").toLowerCase();
+  check("software junk stays in the user profile", Array.isArray(swJunk.groups) && swJunk.groups.every((g) => g.items.every((i) => i.path.toLowerCase().startsWith(profile))), `${swJunk.groups?.length} group(s)`);
+  await evaluate("document.querySelector('[data-pgtab=junk]').click()");
+  for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-pg-junk]')")); i++) await sleep(250);
+  check("Software junk tab renders", await evaluate("!!document.querySelector('[data-pg-junk]')"));
   const monNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Disk activity|Hoạt động ổ đĩa/.test(b.innerText))");
   check("Disk activity is in the sidebar", monNav >= 0);
   await nav(monNav);

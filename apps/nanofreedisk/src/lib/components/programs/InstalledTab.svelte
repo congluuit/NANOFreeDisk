@@ -122,6 +122,7 @@
     {scope}
     noLevels
     files={false}
+    sticky={!pg.leftovers.length}
     busy={!!pg.current}
     action={{ label: (count) => t("pg-uninstall-n", { count }), icon: "trash", hint: t("pg-uninstall-n-hint"), testid: "programs", run: () => ask(pg.picked) }}
   />

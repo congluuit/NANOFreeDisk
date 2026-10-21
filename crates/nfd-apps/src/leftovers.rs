@@ -82,7 +82,7 @@ impl Roots {
         resolve: &dyn Fn(&str) -> Option<String>,
         env: &dyn Fn(&str) -> Option<String>,
     ) -> Self {
-        let p = |v: &str| resolve(v).map(PathBuf::from);
+        let p = |v: &str| resolve(v).map(|s| crate::inventory::native_path(&s));
         let mut r = Self {
             program_files: ["PROGRAMFILES", "PROGRAMFILES_X86"]
                 .iter()

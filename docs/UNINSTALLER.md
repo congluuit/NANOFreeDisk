@@ -1,6 +1,6 @@
 # Gỡ phần mềm + Leftovers + Rác phần mềm (E1): kế hoạch chi tiết
 
-> Trạng thái: **đang làm** (2026-10-21, nhánh `cong/uninstaller`). Mục **E1** ở `docs/PLAN.md` §13.2 (nhóm E) kéo lên làm sớm theo yêu cầu người dùng: tương đương *Uninstall + Leftovers* và *Software Redundant Files* của IObit Uninstaller, nhưng theo đường an toàn của app: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`). Không có gì bị xóa vĩnh viễn: tệp vào **Quarantine** (hoặc Thùng rác), khóa registry được **xuất ra `.reg`** trước khi xóa, mọi thứ khôi phục được từ Activity.
+> Trạng thái: **xong 4 lát cắt** (2026-10-21) — còn kiểm trên máy thật bằng `gui-smoke` và một lần gỡ phần mềm "mọi người dùng" (UAC); CI đã gỡ thật một phần mềm giả per-user, dọn 4 leftovers rồi khôi phục đủ. Mục **E1** ở `docs/PLAN.md` §13.2 (nhóm E) kéo lên làm sớm theo yêu cầu người dùng: tương đương *Uninstall + Leftovers* và *Software Redundant Files* của IObit Uninstaller, nhưng theo đường an toàn của app: `Planner → SafetyGate → Executor → UndoJournal` (`docs/PHASE3_CLEAN.md`). Không có gì bị xóa vĩnh viễn: tệp vào **Quarantine** (hoặc Thùng rác), khóa registry được **xuất ra `.reg`** trước khi xóa, mọi thứ khôi phục được từ Activity.
 
 ## 1. Mục tiêu & DoD
 

@@ -99,6 +99,18 @@ impl Program {
     }
 }
 
+/// A resolved folder (`C:/Users/x`, as rule-pack variables expand) in the
+/// platform's own form (`C:\Users\x` on Windows), so shown paths do not mix
+/// separators.
+#[must_use]
+pub fn native_path(s: &str) -> PathBuf {
+    if cfg!(windows) {
+        PathBuf::from(s.replace('/', "\\"))
+    } else {
+        PathBuf::from(s)
+    }
+}
+
 /// Case-insensitive path equality.
 #[must_use]
 pub fn same(a: &Path, b: &Path) -> bool {

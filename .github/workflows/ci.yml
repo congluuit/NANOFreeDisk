@@ -113,6 +113,8 @@ jobs:
           New-ItemProperty $run NfdCiApp -Value "`"$app\NfdCiApp.exe`" --tray" -Force | Out-Null
           $u = & $nfd programs uninstall NfdCiApp --remove-leftovers -y --json | ConvertFrom-Json
           $u.operation.items | Select-Object status, mode, reason, path | Format-Table -AutoSize | Out-String -Width 300
+          if (@($u.operation.items).Count -lt 4) { throw "expected 4 leftovers (install folder, data folder, key, Run entry)" }
+          if (@($u.operation.items | Where-Object { $_.path -match '/' }).Count) { throw "a path mixes separators" }
           if (Test-Path $app) { throw "install folder left behind" }
           if (Test-Path $data) { throw "data folder left behind" }
           if (Test-Path 'HKCU:\Software\NfdCiApp') { throw "registry key left behind" }

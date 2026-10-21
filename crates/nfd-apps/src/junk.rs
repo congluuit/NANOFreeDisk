@@ -118,7 +118,7 @@ impl JunkRoots {
     /// The real folders (`resolve` maps `APPDATA`, `LOCALAPPDATA`, `HOME`).
     #[must_use]
     pub fn detect(resolve: &dyn Fn(&str) -> Option<String>, own_data: &[PathBuf]) -> Self {
-        let p = |v: &str| resolve(v).map(PathBuf::from);
+        let p = |v: &str| resolve(v).map(|s| crate::inventory::native_path(&s));
         let mut r = Self {
             skip: own_data.to_vec(),
             ..Self::default()
