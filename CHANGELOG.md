@@ -28,6 +28,7 @@ First release with a macOS build (preview), the Programs view and a new, clearer
 - The estimated CPU clock is named "Average clock while busy" and is hidden once Advanced sensors report measured clocks.
 
 ### Security
+- `rustls-webpki` 0.103.16 (RUSTSEC-2026-0382: certificate paths through the distrusted emSign intermediates are rejected) — used by the in-app updater's HTTPS client.
 - The elevated helper reads the hardware at most every 200 ms (faster requests get the previous values), runs with a System32-only DLL search, and is started only by its own command-line switch, checked before every other mode.
 
 ## [0.1.1] - 2026-10-17
