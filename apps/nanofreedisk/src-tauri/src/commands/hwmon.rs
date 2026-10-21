@@ -345,6 +345,9 @@ pub struct AdvancedStatus {
     unavailable: Option<String>,
     /// PawnIO was just installed and Windows must restart before its driver loads.
     restart: bool,
+    /// "Start without the Windows prompt" (ADR 0003).
+    #[cfg(windows)]
+    helper_task: nfd_helper::TaskState,
 }
 
 #[tauri::command]
@@ -361,15 +364,22 @@ pub async fn pawnio_status(state: State<'_, HwState>) -> CmdResult<AdvancedStatu
         .map_err(|e| err("internal", e))?
         .clone();
     #[cfg(windows)]
-    let pawnio = tauri::async_runtime::spawn_blocking(nfd_sensors::win::pawnio::status)
-        .await
-        .map_err(|e| err("internal", e))?;
+    let (pawnio, helper_task) = tauri::async_runtime::spawn_blocking(|| {
+        (
+            nfd_sensors::win::pawnio::status(),
+            nfd_helper::win_task::state(),
+        )
+    })
+    .await
+    .map_err(|e| err("internal", e))?;
     Ok(AdvancedStatus {
         #[cfg(windows)]
         pawnio,
         active,
         unavailable,
         restart: state.restart_needed.load(Ordering::Relaxed),
+        #[cfg(windows)]
+        helper_task,
     })
 }
 
@@ -535,14 +545,44 @@ mod setup {
     }
 }
 
-/// The running elevated helper, or a new one (UAC prompt). Blocking.
+/// `NFD_NO_AUTO_ELEVATE` (the GUI smoke test): nothing may start elevated on its
+/// own — no automatic start, no scheduled task (ADR 0003).
+#[cfg(windows)]
+fn no_auto_elevate() -> bool {
+    std::env::var_os("NFD_NO_AUTO_ELEVATE").is_some()
+}
+
+/// The running elevated helper, or a new one. Blocking. With "start without the
+/// Windows prompt" set up for this build the account's scheduled task starts it;
+/// otherwise UAC asks, and a task left from an older build is renewed by the new
+/// helper (one prompt per app update, ADR 0003).
 #[cfg(windows)]
 pub fn helper_connection(
     slot: &Mutex<Option<nfd_helper::Connection>>,
 ) -> CmdResult<nfd_helper::Connection> {
+    connect(slot, true)
+}
+
+#[cfg(windows)]
+fn connect(
+    slot: &Mutex<Option<nfd_helper::Connection>>,
+    renew: bool,
+) -> CmdResult<nfd_helper::Connection> {
+    use nfd_helper::TaskState;
     let mut guard = slot.lock().map_err(|e| err("internal", e))?;
     if let Some(c) = guard.as_ref().filter(|c| c.connected()) {
         return Ok(c.clone());
+    }
+    let task = if no_auto_elevate() {
+        TaskState::Off
+    } else {
+        nfd_helper::win_task::state()
+    };
+    if task == TaskState::On {
+        if let Ok(conn) = nfd_helper::start_task() {
+            *guard = Some(conn.clone());
+            return Ok(conn);
+        }
     }
     let conn = nfd_helper::start().map_err(|e| {
         let code = match e {
@@ -551,8 +591,50 @@ pub fn helper_connection(
         };
         err(code, format!("{e:?}"))
     })?;
+    if renew && task != TaskState::Off {
+        // stale copy (app updated) or a task Windows lost: the user opted in
+        let _ = conn.task_register();
+    }
     *guard = Some(conn.clone());
     Ok(conn)
+}
+
+/// Turn "start without the Windows prompt" on or off (ADR 0003). On: the helper
+/// (started now if needed — at most one prompt) copies itself to its protected
+/// folder and registers the task. Off: the helper removes both (no prompt while
+/// the task is current).
+#[tauri::command]
+pub async fn helper_task_set(state: State<'_, HwState>, on: bool) -> CmdResult<AdvancedStatus> {
+    #[cfg(windows)]
+    {
+        if no_auto_elevate() {
+            return Err(err(
+                "no-auto-elevate",
+                "NFD_NO_AUTO_ELEVATE is set: the scheduled task is never touched",
+            ));
+        }
+        let helper = state.helper.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            if !on && nfd_helper::win_task::state() == nfd_helper::TaskState::Off {
+                return Ok(());
+            }
+            let conn = connect(&helper, false)?;
+            let done = if on {
+                conn.task_register()
+            } else {
+                conn.task_remove()
+            };
+            done.map_err(|e| err("helper-task", e))
+        })
+        .await
+        .map_err(|e| err("internal", e))??;
+        pawnio_status(state).await
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (state, on);
+        unsupported()
+    }
 }
 
 /// The helper slot, shared by Advanced sensors, the Monitor and drive health.
@@ -561,7 +643,8 @@ pub fn helper_slot(state: &HwState) -> Arc<Mutex<Option<nfd_helper::Connection>>
     state.helper.clone()
 }
 
-/// Start the elevated helper (UAC prompt) and add its sensors to the hub.
+/// Start the elevated helper (UAC prompt, or none through the opt-in task — see
+/// [`helper_connection`]) and add its sensors to the hub.
 /// `auto`: the app opening with "turn on automatically" set — tried once per
 /// session, only when PawnIO and the module are ready, and never under
 /// `NFD_NO_AUTO_ELEVATE` (the GUI smoke test must not raise a UAC prompt).
@@ -576,7 +659,7 @@ pub async fn advanced_sensors_start(
             let p = nfd_sensors::win::pawnio::status();
             p.running && p.intel_module
         };
-        if std::env::var_os("NFD_NO_AUTO_ELEVATE").is_some()
+        if no_auto_elevate()
             || state.auto_tried.swap(true, Ordering::Relaxed)
             || !tauri::async_runtime::spawn_blocking(ready)
                 .await

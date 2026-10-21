@@ -1370,6 +1370,10 @@ try {
   check("Advanced sensors status needs no admin", typeof adv.active === "boolean" && !adv.__error, JSON.stringify(adv.pawnio ?? adv));
   const auto = await invoke("advanced_sensors_start", { auto: true });
   check("automatic Advanced sensors never prompt in the smoke test", auto.active === adv.active && !auto.__error, JSON.stringify(auto));
+  // ADR 0003: the no-prompt scheduled task is reported, never set up or used under NFD_NO_AUTO_ELEVATE
+  check("no-prompt helper task state is reported", ["off", "on", "stale"].includes(adv.helperTask), String(adv.helperTask));
+  const noTask = await invoke("helper_task_set", { on: true });
+  check("no-prompt helper task is never set up by the smoke test", noTask?.__error?.code === "no-auto-elevate", JSON.stringify(noTask));
   await evaluate("document.querySelector('[data-hwtab=sensors]').click()");
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')")); i++) await sleep(150);
   check("Sensors tab shows CPU Total", await evaluate("!!document.querySelector('[data-sensor=\"cpu/cpu-total\"]')"));

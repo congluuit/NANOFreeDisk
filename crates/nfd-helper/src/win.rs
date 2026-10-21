@@ -1,7 +1,7 @@
-//! Named pipe, UAC launch and the two ends of the protocol.
+//! Named pipe, UAC / scheduled-task launch and the two ends of the protocol.
 
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use nfd_sensors::{Discovery, SensorInfo, SensorProvider};
 use windows_sys::Win32::Foundation::{
@@ -16,6 +16,9 @@ use windows_sys::Win32::Storage::FileSystem::{
     CreateFileW, FILE_FLAG_FIRST_PIPE_INSTANCE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX, ReadFile,
     WriteFile,
 };
+use windows_sys::Win32::System::LibraryLoader::{
+    LOAD_LIBRARY_SEARCH_SYSTEM32, SetDefaultDllDirectories,
+};
 use windows_sys::Win32::System::Pipes::{
     ConnectNamedPipe, CreateNamedPipeW, GetNamedPipeClientProcessId, GetNamedPipeServerProcessId,
     PIPE_READMODE_BYTE, PIPE_REJECT_REMOTE_CLIENTS, PIPE_TYPE_BYTE, PIPE_WAIT,
@@ -29,8 +32,10 @@ use windows_sys::Win32::UI::Shell::{
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_HIDE;
 
+use crate::task::task_pipe_name;
 use crate::{
-    HELPER_FLAG, MAX_FRAME, PROTOCOL, Request, Response, WireSensor, decode, encode, pipe_name,
+    HELPER_FLAG, MAX_FRAME, PROTOCOL, Request, Response, TaskState, WireSensor, decode, encode,
+    pipe_name,
 };
 
 fn wide(s: &str) -> Vec<u16> {
@@ -119,7 +124,7 @@ impl Pipe {
     }
 }
 
-fn image_of(pid: u32) -> Option<String> {
+pub(crate) fn image_of(pid: u32) -> Option<String> {
     // SAFETY: query-only handle, closed below.
     unsafe {
         let h = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
@@ -150,18 +155,14 @@ pub enum StartError {
     NoConnection,
     /// Something else answered on the pipe.
     WrongPeer,
+    /// "Start without the Windows prompt" is off, or set up for another build.
+    NotSetUp,
     Failed(String),
 }
 
-/// Start the elevated helper (shows UAC) and return the connection to it.
-pub fn start() -> Result<Connection, StartError> {
-    // SAFETY: no arguments.
-    let me = unsafe { GetCurrentProcessId() };
-    let nonce = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_or(0, |d| d.as_nanos() as u64)
-        ^ (u64::from(me) << 32);
-    let name = pipe_name(me, nonce);
+/// Our end of a helper pipe: one instance, local clients only, owner /
+/// administrators / SYSTEM only. Fails when the name is already taken.
+fn create_pipe(name: &str) -> Result<Pipe, StartError> {
     // owner, administrators and SYSTEM only; protected from inheritance
     let sddl = wide("D:P(A;;GA;;;OW)(A;;GA;;;BA)(A;;GA;;;SY)");
     let mut sd: PSECURITY_DESCRIPTOR = std::ptr::null_mut();
@@ -182,7 +183,7 @@ pub fn start() -> Result<Connection, StartError> {
         lpSecurityDescriptor: sd,
         bInheritHandle: 0,
     };
-    let wname = wide(&name);
+    let wname = wide(name);
     // SAFETY: one instance, local clients only.
     let h = unsafe {
         CreateNamedPipeW(
@@ -201,40 +202,16 @@ pub fn start() -> Result<Connection, StartError> {
     if h == INVALID_HANDLE_VALUE {
         return Err(StartError::Failed("pipe".into()));
     }
-    let pipe = Pipe(h);
+    Ok(Pipe(h))
+}
 
-    let exe = std::env::current_exe().map_err(|e| StartError::Failed(e.to_string()))?;
-    let file = wide(&exe.to_string_lossy());
-    let params = wide(&format!("{HELPER_FLAG} {name} {me}"));
-    let verb = wide("runas");
-    let mut sei = SHELLEXECUTEINFOW {
-        cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
-        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
-        lpVerb: verb.as_ptr(),
-        lpFile: file.as_ptr(),
-        lpParameters: params.as_ptr(),
-        nShow: SW_HIDE,
-        ..Default::default()
-    };
-    // SAFETY: initialized struct; blocks until UAC is answered.
-    if unsafe { ShellExecuteExW(&mut sei) } == 0 {
-        // SAFETY: no arguments.
-        return Err(if unsafe { GetLastError() } == ERROR_CANCELLED {
-            StartError::Declined
-        } else {
-            StartError::Failed(std::io::Error::last_os_error().to_string())
-        });
-    }
-    // SAFETY: process handle from ShellExecuteEx.
-    let helper_pid = unsafe { GetProcessId(sei.hProcess) };
-    // SAFETY: we own it.
-    unsafe { CloseHandle(sei.hProcess) };
-
+/// Wait up to `timeout` for the helper to connect; the client's PID.
+fn accept(pipe: &Pipe, name: &str, timeout: Duration) -> Result<u32, StartError> {
     // if the helper never connects, unblock ConnectNamedPipe by connecting ourselves
-    let watchdog_name = name.clone();
+    let watchdog_name = name.to_owned();
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     std::thread::spawn(move || {
-        if rx.recv_timeout(Duration::from_secs(20)).is_err() {
+        if rx.recv_timeout(timeout).is_err() {
             let n = wide(&watchdog_name);
             // SAFETY: opening our own pipe; dropped right away.
             let h = unsafe {
@@ -266,15 +243,85 @@ pub fn start() -> Result<Connection, StartError> {
     let mut client = 0u32;
     // SAFETY: connected pipe.
     unsafe { GetNamedPipeClientProcessId(pipe.0, &mut client) };
-    if client == me {
+    // SAFETY: no arguments.
+    if client == unsafe { GetCurrentProcessId() } {
         return Err(StartError::NoConnection);
     }
+    Ok(client)
+}
+
+impl Connection {
+    fn new(pipe: Pipe) -> Self {
+        Self {
+            link: Arc::new(Mutex::new(Link { pipe: Some(pipe) })),
+        }
+    }
+}
+
+/// Start the elevated helper (shows UAC) and return the connection to it.
+pub fn start() -> Result<Connection, StartError> {
+    // SAFETY: no arguments.
+    let me = unsafe { GetCurrentProcessId() };
+    let nonce = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_nanos() as u64)
+        ^ (u64::from(me) << 32);
+    let name = pipe_name(me, nonce);
+    let pipe = create_pipe(&name)?;
+
+    let exe = std::env::current_exe().map_err(|e| StartError::Failed(e.to_string()))?;
+    let file = wide(&exe.to_string_lossy());
+    let params = wide(&format!("{HELPER_FLAG} {name} {me}"));
+    let verb = wide("runas");
+    let mut sei = SHELLEXECUTEINFOW {
+        cbSize: size_of::<SHELLEXECUTEINFOW>() as u32,
+        fMask: SEE_MASK_NOCLOSEPROCESS | SEE_MASK_NOASYNC,
+        lpVerb: verb.as_ptr(),
+        lpFile: file.as_ptr(),
+        lpParameters: params.as_ptr(),
+        nShow: SW_HIDE,
+        ..Default::default()
+    };
+    // SAFETY: initialized struct; blocks until UAC is answered.
+    if unsafe { ShellExecuteExW(&mut sei) } == 0 {
+        // SAFETY: no arguments.
+        return Err(if unsafe { GetLastError() } == ERROR_CANCELLED {
+            StartError::Declined
+        } else {
+            StartError::Failed(std::io::Error::last_os_error().to_string())
+        });
+    }
+    // SAFETY: process handle from ShellExecuteEx.
+    let helper_pid = unsafe { GetProcessId(sei.hProcess) };
+    // SAFETY: we own it.
+    unsafe { CloseHandle(sei.hProcess) };
+
+    let client = accept(&pipe, &name, Duration::from_secs(20))?;
     if client != helper_pid || !same_exe(client) {
         return Err(StartError::WrongPeer);
     }
-    Ok(Connection {
-        link: Arc::new(Mutex::new(Link { pipe: Some(pipe) })),
-    })
+    Ok(Connection::new(pipe))
+}
+
+/// Start the helper through the account's scheduled task — no prompt (ADR 0003).
+/// Only when the task is set up for this very build ([`TaskState::On`]); the only
+/// client accepted is the administrator-only copy.
+pub fn start_task() -> Result<Connection, StartError> {
+    use crate::win_task;
+    if win_task::state() != TaskState::On {
+        return Err(StartError::NotSetUp);
+    }
+    let sid = win_task::own_sid().ok_or(StartError::NotSetUp)?;
+    let copy = win_task::copy_paths(&sid).ok_or(StartError::NotSetUp)?;
+    let name = task_pipe_name(&sid);
+    let pipe = create_pipe(&name)?;
+    win_task::run_task(&sid).map_err(StartError::Failed)?;
+    let client = accept(&pipe, &name, Duration::from_secs(10))?;
+    let image = image_of(client).map(std::path::PathBuf::from);
+    if !image.is_some_and(|i| win_task::same_path(&i, &copy.exe)) {
+        return Err(StartError::WrongPeer);
+    }
+    Ok(Connection::new(pipe))
 }
 
 #[derive(Debug)]
@@ -311,6 +358,31 @@ impl Connection {
 
     pub fn connected(&self) -> bool {
         self.link.lock().is_ok_and(|l| l.pipe.is_some())
+    }
+
+    fn task_request(&self, req: &Request) -> Result<(), String> {
+        match self.ask(req) {
+            Some(Response::TaskDone) => Ok(()),
+            Some(Response::Error { message }) => Err(message),
+            Some(_) => Err("protocol".into()),
+            None => Err("helper-stopped".into()),
+        }
+    }
+
+    /// Set up "start without the Windows prompt" for this account (ADR 0003).
+    ///
+    /// # Errors
+    /// The helper's reason as text.
+    pub fn task_register(&self) -> Result<(), String> {
+        self.task_request(&Request::TaskRegister { protocol: PROTOCOL })
+    }
+
+    /// Remove that task and the protected copy.
+    ///
+    /// # Errors
+    /// The helper's reason as text.
+    pub fn task_remove(&self) -> Result<(), String> {
+        self.task_request(&Request::TaskRemove { protocol: PROTOCOL })
     }
 
     /// Administrator-only drive reads (Phase 7).
@@ -479,13 +551,16 @@ impl SensorProvider for RemoteProvider {
     }
 }
 
-/// The helper's main loop (`nanofreedisk.exe --elevated-helper <pipe> <pid>`).
-/// Returns the process exit code.
-pub fn run_helper(args: &[String]) -> i32 {
-    let Some((name, parent)) = crate::helper_args(args) else {
-        return 2;
-    };
-    let wname = wide(&name);
+/// Libraries this elevated process loads at run time come from System32 only
+/// (its static imports are all Windows DLLs).
+fn harden_dll_search() {
+    // SAFETY: plain flag call.
+    unsafe { SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_SYSTEM32) };
+}
+
+/// Open the app's pipe as its client; the server's PID.
+fn open_app_pipe(name: &str) -> Option<(Pipe, u32)> {
+    let wname = wide(name);
     // SAFETY: plain client open of the app's pipe.
     let h = unsafe {
         CreateFileW(
@@ -499,20 +574,77 @@ pub fn run_helper(args: &[String]) -> i32 {
         )
     };
     if h == INVALID_HANDLE_VALUE {
-        return 3;
+        return None;
     }
     let pipe = Pipe(h);
     let mut server = 0u32;
     // SAFETY: connected pipe.
     unsafe { GetNamedPipeServerProcessId(pipe.0, &mut server) };
+    Some((pipe, server))
+}
+
+/// The helper started through UAC (`nanofreedisk.exe --elevated-helper <pipe>
+/// <pid>`). Returns the process exit code.
+pub fn run_helper(args: &[String]) -> i32 {
+    harden_dll_search();
+    let Some((name, parent)) = crate::helper_args(args) else {
+        return 2;
+    };
+    // before anything else: the image a TaskRegister would copy (ADR 0003)
+    let own = crate::win_task::lock_own_image();
+    let Some((pipe, server)) = open_app_pipe(&name) else {
+        return 3;
+    };
     // only the app that started us, running the same executable
     if server != parent || !same_exe(server) {
         return 4;
     }
+    serve(&pipe, own.as_ref())
+}
+
+/// The helper started by the account's scheduled task (`<Program Files>\NANOFreeDisk
+/// Helper\<SID>\nanofreedisk.exe --elevated-helper-task`, ADR 0003). It serves an
+/// app of its own account whose executable hashes like itself, nothing else.
+pub fn run_task_helper(args: &[String]) -> i32 {
+    use crate::win_task;
+    harden_dll_search();
+    if !crate::task::task_args(args) {
+        return 2;
+    }
+    let Some(sid) = win_task::own_sid() else {
+        return 2;
+    };
+    let Some(copy) = win_task::copy_paths(&sid) else {
+        return 2;
+    };
+    // only ever as the protected copy
+    let me = std::env::current_exe().ok();
+    if !me.is_some_and(|m| win_task::same_path(&m, &copy.exe)) {
+        return 2;
+    }
+    let Some((pipe, server)) = open_app_pipe(&task_pipe_name(&sid)) else {
+        return 3;
+    };
+    if win_task::process_sid(Some(server)).as_deref() != Some(sid.as_str()) {
+        return 4;
+    }
+    let mine = win_task::file_sha256(&copy.exe);
+    let theirs = image_of(server).and_then(|p| win_task::file_sha256(std::path::Path::new(&p)));
+    if mine.is_none() || mine != theirs {
+        return 4; // another build (stale copy) or another program
+    }
+    serve(&pipe, None)
+}
+
+/// Answer the app's requests until it closes the pipe or says Shutdown. `own`: the
+/// helper's locked image when it runs through UAC (what TaskRegister copies).
+fn serve(pipe: &Pipe, own: Option<&std::fs::File>) -> i32 {
     let mut providers: Vec<Box<dyn SensorProvider>> = Vec::new();
     let mut maps: Vec<usize> = Vec::new(); // provider start offsets
     // the monitor's trace session; dropping it (return, app gone) stops it
     let mut etw: Option<nfd_monitor::win::etw::EtwSession> = None;
+    // the last hardware read, served again to faster requests
+    let mut last: Option<(Instant, Vec<(usize, f64)>)> = None;
     loop {
         let Some(req) = pipe.recv::<Request>() else {
             return 0; // app closed the pipe
@@ -569,6 +701,7 @@ pub fn run_helper(args: &[String]) -> i32 {
                 Ok(list) => {
                     providers = list;
                     maps.clear();
+                    last = None;
                     let (mut devices, mut sensors, mut notes) =
                         (Vec::new(), Vec::new(), Vec::new());
                     for p in &mut providers {
@@ -613,16 +746,39 @@ pub fn run_helper(args: &[String]) -> i32 {
                     privileged: nfd_health::privileged_for(&drives, &volumes),
                 }
             }
-            Request::Sample => {
-                let mut values = Vec::new();
-                let mut buf = Vec::new();
-                for (p, &off) in providers.iter_mut().zip(&maps) {
-                    buf.clear();
-                    p.sample(&mut buf);
-                    values.extend(buf.iter().map(|&(i, v)| (off + i, v)));
+            Request::Sample => match &last {
+                Some((at, values)) if at.elapsed() < crate::MIN_SAMPLE_INTERVAL => {
+                    Response::Sample {
+                        values: values.clone(),
+                    }
                 }
-                Response::Sample { values }
+                _ => {
+                    let mut values = Vec::new();
+                    let mut buf = Vec::new();
+                    for (p, &off) in providers.iter_mut().zip(&maps) {
+                        buf.clear();
+                        p.sample(&mut buf);
+                        values.extend(buf.iter().map(|&(i, v)| (off + i, v)));
+                    }
+                    last = Some((Instant::now(), values.clone()));
+                    Response::Sample { values }
+                }
+            },
+            Request::TaskRegister { protocol } | Request::TaskRemove { protocol }
+                if protocol != PROTOCOL =>
+            {
+                Response::Error {
+                    message: format!("protocol {protocol} != {PROTOCOL}"),
+                }
             }
+            Request::TaskRegister { .. } => match crate::win_task::register(own) {
+                Ok(()) => Response::TaskDone,
+                Err(message) => Response::Error { message },
+            },
+            Request::TaskRemove { .. } => match crate::win_task::remove() {
+                Ok(()) => Response::TaskDone,
+                Err(message) => Response::Error { message },
+            },
         };
         if !pipe.send(&resp) {
             return 0;

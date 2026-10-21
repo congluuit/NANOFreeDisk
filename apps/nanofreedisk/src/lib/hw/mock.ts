@@ -181,6 +181,7 @@ const PROCS: Proto[] = [
 const ended = new Set<number>();
 
 let thermalOn = false;
+let helperTask: "off" | "on" | "stale" = "off";
 function thermalMock() {
   const now = Math.floor(Date.now() / 60000);
   const minutes = Array.from({ length: 240 }, (_, i) => {
@@ -250,8 +251,9 @@ function mockEnd(pid: number, mode: string, confirmed: boolean): EndResult[] {
 }
 
 export const hwHandlers: Record<string, (a: Record<string, any>) => unknown> = {
-  pawnio_status: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null }),
-  advanced_sensors_start: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null }),
+  pawnio_status: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null, helperTask }),
+  advanced_sensors_start: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null, helperTask }),
+  helper_task_set: ({ on }) => ((helperTask = on ? "on" : "off"), { pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null, helperTask }),
   pawnio_setup: () => ({ pawnio: { installed: true, running: true, version: "2.2.0.0", memory_integrity: false, intel_module: true, accessible: false }, active: false, unavailable: null }),
   pawnio_open_site: () => undefined,
   thermal_set: ({ enabled }) => ((thermalOn = enabled), thermalMock()),

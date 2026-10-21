@@ -4,8 +4,8 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail } from "../state.svelte";
   import { hwApi } from "../hw/api";
-  import { advanced, advancedStep, autoStartAdvanced, refreshAdvanced, setAdvancedAuto, setupAdvanced, startAdvanced } from "../hw/advanced.svelte";
-  import { formatValue, ownHot, sensorLabel, sensorTempLevel, tree } from "../hw/sensors";
+  import { advanced, advancedStep, autoStartAdvanced, refreshAdvanced, setAdvancedAuto, setHelperTask, setupAdvanced, startAdvanced } from "../hw/advanced.svelte";
+  import { formatValue, ownHot, sensorLabel, sensorTempLevel, showNoPrompt, tree } from "../hw/sensors";
   import type { DeviceKind, Sensor, SensorSnapshot } from "../hw/types";
   import Icon from "../components/Icon.svelte";
   import Thermal24h from "../components/Thermal24h.svelte";
@@ -20,6 +20,7 @@
   const nodes = $derived(snap ? tree(snap, app.settings.mode === "simple") : []);
   const needsPawn = $derived(!!snap?.notes.some((n) => n.reason === "needs-pawnio"));
   const step = $derived(advancedStep(advanced.status));
+  const task = $derived(advanced.status?.helperTask);
 
   const DEVICE_ICON: Record<DeviceKind, string> = {
     cpu: "cpu",
@@ -141,6 +142,18 @@
     {/if}
   {:else if needsPawn}
     <span class="hint small"><Icon name="lock" size={14} />{t("hw-sensors-pawn-hint")}</span>
+  {/if}
+  {#if showNoPrompt(advanced.status)}
+    <label class="auto small" title={task === "stale" ? t("hw-adv-noprompt-stale") : t("hw-adv-noprompt-hint")}>
+      <input
+        type="checkbox"
+        data-adv-noprompt
+        checked={task !== "off"}
+        disabled={!!advanced.busy}
+        onchange={(e) => setHelperTask(e.currentTarget.checked)}
+      />
+      {t("hw-adv-noprompt")}
+    </label>
   {/if}
   <span class="grow"></span>
   {#if snap && expert()}

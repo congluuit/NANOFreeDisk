@@ -12,12 +12,16 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 - **Software junk**: the caches (Electron / Chromium apps), crash dumps, logs, temporary files and old update packages of the programs you keep, grouped by program; profiles, sign-ins and site data are never listed, and nothing the Junk files view already cleans is counted twice.
 - **Set up Advanced sensors in one click** (Hardware → Sensors): CPU temperatures need PawnIO and its official CPU module, which used to mean a manual download into a hidden folder. The app now downloads PawnIO's official installer and module from its author's GitHub releases, accepts them only when their SHA-256 matches the pinned values, installs PawnIO through Windows' administrator prompt and stores the module — then turns the sensors on.
 - **Turn on automatically when the app opens**: after Advanced sensors were turned on once, the next start turns them on again (one Windows prompt per start; untick to stop).
+- **Start without the Windows prompt** (opt-in, next to the option above; [ADR 0003](docs/adr/0003-helper-without-uac-prompt.md)): a Windows scheduled task starts the read-only administrator helper (Advanced sensors, Monitor file detail, full drive-health read) from a copy in `Program Files\NANOFreeDisk Helper` that only administrators can change — never from the user-writable install folder — so there is no prompt at each start. After an app update Windows asks once more and the copy is renewed; unticking it, or uninstalling, removes the task and the copy.
 - **macOS (preview)**: one universal app for Intel and Apple silicon Macs, macOS 11+ (`.dmg` and zipped `.app`, ad-hoc signed, not notarized yet). Analyze, Duplicates, Old & Large, Tidy up, DevCache and Activity work; deleting moves items to the Trash (Put Back and Activity → Restore work) or the quarantine. Protected on macOS: the system folders, iCloud Drive, Mail, Messages, keychains, app sandboxes, iPhone backups, Time Machine, Photos / Music / TV libraries, the inside of app bundles and document packages, and AI agents' chat history (ChatGPT, Codex, Copilot for Xcode, Ollama, Zed, Raycast besides the cross-platform tools). Duplicates counts APFS clones once and never pre-selects them, and never reads iCloud files that are not downloaded. A hint explains how to grant Full Disk Access. Clean, Drive health, Hardware and Monitor stay Windows-only for now. See the README's macOS section and `docs/MACOS.md`.
 
 ### Fixed
 - Wrong CPU numbers right after opening a sensor view: load, power, effective clocks, network and GPU rates were computed over a few milliseconds on the first sample (e.g. 58 % CPU load at 20 %, inflated power maxima). Rate sources now wait 500 ms after discovery.
 - The Home card no longer shows an ACPI thermal zone (often a fixed firmware value) as the CPU temperature; it says why the CPU value is missing and links to the setup instead.
 - The estimated CPU clock is named "Average clock while busy" and is hidden once Advanced sensors report measured clocks.
+
+### Security
+- The elevated helper reads the hardware at most every 200 ms (faster requests get the previous values), runs with a System32-only DLL search, and is started only by its own command-line switch, checked before every other mode.
 
 ## [0.1.1] - 2026-10-17
 

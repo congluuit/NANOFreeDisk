@@ -169,6 +169,9 @@ export interface AdvancedStatus {
   unavailable: string | null;
   /** PawnIO was just installed and needs a restart before its driver loads. */
   restart?: boolean;
+  /** "Start without the Windows prompt" (ADR 0003): stale = set up for an older
+   * build, renewed after the next UAC start. Windows only. */
+  helperTask?: "off" | "on" | "stale";
 }
 
 export interface ThermalMinute {

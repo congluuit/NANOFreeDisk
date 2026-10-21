@@ -44,6 +44,23 @@ fn wants_dupes(args: &[String]) -> bool {
 #[allow(clippy::expect_used)]
 pub fn run() {
     let args: Vec<String> = std::env::args().collect();
+    // elevated helper (Advanced sensors, Monitor detail, drive health): no window,
+    // only the pipe protocol. Checked first and alone: nothing appended to a helper
+    // command line may reach another mode (ADR 0003).
+    #[cfg(windows)]
+    if nfd_helper::is_helper(&args) {
+        std::process::exit(if args[1] == nfd_helper::TASK_FLAG {
+            nfd_helper::run_task_helper(&args)
+        } else {
+            nfd_helper::run_helper(&args)
+        });
+    }
+    if args
+        .iter()
+        .any(|a| a == nfd_helper::HELPER_FLAG || a == nfd_helper::TASK_FLAG)
+    {
+        std::process::exit(2);
+    }
     if args.iter().any(|a| a == "--unregister-shell") {
         let _ = nfd_platform::shell_menu::unregister();
         return;
@@ -55,11 +72,6 @@ pub fn run() {
     // the uninstaller's one elevated step (all-users leftovers): no window, one request file
     if args.iter().any(|a| a == nfd_apps::elevated::FLAG) {
         std::process::exit(nfd_apps::elevated::run(&args));
-    }
-    // elevated helper (Advanced sensors, Monitor detail): no window, only the pipe protocol
-    #[cfg(windows)]
-    if args.iter().any(|a| a == nfd_helper::HELPER_FLAG) {
-        std::process::exit(nfd_helper::run_helper(&args));
     }
     let cwd = std::env::current_dir()
         .map(|d| d.to_string_lossy().into_owned())
@@ -209,6 +221,7 @@ pub fn run() {
             commands::hwmon::open_task_manager,
             commands::hwmon::pawnio_status,
             commands::hwmon::advanced_sensors_start,
+            commands::hwmon::helper_task_set,
             commands::hwmon::pawnio_setup,
             commands::hwmon::pawnio_open_site,
             commands::hwmon::thermal_set,
