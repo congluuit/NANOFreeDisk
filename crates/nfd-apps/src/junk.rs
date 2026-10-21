@@ -727,5 +727,7 @@ pub fn plan(report: &JunkReport, picked: &[PathBuf]) -> CleanPlan {
     plan
 }
 
-#[cfg(test)]
+// Windows paths, registry layouts and Store packages: the tests are Windows-only
+// like the Programs view itself (hidden on macOS, docs/MACOS.md §4).
+#[cfg(all(test, windows))]
 mod tests;

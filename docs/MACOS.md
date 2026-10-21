@@ -27,6 +27,7 @@ rỗng), DevCache, Activity (hoàn tác), Settings, bảng lệnh ⌘K, EN/VI, t
 | Drive health | SMART/NVMe qua IOCTL và helper nâng quyền của Windows. |
 | Hardware (cảm biến, Tasks, PawnIO, nhiệt độ 24 h) | WMI / PawnIO / Toolhelp. |
 | Monitor (hoạt động đĩa) | ETW + bộ đếm I/O của Windows. |
+| Programs (gỡ cài đặt, phần sót lại, rác phần mềm) | Registry Uninstall, trình gỡ của Windows, gói Store (`nfd-apps`; test của crate chỉ chạy trên Windows). |
 | Menu Explorer, cập nhật tại chỗ | Registry / NSIS–MSI; trên macOS Settings → Updates chỉ mở trang Releases. |
 
 Các lệnh Rust của những tính năng trên vẫn được đăng ký (để `generate_handler!` không
@@ -217,8 +218,8 @@ giải nén.
 1. **Cài đặt** — mở `.dmg`, kéo NANOFreeDisk vào Applications. Mở app: Gatekeeper chặn
    → làm như §5.2. App mở được, cửa sổ hiện đúng, không lỗi trắng màn hình.
 2. **Thanh bên** chỉ có: Home, Analyze, Free up space (DevCache, Duplicates, Old &
-   Large, Tidy up), Activity, Settings. **Không** có Clean, Drive health, Hardware,
-   Monitor. ⌘K mở bảng lệnh, ⌘, mở Settings; Settings không có Explorer menu,
+   Large, Tidy up), Activity, Settings. **Không** có Clean, Programs, Drive health,
+   Hardware, Monitor. ⌘K mở bảng lệnh, ⌘, mở Settings; Settings không có Explorer menu,
    Monitor, Drive health; mục Updates chỉ có nút mở trang Releases.
 3. **Ổ đĩa (Home)** — có "Macintosh HD" (hoặc tên ổ của bạn), dung lượng/còn trống gần
    bằng menu Apple → About This Mac → Storage (chênh lệch là "purgeable"). Cắm USB → hiện ở

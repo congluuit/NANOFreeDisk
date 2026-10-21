@@ -255,7 +255,9 @@ pub fn run_registry(jobs: &[RegJob], first: usize, allow_machine: bool) -> Vec<I
         .collect()
 }
 
-#[cfg(test)]
+// Windows paths, registry layouts and Store packages: the tests are Windows-only
+// like the Programs view itself (hidden on macOS, docs/MACOS.md §4).
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use crate::inventory::Program;

@@ -673,7 +673,9 @@ pub fn parse_appx_json(text: &str) -> Vec<AppxRow> {
 /// The PowerShell script that lists Store packages for [`parse_appx_json`].
 pub const APPX_SCRIPT: &str = "[Console]::OutputEncoding=[Text.Encoding]::UTF8;$ErrorActionPreference='SilentlyContinue';Get-AppxPackage -PackageTypeFilter Main | Where-Object { -not $_.IsFramework } | ForEach-Object { [pscustomobject]@{ n=$_.Name; f=$_.PackageFullName; fam=$_.PackageFamilyName; v=[string]$_.Version; l=$_.InstallLocation; nr=[bool]$_.NonRemovable; s=[string]$_.SignatureKind } } | ConvertTo-Json -Compress -Depth 2";
 
-#[cfg(test)]
+// Windows paths, registry layouts and Store packages: the tests are Windows-only
+// like the Programs view itself (hidden on macOS, docs/MACOS.md §4).
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
     use crate::registry::MemRegistry;

@@ -205,7 +205,9 @@ fn has_ext(p: &str) -> bool {
     Path::new(p).extension().is_some()
 }
 
-#[cfg(test)]
+// Windows paths, registry layouts and Store packages: the tests are Windows-only
+// like the Programs view itself (hidden on macOS, docs/MACOS.md §4).
+#[cfg(all(test, windows))]
 mod tests {
     use super::*;
 

@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { currentOs, hasFeature, modKey, viewAvailable } from "./platform.ts";
 
 test("macOS hides the Windows-only views, Windows and the mock keep everything", () => {
-  for (const view of ["clean", "health", "hardware", "monitor"] as const) {
+  for (const view of ["clean", "health", "hardware", "monitor", "programs"] as const) {
     assert.equal(viewAvailable("macos", view), false, view);
     assert.equal(viewAvailable("windows", view), true, view);
     assert.equal(viewAvailable("browser", view), true, view);

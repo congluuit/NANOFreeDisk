@@ -4,8 +4,8 @@
 //
 // Hidden on macOS: Clean (the rule packs are Windows'), Drive health (SMART/NVMe
 // through the elevated helper), Hardware (sensors, Tasks, PawnIO) and the disk
-// activity Monitor (ETW), plus their Settings blocks, the Explorer menu and the
-// in-place updater.
+// activity Monitor (ETW), Programs (Windows uninstallers and registry), plus their
+// Settings blocks, the Explorer menu and the in-place updater.
 
 import type { View } from "./state.svelte";
 
@@ -14,6 +14,7 @@ export type Feature =
   | "health"
   | "hardware"
   | "monitor"
+  | "programs"
   | "sensors"
   | "shell-menu"
   | "updater";
@@ -23,6 +24,7 @@ const WINDOWS_ONLY: readonly Feature[] = [
   "health",
   "hardware",
   "monitor",
+  "programs",
   "sensors",
   "shell-menu",
   "updater",
@@ -33,6 +35,7 @@ const VIEW_FEATURE: Partial<Record<View, Feature>> = {
   health: "health",
   hardware: "hardware",
   monitor: "monitor",
+  programs: "programs",
 };
 
 /** The OS: `app_info`'s answer, else a guess from the user agent. */
