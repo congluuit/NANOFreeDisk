@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*", "apps/nfd-cli", "apps/nanofreedisk/src-tauri", "apps/nanofreedisk-setup"]
 
 [workspace.package]
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
 rust-version = "1.85"
 license = "MIT"
@@ -16,21 +16,21 @@ categories = ["filesystem", "command-line-utilities"]
 [workspace.dependencies]
 # internal
 # (versions keep cargo-deny's wildcard ban happy; bump them with the workspace version)
-nfd-core = { path = "crates/nfd-core", version = "0.2.1" }
-nfd-rules = { path = "crates/nfd-rules", version = "0.2.1" }
-nfd-platform = { path = "crates/nfd-platform", version = "0.2.1" }
-nfd-history = { path = "crates/nfd-history", version = "0.2.1" }
-nfd-hwinfo = { path = "crates/nfd-hwinfo", version = "0.2.1" }
-nfd-sensors = { path = "crates/nfd-sensors", version = "0.2.1" }
-nfd-tasks = { path = "crates/nfd-tasks", version = "0.2.1" }
-nfd-helper = { path = "crates/nfd-helper", version = "0.2.1" }
-nfd-devtools = { path = "crates/nfd-devtools", version = "0.2.1" }
-nfd-dupes = { path = "crates/nfd-dupes", version = "0.2.1" }
-nfd-monitor = { path = "crates/nfd-monitor", version = "0.2.1" }
-nfd-health = { path = "crates/nfd-health", version = "0.2.1" }
-nfd-browsers = { path = "crates/nfd-browsers", version = "0.2.1" }
-nfd-advice = { path = "crates/nfd-advice", version = "0.2.1" }
-nfd-apps = { path = "crates/nfd-apps", version = "0.2.1" }
+nfd-core = { path = "crates/nfd-core", version = "0.3.0" }
+nfd-rules = { path = "crates/nfd-rules", version = "0.3.0" }
+nfd-platform = { path = "crates/nfd-platform", version = "0.3.0" }
+nfd-history = { path = "crates/nfd-history", version = "0.3.0" }
+nfd-hwinfo = { path = "crates/nfd-hwinfo", version = "0.3.0" }
+nfd-sensors = { path = "crates/nfd-sensors", version = "0.3.0" }
+nfd-tasks = { path = "crates/nfd-tasks", version = "0.3.0" }
+nfd-helper = { path = "crates/nfd-helper", version = "0.3.0" }
+nfd-devtools = { path = "crates/nfd-devtools", version = "0.3.0" }
+nfd-dupes = { path = "crates/nfd-dupes", version = "0.3.0" }
+nfd-monitor = { path = "crates/nfd-monitor", version = "0.3.0" }
+nfd-health = { path = "crates/nfd-health", version = "0.3.0" }
+nfd-browsers = { path = "crates/nfd-browsers", version = "0.3.0" }
+nfd-advice = { path = "crates/nfd-advice", version = "0.3.0" }
+nfd-apps = { path = "crates/nfd-apps", version = "0.3.0" }
 
 # external
 serde = { version = "1", features = ["derive"] }

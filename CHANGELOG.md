@@ -6,6 +6,10 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-21
+
+One-click updates for every copy, program icons, a livelier uninstall and a quarantine you can see and empty.
+
 ### Added
 - **One-click update for every copy** (Settings → Updates → **Update now**): copies installed with NANOFreeDisk Setup, the portable zip and the macOS app now update in place like the NSIS / MSI packages, with a download progress. Setup copies are updated by the new Setup in their own folder with the same options (one Windows prompt when installed for everyone); portable copies get the new files next to the exe and their `data` folder is never touched; the app closes and starts again. Every package is verified with the release's signing key. Copies of 0.2.1 and earlier installed with Setup or portable need one manual update to get this.
 - **Program icons** (Programs): each program shows its own icon — read from the vendor's `DisplayIcon`, the Windows Installer's product icon or the program file in its install folder, and Store apps their manifest's logo. Program files are only opened as data (never run) and only on local drives, never on a network share; a program without an icon keeps its letter.
@@ -157,7 +161,8 @@ First preview release for Windows 10/11 (x64): branded setup, MSI, classic EXE a
 - **Drive health's administrator reads use the shared elevated helper**: if Advanced sensors or the disk monitor's file detail already started it, there is no second UAC prompt (and the other way round); the helper stays until the app closes.
 - **AI conversation history is never deleted** (PLAN §5.1): the SafetyGate protects the session / conversation folders of Claude Code and Claude Desktop, Codex, Gemini CLI, Antigravity, Copilot (VS Code and CLI), Cursor, Windsurf, Devin, ZCode, Trae, Kiro, opencode, Continue, Cline, Roo Code, Qwen Code, LM Studio and Jan, plus Aider chat logs and `.specstory` folders inside projects, against every origin — rules of any level, DevCache, Duplicates and items picked by hand — and refuses the folders that contain them. The rules that used to offer old transcripts (🟡 Claude Code / Codex sessions, Gemini CLI `tmp` and history, Copilot chat, Cursor and VS Code `workspaceStorage`, Windsurf Cascade, Continue, Cline, Roo Code) are now 🔴 Keep rules, and new Keep rules list the other agents' history in DevCache.
 
-[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.1...HEAD
+[Unreleased]: https://github.com/congluuit/NANOFreeDisk/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/congluuit/NANOFreeDisk/compare/v0.1.0...v0.1.1
