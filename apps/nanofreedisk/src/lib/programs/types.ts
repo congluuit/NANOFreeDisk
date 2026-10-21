@@ -60,6 +60,8 @@ export interface Leftover {
   mtime: number;
   selected: boolean;
   blocked: string | null;
+  /** Big enough to hold the user's own files: never pre-selected. */
+  large: boolean;
 }
 
 export type LeftoverMode = "after-uninstall" | "broken" | "forced";

@@ -52,6 +52,7 @@ Người dùng muốn một chỗ để: (1) xem phần mềm đã cài và dung
 | Thư mục cùng tên | tên chuẩn hóa = tên phần mềm / tên exe chính / tên thư mục cài; đủ "riêng" (≥ 4 ký tự, không phải từ chung) và không khớp phần mềm nào khác còn cài | 🟢 |
 | Thư mục nhà phát hành | chỉ khi mọi thứ bên trong đều là leftover được đề xuất (sẽ thành rỗng) | 🟡 |
 | Khớp yếu | tên chứa tên phần mềm, hoặc khớp cả phần mềm khác | 🟡 (không chọn sẵn) |
+| Thư mục lớn | bất kỳ thư mục leftover nào ≥ 500 MB (`LARGE_LEFTOVER`): có thể là tệp của người dùng — thư viện game, tin nhắn, tải về | 🟡 (không chọn sẵn, ghi chú "lớn") |
 | Shortcut `.lnk` | đích nằm trong thư mục cài / là exe của phần mềm, và **đích không còn**; thư mục Start Menu cùng tên chỉ còn các shortcut đó | 🟢 |
 | Khóa registry | `Software\<Publisher>\<Tên>`, `Software\<Tên>` (HKCU, HKLM 64/32); khóa ARP còn sót; `App Paths\<exe>` trỏ vào tệp đã mất; giá trị `Run` trỏ vào tệp đã mất | 🟢 (khóa nhà phát hành: 🟡, chỉ khi sẽ rỗng) |
 | Dịch vụ | `ImagePath` trỏ vào thư mục cài | chỉ thông tin + lệnh `sc delete` |

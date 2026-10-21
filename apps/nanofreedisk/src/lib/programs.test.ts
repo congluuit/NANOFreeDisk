@@ -118,6 +118,7 @@ test("every code the backend sends has a message in both languages", () => {
       "uac-declined", "elevation-failed", "backup", "delete", "access-denied", "missing", "registry",
       "unexpected-key", "unexpected-value", "protected", "system-dir", "volume-root", "contains-protected",
     ].map((x) => `reason-${x}`),
+    "pg-left-large",
     "activity-kind-uninstall",
     "activity-kind-software-junk",
     "activity-mode-registry",

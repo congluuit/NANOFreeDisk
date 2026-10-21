@@ -432,6 +432,7 @@ fn scan(snap: &leftovers::Snapshot, mode: Mode) -> Report {
         others: &others,
         running: &running,
         max_entries: 2_000_000,
+        large: leftovers::LARGE_LEFTOVER,
         exists: &|p: &Path| p.exists(),
         env: &env,
         system_root,
@@ -474,6 +475,7 @@ fn print_leftovers(report: &Report) {
                 .as_deref()
                 .map(|b| format!(" (not offered: {b})"))
                 .or_else(|| i.also.as_deref().map(|a| format!(" (also fits {a})")))
+                .or_else(|| i.large.then(|| " (large: look inside first)".to_owned()))
                 .unwrap_or_default()
         );
         if i.kind == Kind::Service {

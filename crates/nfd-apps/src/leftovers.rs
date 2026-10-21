@@ -39,6 +39,11 @@ const STARTUP_APPROVED_32: &str =
     r"Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run32";
 const SERVICES: &str = r"SYSTEM\CurrentControlSet\Services";
 
+/// Leftover folders this big are never pre-selected: an uninstaller that leaves
+/// half a gigabyte behind usually left the user's own files (saves, libraries,
+/// chat history, downloads).
+pub const LARGE_LEFTOVER: u64 = 500 << 20;
+
 /// Keys directly under `Software` that are never a program's leftover.
 pub const SOFTWARE_DENY: &[&str] = &[
     "microsoft",
@@ -408,6 +413,10 @@ pub struct Leftover {
     /// Why it cannot be removed: a SafetyGate code, `other-program`, `in-use`,
     /// `contains-history`, `too-large`, `info` (services).
     pub blocked: Option<String>,
+    /// Holds more than [`Ctx::large`]: what is left may be the user's (a game
+    /// library, chat history, downloads), so it is never pre-selected.
+    #[serde(default)]
+    pub large: bool,
 }
 
 impl Leftover {
@@ -467,6 +476,9 @@ pub struct Ctx<'a> {
     pub running: &'a [PathBuf],
     /// Entries visited per folder when sizing.
     pub max_entries: u64,
+    /// A leftover folder at least this big is 🟡 and never pre-selected
+    /// ([`LARGE_LEFTOVER`]).
+    pub large: u64,
     pub exists: &'a dyn Fn(&Path) -> bool,
     pub env: &'a dyn Fn(&str) -> Option<String>,
     pub system_root: PathBuf,
@@ -556,6 +568,10 @@ impl Scan<'_, '_> {
         if blocked.is_none() && t.truncated {
             blocked = Some("too-large".into());
         }
+        let large = t.bytes >= self.ctx.large;
+        if large {
+            level = RiskLevel::Caution;
+        }
         let selected = blocked.is_none() && level == RiskLevel::Safe && also.is_none();
         self.items.push(Leftover {
             id,
@@ -576,6 +592,7 @@ impl Scan<'_, '_> {
             },
             selected,
             blocked,
+            large,
         });
     }
 
@@ -634,6 +651,7 @@ impl Scan<'_, '_> {
             mtime: self.ctx.reg.last_write(hive, key).unwrap_or(0),
             selected,
             blocked,
+            large: false,
         });
     }
 
@@ -970,6 +988,7 @@ impl Scan<'_, '_> {
                     mtime: 0,
                     selected: false,
                     blocked: Some("info".into()),
+                    large: false,
                 });
             }
         }

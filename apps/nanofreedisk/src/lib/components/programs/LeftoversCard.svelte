@@ -74,6 +74,7 @@
               <span class="muted pg-small">
                 {t(`pg-reason-${l.reason}`)}
                 {#if l.also}· {t("pg-left-also", { name: l.also })}{/if}
+                {#if l.large}· <b class="large">{t("pg-left-large")}</b>{/if}
                 {#if l.blocked && l.kind !== "service"}· {reasonText(l.blocked)}{/if}
                 {#if l.kind === "service" && l.detail}· <code>sc delete "{l.detail}"</code>{/if}
               </span>
@@ -170,6 +171,10 @@
   .admin {
     color: var(--text-muted);
     display: inline-flex;
+  }
+  .large {
+    color: var(--risk-caution);
+    font-weight: 600;
   }
   .admin-note {
     display: flex;

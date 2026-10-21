@@ -81,6 +81,7 @@ function left(id: string, kind: Leftover["kind"], reason: string, bytes: number,
     mtime: now() - 5 * DAY,
     selected: level === "safe" && !blocked && !extra.also,
     blocked,
+    large: false,
     ...extra,
   };
 }

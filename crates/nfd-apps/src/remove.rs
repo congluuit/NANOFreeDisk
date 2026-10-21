@@ -278,6 +278,7 @@ mod tests {
             mtime: 0,
             selected: true,
             blocked: None,
+            large: false,
         }
     }
 

@@ -97,6 +97,7 @@ pg-left-group-services = Dịch vụ (thông tin)
 pg-left-pick = Chọn
 pg-left-blocked = Giữ lại
 pg-left-also = tên này cũng khớp { $name }
+pg-left-large = lớn: hãy xem bên trong trước — có thể là tệp của bạn (save game, thư viện, tin nhắn)
 pg-left-machine-hint = Của mọi người dùng: được dọn với quyền quản trị.
 pg-left-admin = { $count } mục là của mọi người dùng: Windows sẽ hỏi quyền quản trị một lần.
 pg-left-remove = Dọn { $count } mục ({ $size })

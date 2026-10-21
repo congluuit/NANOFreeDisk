@@ -296,6 +296,7 @@ pub async fn programs_leftovers(
             others: &others,
             running: &running,
             max_entries: MAX_ENTRIES,
+            large: leftovers::LARGE_LEFTOVER,
             exists: &|x: &Path| x.exists(),
             env: &env,
             system_root,

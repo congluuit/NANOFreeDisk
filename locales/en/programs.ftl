@@ -106,6 +106,7 @@ pg-left-group-services = Services (information)
 pg-left-pick = Select
 pg-left-blocked = Kept
 pg-left-also = the name also fits { $name }
+pg-left-large = large: look inside first — it may hold your own files (saves, libraries, chats)
 pg-left-machine-hint = For every user: removed with administrator rights.
 pg-left-admin = { $count ->
     [one] 1 item is

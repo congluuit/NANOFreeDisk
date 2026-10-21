@@ -17,6 +17,7 @@ struct Machine {
     roots: Roots,
     gate: SafetyGate,
     reg: MemRegistry,
+    large: u64,
 }
 
 impl Machine {
@@ -61,6 +62,7 @@ impl Machine {
             roots,
             gate,
             reg: MemRegistry::new(),
+            large: LARGE_LEFTOVER,
         }
     }
 
@@ -138,6 +140,7 @@ impl Machine {
             others: &o,
             running: &[],
             max_entries: 100_000,
+            large: self.large,
             exists: &|p: &Path| p.exists(),
             env: &|_| None,
             system_root,
@@ -604,4 +607,22 @@ fn a_product_named_like_its_vendor() {
     let r = m.scan(&prog, &[ptb], Mode::AfterUninstall);
     let it = find(&r, &m.p("home/AppData/Roaming/discord")).expect("discord");
     assert_eq!((it.level, it.selected), (RiskLevel::Caution, false));
+}
+
+#[test]
+fn large_leftovers_are_never_preselected() {
+    let mut m = Machine::new();
+    m.large = 1000;
+    let install = m.mkdir("pf/Acme Tool");
+    m.file("pf/Acme Tool/library/game.pak", 5000);
+    m.file("home/AppData/Roaming/Acme Tool/small.ini", 10);
+    let prog = program("Acme Tool", None, Some(install.clone()));
+    let r = m.scan(&prog, &[], Mode::AfterUninstall);
+    let big = find(&r, &install).expect("install folder");
+    assert!(
+        big.large && !big.selected && big.level == RiskLevel::Caution,
+        "{big:?}"
+    );
+    let small = find(&r, &m.p("home/AppData/Roaming/Acme Tool")).expect("data");
+    assert!(!small.large && small.selected);
 }
