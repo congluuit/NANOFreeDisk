@@ -502,10 +502,13 @@ fn full_match(p: &CompiledPath, text: &str) -> bool {
             a == b
         }
     };
-    if text.len() < base.len() || !same(&text[..base.len()], base) {
+    // `get`: a byte offset inside a multi-byte character ("Tài liệu") is no match
+    let (Some(head), Some(tail)) = (text.get(..base.len()), text.get(base.len()..)) else {
+        return false;
+    };
+    if !same(head, base) {
         return false;
     }
-    let tail = &text[base.len()..];
     if !tail.is_empty() && !tail.starts_with('/') {
         return false;
     }
@@ -754,6 +757,20 @@ mod tests {
 
     use super::*;
     use crate::parse_pack;
+
+    #[test]
+    fn full_match_never_cuts_inside_a_character() {
+        let p = compile_path("C:/Users/nano/AppData/Local/Acme/Cache").expect("path");
+        // the base is 38 bytes; byte 38 of this path falls inside "ê": no match, no panic
+        let text = "C:/Users/nano/AppData/Local/Acme/Cachê/x";
+        assert!(!text.is_char_boundary(38));
+        assert!(!full_match(&p, text));
+        assert!(!full_match(&p, "C:/Users/nano/AppData/Local/Acmê/Cache/x"));
+        assert!(full_match(
+            &p,
+            "C:/Users/nano/AppData/Local/Acme/Cache/Tài liệu"
+        ));
+    }
 
     fn pack(paths: &str, extra: &str) -> Pack {
         let text = format!(
