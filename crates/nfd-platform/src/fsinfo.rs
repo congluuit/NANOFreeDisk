@@ -23,7 +23,12 @@
 //!   data (`FindFirstFileExW`) is used and [`FileInfo::approximate`] is set.
 //!
 //! On Unix both use `lstat`: `st_blocks * 512` for the on-disk size, `st_nlink`,
-//! `st_ino`, `st_dev`.
+//! `st_ino`, `st_dev`. On macOS `st_flags` adds hidden (`UF_HIDDEN`), compressed,
+//! locked and SIP-restricted files, and iCloud / File Provider *dataless* files
+//! (`SF_DATALESS`, [`FileFlags::OFFLINE`]: reading one downloads it). The APFS
+//! system volume and its firmlinked Data volume count as one volume, so `/Users`
+//! is walked from `/`; their other path, `/System/Volumes/Data`, is a
+//! [`LinkKind::MountPoint`] (never walked twice).
 
 use std::ffi::OsString;
 use std::io;
@@ -121,6 +126,14 @@ pub fn file_info(path: &Path) -> io::Result<FileInfo> {
 /// Returns the OS error when the directory itself cannot be opened or listed.
 pub fn read_dir(dir: &Path, exact_links: bool) -> io::Result<Vec<DirItem>> {
     imp::read_dir(dir, exact_links)
+}
+
+/// `true` for macOS `st_flags` of a *dataless* file (iCloud Drive / File Provider:
+/// the contents are in the cloud and reading them downloads them).
+#[cfg(target_os = "macos")]
+#[must_use]
+pub fn macos_dataless(st_flags: u32) -> bool {
+    st_flags & imp::macos::SF_DATALESS != 0
 }
 
 /// `std::fs::read_dir` + [`file_info`] per child: the portable path.
@@ -688,6 +701,20 @@ mod imp {
         if md.permissions().readonly() {
             flags = flags.with(FileFlags::READONLY);
         }
+        #[cfg(target_os = "macos")]
+        {
+            use std::os::macos::fs::MetadataExt as _;
+            flags = flags.with(macos::flags(md.st_flags()));
+        }
+        let mut link = if is_link {
+            LinkKind::Symlink
+        } else {
+            LinkKind::None
+        };
+        #[cfg(target_os = "macos")]
+        if is_dir && macos::is_data_volume(path) {
+            link = LinkKind::MountPoint;
+        }
         Ok(FileInfo {
             logical: if sized { md.len() } else { 0 },
             on_disk: if sized {
@@ -698,20 +725,126 @@ mod imp {
             mtime: md.mtime(),
             flags,
             is_dir,
-            link: if is_link {
-                LinkKind::Symlink
-            } else {
-                LinkKind::None
-            },
+            link,
             link_count: Some(u32::try_from(md.nlink()).unwrap_or(u32::MAX).max(1)),
-            volume_id: md.dev(),
-            file_id: Some(u128::from(md.ino())),
+            volume_id: volume_id(md.dev()),
+            file_id: Some(file_id(md.dev(), md.ino())),
             approximate: false,
         })
     }
 
+    #[cfg(not(target_os = "macos"))]
+    fn volume_id(dev: u64) -> u64 {
+        dev
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    fn file_id(_dev: u64, ino: u64) -> u128 {
+        u128::from(ino)
+    }
+
+    /// The Data volume reports the system volume's id (one volume for the walk)…
+    #[cfg(target_os = "macos")]
+    fn volume_id(dev: u64) -> u64 {
+        macos::volume_group(dev)
+    }
+
+    /// …so the real device goes into the file id: inode numbers of the two APFS
+    /// volumes may collide.
+    #[cfg(target_os = "macos")]
+    fn file_id(dev: u64, ino: u64) -> u128 {
+        (u128::from(dev) << 64) | u128::from(ino)
+    }
+
     pub(super) fn read_dir(dir: &Path, _exact_links: bool) -> io::Result<Vec<DirItem>> {
         read_dir_probing(dir)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) mod macos {
+        use std::os::unix::fs::MetadataExt;
+        use std::path::Path;
+        use std::sync::OnceLock;
+
+        use super::super::FileFlags;
+
+        // <sys/stat.h> st_flags
+        const UF_IMMUTABLE: u32 = 0x0000_0002;
+        const UF_COMPRESSED: u32 = 0x0000_0020;
+        const UF_HIDDEN: u32 = 0x0000_8000;
+        const SF_IMMUTABLE: u32 = 0x0002_0000;
+        /// System Integrity Protection.
+        const SF_RESTRICTED: u32 = 0x0008_0000;
+        /// The contents are in the cloud (iCloud Drive, File Provider): any read
+        /// downloads them.
+        pub(crate) const SF_DATALESS: u32 = 0x4000_0000;
+
+        /// Where the APFS Data volume of the system volume group is mounted.
+        pub(crate) const DATA_VOLUME: &str = "/System/Volumes/Data";
+
+        pub(crate) fn flags(st_flags: u32) -> FileFlags {
+            let mut f = FileFlags::default();
+            for (bit, flag) in [
+                (UF_HIDDEN, FileFlags::HIDDEN),
+                (UF_COMPRESSED, FileFlags::COMPRESSED),
+                (UF_IMMUTABLE, FileFlags::READONLY),
+                (SF_IMMUTABLE, FileFlags::READONLY),
+                (SF_RESTRICTED, FileFlags::SYSTEM),
+                (SF_DATALESS, FileFlags::OFFLINE),
+            ] {
+                if st_flags & bit != 0 {
+                    f = f.with(flag);
+                }
+            }
+            f
+        }
+
+        /// `(data volume device, system volume device)` when they differ
+        /// (macOS 10.15+).
+        fn group() -> Option<(u64, u64)> {
+            static GROUP: OnceLock<Option<(u64, u64)>> = OnceLock::new();
+            *GROUP.get_or_init(|| {
+                let system = std::fs::symlink_metadata("/").ok()?.dev();
+                let data = std::fs::symlink_metadata(DATA_VOLUME).ok()?.dev();
+                (system != data).then_some((data, system))
+            })
+        }
+
+        pub(crate) fn volume_group(dev: u64) -> u64 {
+            match group() {
+                Some((data, system)) if dev == data => system,
+                _ => dev,
+            }
+        }
+
+        pub(crate) fn is_data_volume(path: &Path) -> bool {
+            group().is_some() && path == Path::new(DATA_VOLUME)
+        }
+
+        #[cfg(test)]
+        mod tests {
+            use super::*;
+
+            #[test]
+            fn st_flags_map_onto_file_flags() {
+                assert_eq!(flags(0), FileFlags::default());
+                let f = flags(SF_DATALESS | UF_HIDDEN);
+                assert!(f.contains(FileFlags::OFFLINE) && f.contains(FileFlags::HIDDEN));
+                assert!(flags(SF_RESTRICTED).contains(FileFlags::SYSTEM));
+                assert!(flags(UF_IMMUTABLE).contains(FileFlags::READONLY));
+            }
+
+            #[test]
+            fn the_data_volume_is_walked_once() {
+                if group().is_some() {
+                    let users = super::super::file_info(Path::new("/Users")).expect("/Users");
+                    let root = super::super::file_info(Path::new("/")).expect("/");
+                    assert_eq!(users.volume_id, root.volume_id, "firmlinked /Users");
+                    let data = super::super::file_info(Path::new(DATA_VOLUME)).expect("data");
+                    assert_eq!(data.link, super::super::LinkKind::MountPoint);
+                }
+            }
+        }
     }
 }
 

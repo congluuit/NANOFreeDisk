@@ -40,6 +40,7 @@ const PLAIN: CopyFlags = CopyFlags {
     git: false,
     app_dir: false,
     readonly: false,
+    clone: false,
 };
 
 #[test]
@@ -214,6 +215,7 @@ fn arb_groups() -> impl Strategy<Value = Vec<DupeGroup>> {
                                 git: f[2] && f[3],
                                 app_dir: f[0] && f[2],
                                 readonly: f[1] && f[3],
+                                clone: false,
                             },
                         );
                         if f[0] && !f[1] {
@@ -518,8 +520,14 @@ fn copies_become_links_and_come_back() {
         return; // the temp folder is on a drive without hard links
     }
     let sel = auto_select(&report.groups, &KeepStrategy::Auto);
-    // `.bin` is not a media type: tick other types explicitly
-    assert!(nfd_dupes::plan::link_selection(&report.groups, &sel, false).is_empty());
+    // `.bin` is not a media type: hard links need other types ticked explicitly
+    // (block clones — ReFS, APFS — take any type)
+    if g.copies
+        .iter()
+        .all(|c| c.link == Some(nfd_dupes::LinkKind::Hardlink))
+    {
+        assert!(nfd_dupes::plan::link_selection(&report.groups, &sel, false).is_empty());
+    }
     let sel = nfd_dupes::plan::link_selection(&report.groups, &sel, true);
     let p = plan(&report.groups, &sel, Action::Link).expect("plan");
     let gate = SafetyGate::new(&|_: &str| None);

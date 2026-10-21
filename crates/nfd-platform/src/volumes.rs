@@ -2,8 +2,11 @@
 //!
 //! On Windows every drive letter is listed with `GetDriveTypeW`,
 //! `GetVolumeInformationW` and `GetDiskFreeSpaceExW`. Drives without media (empty card
-//! readers, DVD drives) are listed with `ready == false` and no sizes. Other platforms
-//! report `/` only, without sizes, until the macOS/Linux phase.
+//! readers, DVD drives) are listed with `ready == false` and no sizes. On macOS
+//! `getfsstat` lists `/` (the startup disk: the APFS system volume, sized like its
+//! container) and the volumes Finder shows under `/Volumes`; the system volume
+//! group's own hidden volumes (`/System/Volumes/*`) are left out. Other platforms
+//! report `/` only, without sizes.
 
 use std::path::PathBuf;
 
@@ -209,7 +212,130 @@ mod imp {
     }
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+mod imp {
+    use std::path::{Path, PathBuf};
+
+    use super::{Volume, VolumeKind};
+
+    /// Text of a NUL-terminated `char` array.
+    fn text(raw: &[libc::c_char]) -> String {
+        let bytes: Vec<u8> = raw
+            .iter()
+            .take_while(|&&c| c != 0)
+            .map(|&c| c as u8)
+            .collect();
+        String::from_utf8_lossy(&bytes).into_owned()
+    }
+
+    fn mounts() -> Vec<libc::statfs> {
+        // SAFETY: a null buffer only asks for the number of mounted file systems.
+        let n = unsafe { libc::getfsstat(std::ptr::null_mut(), 0, libc::MNT_NOWAIT) };
+        let Ok(n) = usize::try_from(n) else {
+            return Vec::new();
+        };
+        // room for a few more mounted meanwhile
+        let mut buf: Vec<libc::statfs> = Vec::with_capacity(n + 8);
+        let bytes = buf.capacity() * std::mem::size_of::<libc::statfs>();
+        let Ok(bytes) = libc::c_int::try_from(bytes) else {
+            return Vec::new();
+        };
+        // SAFETY: `buf` has room for `bytes` bytes of `statfs` records; the kernel
+        // writes at most that many and returns how many records it filled.
+        let got = unsafe { libc::getfsstat(buf.as_mut_ptr(), bytes, libc::MNT_NOWAIT) };
+        let Ok(got) = usize::try_from(got) else {
+            return Vec::new();
+        };
+        // SAFETY: the first `got` records were initialised by the kernel.
+        unsafe { buf.set_len(got.min(buf.capacity())) };
+        buf
+    }
+
+    /// Finder's name of the startup disk: the `/Volumes` entry linking to `/`.
+    fn startup_name() -> String {
+        std::fs::read_dir("/Volumes")
+            .into_iter()
+            .flatten()
+            .flatten()
+            .find(|e| std::fs::read_link(e.path()).is_ok_and(|t| t == Path::new("/")))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .unwrap_or_default()
+    }
+
+    pub(super) fn list() -> Vec<Volume> {
+        let mut out = Vec::new();
+        for m in mounts() {
+            let root = text(&m.f_mntonname);
+            let fs = text(&m.f_fstypename);
+            let flags = i64::from(m.f_flags);
+            let system = root == "/";
+            let browsable = flags & i64::from(libc::MNT_DONTBROWSE) == 0;
+            if !system && (!browsable || !root.starts_with("/Volumes/")) {
+                continue;
+            }
+            if matches!(fs.as_str(), "devfs" | "autofs" | "nullfs") {
+                continue;
+            }
+            let kind = if flags & i64::from(libc::MNT_LOCAL) == 0 {
+                VolumeKind::Network
+            } else if matches!(fs.as_str(), "cd9660" | "udf" | "cddafs") {
+                VolumeKind::Optical
+            } else if system {
+                VolumeKind::Fixed
+            } else if matches!(fs.as_str(), "msdos" | "exfat") {
+                VolumeKind::Removable
+            } else {
+                VolumeKind::Fixed
+            };
+            let block = u64::from(m.f_bsize);
+            let label = if system {
+                startup_name()
+            } else {
+                Path::new(&root)
+                    .file_name()
+                    .map(|n| n.to_string_lossy().into_owned())
+                    .unwrap_or_default()
+            };
+            out.push(Volume {
+                root: PathBuf::from(&root),
+                label,
+                fs: fs.to_uppercase(),
+                kind,
+                total: m.f_blocks.saturating_mul(block),
+                available: m.f_bavail.saturating_mul(block),
+                free: m.f_bfree.saturating_mul(block),
+                ready: true,
+                system,
+            });
+        }
+        if !out.iter().any(|v| v.system) {
+            out.insert(0, fallback());
+        }
+        // the startup disk first, then by name
+        out.sort_by(|a, b| b.system.cmp(&a.system).then_with(|| a.root.cmp(&b.root)));
+        out
+    }
+
+    fn fallback() -> Volume {
+        Volume {
+            root: PathBuf::from("/"),
+            label: String::new(),
+            fs: String::new(),
+            kind: VolumeKind::Fixed,
+            total: 0,
+            available: 0,
+            free: 0,
+            ready: true,
+            system: true,
+        }
+    }
+
+    pub(super) fn seek_penalty(_path: &Path) -> Option<bool> {
+        None
+    }
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 mod imp {
     use std::path::PathBuf;
 
@@ -242,6 +368,13 @@ mod tests {
     fn lists_the_system_volume() {
         let vols = list();
         assert!(vols.iter().any(|v| v.system && v.ready), "{vols:?}");
+        #[cfg(target_os = "macos")]
+        {
+            let sys = vols.iter().find(|v| v.system).expect("startup disk");
+            assert_eq!(sys.root, std::path::Path::new("/"));
+            assert!(sys.total > 0 && sys.free <= sys.total, "{sys:?}");
+            assert!(vols.iter().all(|v| !v.root.starts_with("/System/Volumes")));
+        }
         #[cfg(windows)]
         {
             let sys = vols.iter().find(|v| v.system).expect("system volume");

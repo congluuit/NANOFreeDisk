@@ -9,7 +9,7 @@
   <a href="https://github.com/congluuit/NANOFreeDisk/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/congluuit/NANOFreeDisk/total"></a>
   <a href="LICENSE"><img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-blue.svg"></a>
   <img alt="Rust" src="https://img.shields.io/badge/rust-stable%20%7C%20edition%202024-orange?logo=rust">
-  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11-0078D4?logo=windows">
+  <img alt="Platform" src="https://img.shields.io/badge/platform-Windows%2010%2F11%20%7C%20macOS%2011%2B-0078D4?logo=windows">
 </p>
 
 <p align="center">
@@ -162,6 +162,21 @@ Get-FileHash .\NANOFreeDisk-Setup-1.0.0-x64.exe -Algorithm SHA256
 
 Requirements: Windows 10 1809+ / Windows 11, x64. The GUI uses the WebView2 runtime (preinstalled on Windows 11; the installer fetches it on Windows 10 if missing). Admin rights are only requested for the optional MFT fast scan, ETW monitoring, SMART over IOCTL and system-junk cleanup.
 
+### 🍎 macOS (preview)
+
+One app for **Intel and Apple silicon** Macs, **macOS 11 Big Sur or later** (keep Safari up to date: the app's window uses the system's WebKit, Safari 16.2+). Not yet tested by its author on a real Mac — please report what breaks.
+
+- **Download:** `NANOFreeDisk-<ver>-macos-universal.dmg` from the [Releases page](https://github.com/congluuit/NANOFreeDisk/releases/latest) (from the next release on). Until then, the latest build is the `NANOFreeDisk-macos-universal` artifact of a manual [CI run](https://github.com/congluuit/NANOFreeDisk/actions/workflows/ci.yml) (open a run started with "Run workflow" → Artifacts; you need to be signed in to GitHub). Open the `.dmg` and drag NANOFreeDisk to Applications.
+- **First launch:** the app is ad-hoc signed but **not notarized** by Apple yet, so Gatekeeper blocks it the first time. On macOS 11–14, right-click (or Control-click) the app → **Open** → **Open**. On macOS 15 and later, try to open it once, then go to System Settings → Privacy & Security and click **Open Anyway**. Or, in Terminal:
+
+  ```bash
+  xattr -dr com.apple.quarantine /Applications/NANOFreeDisk.app
+  ```
+
+- **Full Disk Access** (recommended): macOS hides Mail, Messages, Safari and other apps' data from every app, so without it a scan of your home folder or the disk leaves those folders out (the app shows a hint). System Settings → Privacy & Security → **Full Disk Access** → turn on NANOFreeDisk (or add it with **+**), then quit and reopen the app. The first scans also ask for Desktop, Documents and Downloads.
+- **What works on macOS:** Analyze, Duplicates, Old & Large, Tidy up, DevCache, Activity (undo) and Settings. Deleting moves items to the **Trash** (Finder's Put Back works, and so does Activity → Restore) or to the app's quarantine — never a hard delete. Not on macOS yet: Clean (system rule packs), Drive health, Hardware, Monitor, the Finder menu and in-app updates.
+- **Safety on macOS:** the system folders (`/System`, `/Library`, `/Applications`, `/usr`, `/private`…), iCloud Drive, Mail, Messages, keychains, app sandboxes, iPhone backups, Time Machine, Photos / Music / TV libraries and AI agents' chat history are never deleted, and nothing *inside* an app bundle or a document package is ever touched. Duplicates knows that **APFS clones** (Finder's Duplicate, `cp -c`) share their data — deleting one frees nothing, so they are flagged and never pre-selected — and never reads iCloud files that are not downloaded (reading would download them). Details: [docs/MACOS.md](docs/MACOS.md) (Vietnamese).
+
 ---
 
 ## ⌨ CLI
@@ -205,7 +220,7 @@ nfd clean --rules ai-tools --level safe --dry-run
 - **`nfd-dupes`** · **`nfd-browsers`** · **`nfd-history`** — duplicate finder (BLAKE3, hash cache), per-website browser caches, scan history + undo journal (SQLite).
 - **`nfd-monitor`** — ETW consumers, per-process I/O counters, PDH disk counters.
 - **`nfd-health`** · **`nfd-hwinfo`** · **`nfd-sensors`** · **`nfd-tasks`** · **`nfd-helper`** — SMART/NVMe via IOCTL (NVMe without admin rights), hardware inventory, sensors, processes, and the small elevated helper (one UAC prompt).
-- **`nfd-platform`** — Windows APIs on `windows-sys` (file info, Recycle Bin, Restart Manager, volumes, shell menu).
+- **`nfd-platform`** — Windows APIs on `windows-sys` (file info, Recycle Bin, Restart Manager, volumes, shell menu); on macOS the Trash, `getfsstat`, `st_flags`, APFS clones and Full Disk Access.
 - **`apps/nanofreedisk`** — Tauri 2 desktop app (Svelte UI). **`apps/nfd-cli`** — the CLI. **`apps/nanofreedisk-setup`** — the branded installer (egui).
 
 Full design, module specs, risk analysis and the phase-by-phase roadmap live in [`docs/PLAN.md`](docs/PLAN.md) (Vietnamese).
@@ -246,7 +261,7 @@ node scripts/check-locales.mjs       # EN and VI must have the same keys
 node scripts/gui-smoke.mjs           # end-to-end test of the built app on temporary fixtures
 ```
 
-NANOFreeDisk targets Windows only: CI lints and tests on Windows runners (formatting, licenses and the UI checks run on Linux runners because they do not depend on the OS).
+NANOFreeDisk targets Windows and macOS: CI lints and tests on Windows and macOS runners (formatting, licenses and the UI checks run on Linux runners because they do not depend on the OS). On a Mac (Xcode Command Line Tools, Rust targets `aarch64-apple-darwin` + `x86_64-apple-darwin`), `scripts/build-macos.sh dist <version>` builds the universal `.dmg`; a manual run of the CI workflow does the same and keeps it as an artifact.
 
 ---
 

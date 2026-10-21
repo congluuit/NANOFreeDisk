@@ -47,6 +47,11 @@ tempfile = "3"
 proptest = { version = "1", default-features = false, features = ["std"] }
 # SQLite compiled in (no system library); 0.40 is the newest that builds on MSRV 1.85
 rusqlite = { version = "0.40", default-features = false, features = ["bundled"] }
+# macOS: syscalls (getfsstat, getattrlist, clonefile) and NSFileManager for the Trash —
+# the same versions Tauri already links on macOS
+libc = "0.2"
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
 windows-sys = { version = "0.61", features = [
   "Win32_Foundation",
   "Win32_Security",

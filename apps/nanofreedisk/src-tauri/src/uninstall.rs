@@ -326,6 +326,7 @@ mod sys {
 mod sys {
     use super::Lang;
 
+    #[allow(dead_code)]
     pub enum Answer {
         Yes,
         No,

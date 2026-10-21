@@ -11,6 +11,7 @@
 //! levels) is added in Phase 3 on top of both.
 
 pub mod gate;
+pub mod macos;
 
 use std::fmt;
 use std::path::{Component, Path, Prefix};
@@ -175,6 +176,16 @@ pub const AGENT_HISTORY_TEMPLATES: &[&str] = &[
     "${HOME}/.continue/sessions",
     "${HOME}/.lmstudio/conversations",
     "${APPDATA}/Jan/data/threads",
+    // macOS only (`${MACOS_HOME}` resolves nowhere else): Claude Desktop, VS Code,
+    // Cursor, Windsurf, Antigravity… are covered above (`${APPDATA}` is
+    // `~/Library/Application Support` there); these apps exist on macOS only
+    "${MACOS_HOME}/Library/Application Support/com.openai.chat",
+    "${MACOS_HOME}/Library/Application Support/Codex",
+    "${MACOS_HOME}/Library/Application Support/com.github.CopilotForXcode",
+    "${MACOS_HOME}/Library/Application Support/Ollama",
+    "${MACOS_HOME}/Library/Application Support/Zed/threads",
+    "${MACOS_HOME}/Library/Application Support/com.raycast.macos",
+    "${MACOS_HOME}/.config/zed/conversations",
 ];
 
 /// File and folder names that hold AI chat history wherever they are (inside
@@ -635,11 +646,15 @@ pub fn strip_glob_tail(path: &str) -> String {
 /// does **not** try to resolve variables.
 #[must_use]
 pub fn is_protected_template(candidate: &str) -> bool {
-    let cand = strip_glob_tail(&normalize(candidate));
+    // rule packs write `${HOME}`: the macOS-only templates are checked as such
+    let as_home = |t: &str| normalize(t).replace("${macos_home}", "${home}");
+    let cand = as_home(&strip_glob_tail(&normalize(candidate)));
     PROTECTED_TEMPLATES
         .iter()
         .chain(AGENT_HISTORY_TEMPLATES)
-        .any(|root| within_pattern(&cand, &normalize(root)))
+        .chain(macos::MACOS_PROTECTED_TEMPLATES)
+        .chain(macos::MACOS_USER_DATA_TEMPLATES)
+        .any(|root| within_pattern(&cand, &as_home(root)))
         || agent_history_name(&cand).is_some()
 }
 
@@ -818,6 +833,18 @@ mod tests {
         assert!(needs_extra_confirmation(51 << 30, 1 << 42));
         assert!(needs_extra_confirmation(30 << 30, 100 << 30));
         assert!(!needs_extra_confirmation(10 << 30, 0));
+    }
+
+    #[test]
+    fn macos_templates_check_rule_packs_too() {
+        assert!(is_protected_template("${HOME}/Library/Mobile Documents/**"));
+        assert!(is_protected_template(
+            "${HOME}/Library/Containers/com.x/Data/**"
+        ));
+        assert!(is_protected_template(
+            "${MACOS_HOME}/Library/Application Support/com.openai.chat/**"
+        ));
+        assert!(!is_protected_template("${HOME}/Library/Caches/com.x/**"));
     }
 
     #[test]

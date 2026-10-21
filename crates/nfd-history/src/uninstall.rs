@@ -19,7 +19,7 @@ use nfd_core::exec::{self, QuarantineRoots};
 use crate::{History, Result};
 
 /// Journal modes whose files sit in a quarantine folder.
-const QUARANTINE_MODES: [&str; 3] = ["quarantine", "hardlink", "clone"];
+pub(crate) const QUARANTINE_MODES: [&str; 3] = ["quarantine", "hardlink", "clone"];
 
 /// Every operation, however old (the journal keeps 90 days).
 const ALL: usize = 1_000_000;

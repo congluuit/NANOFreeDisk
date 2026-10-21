@@ -4,8 +4,11 @@ export type EntryKind = "file" | "dir" | "symlink" | "junction" | "mount_point" 
 
 export interface AppInfo {
   version: string;
+  /** `windows`, `macos`… (`browser` in the mock): see `platform.ts`. */
   os: string;
   accent: string | null;
+  /** macOS: the app has Full Disk Access (null elsewhere or unknown). */
+  fullDiskAccess?: boolean | null;
 }
 
 export interface Volume {

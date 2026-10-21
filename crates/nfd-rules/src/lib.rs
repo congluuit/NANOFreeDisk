@@ -660,7 +660,8 @@ verified_on = 2026-10-16
         let packs = builtin_packs().expect("builtin");
         let rules: Vec<&Rule> = packs.iter().flat_map(|p| &p.rules).collect();
         for template in AGENT_HISTORY_TEMPLATES {
-            let want = normalize(template);
+            // rule packs write `${HOME}` for the macOS-only `${MACOS_HOME}` templates
+            let want = normalize(template).replace("${macos_home}", "${home}");
             let kept = rules.iter().any(|r| {
                 r.level == RiskLevel::Protected
                     && r.paths.iter().any(|p| {

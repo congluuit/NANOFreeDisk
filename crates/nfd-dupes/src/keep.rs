@@ -88,10 +88,11 @@ fn shared_folders<'a>(paths: impl Iterator<Item = &'a Path>) -> usize {
     n
 }
 
-/// Risky to delete: never pre-selected for removal.
+/// Risky (or pointless: an APFS clone frees nothing) to delete: never pre-selected
+/// for removal.
 #[must_use]
 pub const fn sticky(c: &FileCopy) -> bool {
-    c.flags.app_dir || c.flags.cloud || c.flags.git || c.flags.readonly
+    c.flags.app_dir || c.flags.cloud || c.flags.git || c.flags.readonly || c.flags.clone
 }
 
 fn inside(path: &Path, dirs: &[PathBuf]) -> bool {

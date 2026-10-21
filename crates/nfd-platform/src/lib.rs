@@ -9,6 +9,8 @@
 //! Phase 5 adds [`io`] (low-priority sequential reads for the duplicate finder) and
 //! [`link`] (hard links and ReFS block clones that replace duplicates); the
 //! uninstaller adds [`registry`] (program entries, leftover keys and their backups).
+//! macOS (docs/MACOS.md) adds the Trash, mounted volumes, APFS clones and iCloud
+//! "dataless" files to the same modules.
 
 pub mod appearance;
 pub mod fsinfo;
@@ -16,6 +18,7 @@ pub mod io;
 pub mod link;
 pub mod locks;
 pub mod owner;
+pub mod privacy;
 pub mod private_dir;
 pub mod registry;
 pub mod shell_menu;
@@ -61,7 +64,28 @@ impl Platform for Native {
         env::var_os(env_name).map(PathBuf::from)
     }
 
-    #[cfg(not(windows))]
+    /// macOS: `APPDATA` is `~/Library/Application Support` (where Claude, VS Code,
+    /// Cursor… keep what `%APPDATA%` holds on Windows, so the same rule and
+    /// AI-history templates apply), `LOCALAPPDATA` is `~/Library/Caches`.
+    /// `MACOS_ROOT` (`/`), `MACOS_HOME` and `MACOS_TEMP_REAL` resolve only here: the
+    /// macOS-only templates of `nfd_core::safety` use them, so they never apply on
+    /// Windows.
+    #[cfg(target_os = "macos")]
+    fn known_folder(&self, var: &str) -> Option<PathBuf> {
+        let home = env::var_os("HOME").map(PathBuf::from)?;
+        Some(match var {
+            "HOME" | "USERPROFILE" | "MACOS_HOME" => home,
+            "APPDATA" => home.join("Library/Application Support"),
+            "LOCALAPPDATA" => home.join("Library/Caches"),
+            "TEMP" => env::temp_dir(),
+            // `/var/folders/…` is `/private/var/folders/…` once links are resolved
+            "MACOS_TEMP_REAL" => std::fs::canonicalize(env::temp_dir()).ok()?,
+            "MACOS_ROOT" => PathBuf::from("/"),
+            _ => return None,
+        })
+    }
+
+    #[cfg(all(not(windows), not(target_os = "macos")))]
     fn known_folder(&self, var: &str) -> Option<PathBuf> {
         let home = env::var_os("HOME").map(PathBuf::from)?;
         Some(match var {

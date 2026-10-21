@@ -146,8 +146,11 @@ fn with_session<T>(state: &State<'_, AppState>, f: impl FnOnce(&Session) -> T) -
 #[serde(rename_all = "camelCase")]
 pub struct AppInfo {
     version: &'static str,
+    /// `windows`, `macos`…: the UI hides what this platform does not have.
     os: &'static str,
     accent: Option<String>,
+    /// macOS: whether the app has Full Disk Access (`None` elsewhere / unknown).
+    full_disk_access: Option<bool>,
 }
 
 #[tauri::command]
@@ -156,7 +159,19 @@ pub fn app_info() -> AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         os: std::env::consts::OS,
         accent: nfd_platform::appearance::accent_color(),
+        full_disk_access: nfd_platform::privacy::full_disk_access(),
     }
+}
+
+/// macOS: open System Settings at Privacy & Security → Full Disk Access.
+#[tauri::command]
+pub fn open_privacy_settings(app: AppHandle) -> CmdResult<()> {
+    if !cfg!(target_os = "macos") {
+        return Err(err("unsupported", "macOS only"));
+    }
+    app.opener()
+        .open_url(nfd_platform::privacy::PRIVACY_SETTINGS_URL, None::<&str>)
+        .map_err(|e| err("os", e))
 }
 
 #[derive(Debug, Serialize)]

@@ -3,7 +3,8 @@ name: Release
 # Pushing a semver tag (v1.2.3, v1.2.3-rc.1) builds, checks and publishes a release.
 # workflow_dispatch builds the four packages and runs the smoke test from any ref;
 # with dry_run (the default) it creates no tag, no GitHub Release and no winget PR.
-# See docs/PHASE8_INSTALLERS.md section 2.6.
+# See docs/PHASE8_INSTALLERS.md section 2.6. The macOS packages (a universal .dmg
+# and a zipped .app, ad-hoc signed) come from build-macos (docs/MACOS.md).
 on:
   push:
     tags:
@@ -36,7 +37,8 @@ jobs:
   # ─────────────────────────────────────────────────────────────
   release-check:
     name: release-check
-    # Windows only, like CI: NANOFreeDisk is not built for macOS / Linux.
+    # Windows: the full workspace check gates every package (the macOS build below
+    # adds its own checks).
     runs-on: windows-latest
     defaults:
       run:
@@ -211,11 +213,48 @@ jobs:
           if-no-files-found: error
 
   # ─────────────────────────────────────────────────────────────
+  # 2b. build-macos — one universal app (Intel + Apple silicon)
+  # ─────────────────────────────────────────────────────────────
+  build-macos:
+    name: build (macos universal)
+    needs: release-check
+    runs-on: macos-latest
+    env:
+      VERSION: ${{ needs.release-check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: apps/nanofreedisk/pnpm-lock.yaml
+      - name: Install UI dependencies
+        working-directory: apps/nanofreedisk
+        run: pnpm install --frozen-lockfile
+      # ad-hoc signed (no Apple Developer ID): not notarized, see README "macOS"
+      - name: Build the universal app
+        run: ./scripts/build-macos.sh dist "$VERSION"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-universal
+          path: dist/*
+          if-no-files-found: error
+
+  # ─────────────────────────────────────────────────────────────
   # 3. publish — checksums, SBOM, latest.json, changelog, GitHub Release
   # ─────────────────────────────────────────────────────────────
   publish:
     name: publish release
-    needs: [release-check, build-windows]
+    needs: [release-check, build-windows, build-macos]
     if: ${{ github.event_name == 'push' || !inputs.dry_run }}
     runs-on: ubuntu-latest
     env:
@@ -233,7 +272,7 @@ jobs:
         run: |
           mkdir -p dist
           # not the unsigned copies uploaded for SignPath
-          find artifacts/windows-x64 -type f -exec cp {} dist/ \;
+          find artifacts/windows-x64 artifacts/macos-universal -type f -exec cp {} dist/ \;
           ls -la dist
 
       - name: SBOM (CycloneDX)

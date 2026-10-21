@@ -34,6 +34,7 @@ pub struct HwState {
     thermal_thread: std::sync::OnceLock<()>,
     /// The automatic start (setting "turn on when the app opens") was tried in
     /// this session: never ask Windows twice, even after a declined prompt.
+    #[cfg(windows)]
     auto_tried: AtomicBool,
     /// PawnIO's installer asked for a restart.
     restart_needed: Arc<AtomicBool>,
@@ -811,6 +812,7 @@ pub async fn task_reveal(
     pid: u32,
     create_time: String,
 ) -> CmdResult<()> {
+    #[cfg(windows)]
     use tauri_plugin_opener::OpenerExt;
     #[cfg(windows)]
     let path = {
@@ -829,14 +831,17 @@ pub async fn task_reveal(
         .await
         .map_err(|e| err("internal", e))??
     };
+    #[cfg(windows)]
+    {
+        app.opener()
+            .reveal_item_in_dir(path)
+            .map_err(|e| err("os", e))
+    }
     #[cfg(not(windows))]
-    let path: String = {
-        let _ = (state, pid, create_time);
-        return unsupported();
-    };
-    app.opener()
-        .reveal_item_in_dir(path)
-        .map_err(|e| err("os", e))
+    {
+        let _ = (app, state, pid, create_time);
+        unsupported()
+    }
 }
 
 #[cfg(test)]

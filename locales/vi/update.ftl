@@ -1,6 +1,7 @@
 # Cài đặt -> Cập nhật (docs/PHASE8_INSTALLERS.md mục 2.5)
 update-title = Cập nhật
 update-hint = NANOFreeDisk chỉ kiểm tra bản mới khi bạn bấm nút. Bản cập nhật lấy từ GitHub Releases của dự án và được kiểm tra bằng khóa ký.
+update-mac-hint = Trên macOS NANOFreeDisk chưa tự cập nhật được: các bản mới có trên trang GitHub Releases của dự án (tải tệp .dmg cho máy Mac của bạn).
 update-check = Kiểm tra cập nhật
 update-latest = Bạn đang dùng bản mới nhất ({ $version }).
 update-available = Đã có phiên bản { $version }.

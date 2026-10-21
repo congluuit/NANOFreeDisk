@@ -68,6 +68,7 @@ export async function on<T>(event: string, cb: (payload: T) => void): Promise<()
 
 export const api = {
   appInfo: () => call<AppInfo>("app_info"),
+  openPrivacySettings: () => call<void>("open_privacy_settings"),
   listVolumes: () => call<Volume[]>("list_volumes"),
   startScan: (path: string, record = true) => call<number>("start_scan", { path, record }),
   cancelScan: () => call<void>("cancel_scan"),

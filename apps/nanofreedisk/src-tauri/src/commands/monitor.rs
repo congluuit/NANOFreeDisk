@@ -8,6 +8,10 @@
 //! file-level detail is a kernel trace session: in this process when the app runs
 //! elevated, otherwise in the elevated helper shared with Advanced sensors. It is
 //! stopped whenever sampling stops and started again when sampling resumes.
+//!
+//! Windows only (ETW, I/O counters): elsewhere the commands answer "unsupported"
+//! and the UI hides the view.
+#![cfg_attr(not(windows), allow(dead_code))]
 
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, OnceLock};

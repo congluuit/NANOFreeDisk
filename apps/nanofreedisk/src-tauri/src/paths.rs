@@ -24,6 +24,7 @@ pub fn config<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
 }
 
 /// Logs (audit log, End task log).
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn logs<R: Runtime>(app: &AppHandle<R>) -> Option<PathBuf> {
     nfd_history::portable_dir()
         .map(|d| d.join("logs"))

@@ -417,8 +417,11 @@ const child = spawn(exe, [], {
 });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+// a cold CI runner starts WebView2 slowly: NFD_SMOKE_START_S raises the 20 s wait
+const startTries = Math.max(80, Number(process.env.NFD_SMOKE_START_S ?? 0) * 4);
 async function target() {
-  for (let i = 0; i < 80; i++) {
+  for (let i = 0; i < startTries; i++) {
+    if (child.exitCode != null) throw new Error(`the app exited with code ${child.exitCode} before WebView2 came up`);
     try {
       const list = await (await fetch(`http://127.0.0.1:${PORT}/json`)).json();
       const page = list.find((t) => t.type === "page");
