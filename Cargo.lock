@@ -3108,7 +3108,7 @@ dependencies = [
 
 [[package]]
 name = "nanofreedisk"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-advice",
  "nfd-apps",
@@ -3140,7 +3140,7 @@ dependencies = [
 
 [[package]]
 name = "nanofreedisk-setup"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "eframe",
  "embed-resource",
@@ -3200,7 +3200,7 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 
 [[package]]
 name = "nfd-advice"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-core",
  "nfd-devtools",
@@ -3212,7 +3212,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-apps"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-core",
  "nfd-platform",
@@ -3228,7 +3228,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-browsers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-core",
  "nfd-platform",
@@ -3240,7 +3240,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-cli"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -3264,7 +3264,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-platform",
  "proptest",
@@ -3277,7 +3277,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-devtools"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-core",
  "nfd-platform",
@@ -3291,7 +3291,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-dupes"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "blake3",
  "image",
@@ -3310,7 +3310,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-health"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-hwinfo",
  "nfd-platform",
@@ -3321,7 +3321,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-helper"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-health",
  "nfd-monitor",
@@ -3333,7 +3333,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-history"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-core",
  "nfd-platform",
@@ -3345,7 +3345,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-hwinfo"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -3354,7 +3354,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-monitor"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-sensors",
  "nfd-tasks",
@@ -3367,7 +3367,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-platform"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "libc",
  "objc2 0.6.5",
@@ -3378,7 +3378,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-rules"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "globset",
  "nfd-core",
@@ -3392,7 +3392,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-sensors"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "miniz_oxide 0.8.9",
  "nfd-hwinfo",
@@ -3403,7 +3403,7 @@ dependencies = [
 
 [[package]]
 name = "nfd-tasks"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "nfd-sensors",
  "serde",
