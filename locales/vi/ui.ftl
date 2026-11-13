@@ -5,8 +5,8 @@
 
 stat-free = Còn trống
 stat-of = trên { $total }
-stat-safe = Xóa an toàn
-stat-review = Cần xem lại
+stat-safe = An toàn
+stat-review = Thận trọng
 stat-items = { $count ->
    *[other] { $count } mục
 }
@@ -42,7 +42,7 @@ explorer-lens-folders = Thư mục
 explorer-mapped = Đã vẽ { $size }
 explorer-color-type = Loại tệp
 explorer-color-cleanup = Dọn dẹp
-legend-safe = Dọn an toàn
+legend-safe = An toàn
 explorer-idle = Nhấp một ô hoặc một dòng để chọn · nhấp đúp để mở thư mục
 details-show = Hiện chi tiết
 details-hide = Ẩn chi tiết

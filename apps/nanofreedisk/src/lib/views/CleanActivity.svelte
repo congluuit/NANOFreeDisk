@@ -2,7 +2,7 @@
   // Activity log (PLAN §13 G6): every clean and delete by day, with Restore while the
   // quarantine (7 days) or the Recycle Bin still holds the items. The quarantine has
   // its own panel: what it holds, where, when it deletes things by itself, and
-  // "delete for good" — per item, per operation or all at once — for when the space
+  // "delete for good" (per item, per operation or all at once) for when the space
   // is needed now.
   import { formatDateTime, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
@@ -210,7 +210,7 @@
               {@const e = expires(q.nextExpiry)}
               <b title={e.title}>{e.text}</b>
             {:else}
-              <b>—</b>
+              <b>-</b>
             {/if}
             <span>{t("quarantine-next")}</span>
           </div>

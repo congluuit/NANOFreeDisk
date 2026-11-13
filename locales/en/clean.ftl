@@ -1,11 +1,11 @@
-# Clean view, Activity log and the safety engine (Phase 3). Loaded together with
+# Clean view, Cleanup history and the safety engine (Phase 3). Loaded together with
 # app.ftl; every key must exist in vi/clean.ftl too.
 
 nav-activity = Cleanup history
 
 ## Clean
-clean-title = Clean
-clean-intro = Junk and caches that apps rebuild by themselves, found by the rule packs. Nothing is deleted outright: items go to the quarantine and can be restored from Activity for 7 days.
+clean-title = Junk files
+clean-intro = Caches and temporary files that apps rebuild by themselves.
 clean-activity-hint = Everything cleaned or deleted, with Restore
 clean-rescan = Look again
 clean-scanning = Looking for junk… (read-only)
@@ -17,37 +17,37 @@ clean-level-caution = Caution
 clean-level-advanced = Advanced
 clean-level-protected = Protected
 clean-safe-button = Clean safely ({ $size })
-clean-safe-hint = If you click: every Safe item moves to the quarantine. Apps rebuild them; you can restore them from Activity for 7 days.
+clean-safe-hint = If you click: you see the total first, then every Safe item goes to the quarantine.
 clean-pick-hint = Include this rule
 clean-if-deleted = If deleted:
-clean-close-first = { $apps } is running — close it first, or the files it keeps open are skipped.
+clean-close-first = { $apps } is running. Close it first, or the files it keeps open are skipped.
 clean-files = { $count } files
 clean-preview = Preview
 clean-hide = Hide
 clean-preview-more = Showing the { $shown } largest of { $count } items.
-clean-guide-title = Guidance only ({ $count }) — the app never deletes these
+clean-guide-title = Guidance only ({ $count }): the app never deletes these
 clean-run-hint = If you click: you see the total first, then the selected items move to the quarantine.
 clean-confirm-title = Clean these items?
 clean-confirm-body = { $size } from { $rules } rule(s) will move to the quarantine.
-clean-confirm-note = Every item is checked again right before it moves. You can restore everything from Activity for 7 days; after that the quarantine is emptied.
+clean-confirm-note = Every item is checked again right before it moves.
 clean-confirm-permanent-note = Permanent delete: nothing can be restored afterwards.
 clean-permanent = Delete permanently instead (Expert, Safe items only)
 clean-type-delete = Type DELETE to confirm:
-clean-confirm-go = Move to quarantine
+clean-confirm-go = Clean
 clean-confirm-permanent = Delete permanently
 clean-running = Cleaning… { $done } / { $total }
-clean-freed-so-far = { $size } freed so far
+clean-freed-so-far = { $size } removed so far
 clean-cancel = Stop
 clean-done-title = Freed { $size }
 clean-done-detail = { $done } done, { $partial } partly (files in use), { $skipped } skipped, { $failed } failed.
 clean-was-cancelled = stopped early
 clean-problems = { $count } item(s) were not cleaned completely
-clean-undo = Undo in Activity
+clean-undo = Undo in Cleanup history
 clean-dismiss = Dismiss
-clean-result = Freed { $size } · { $done } item(s) cleaned, { $skipped } skipped.
+clean-result = Removed { $size } · { $done } item(s) done, { $skipped } stayed.
 clean-journal-failed = Cleaned, but the undo journal could not be written ({ $error }). Quarantined items are listed in each manifest.jsonl.
 clean-status-done = done
-clean-status-partial = partly — some files were in use
+clean-status-partial = partly: some files were in use
 clean-status-skipped = skipped
 clean-status-failed = failed
 clean-status-declined = declined
@@ -107,12 +107,12 @@ reason-not-found-now = It is no longer there, or no rule offers it any more.
 reason-path-changed = A link or another name now leads somewhere else; left alone.
 reason-unknown = Not deleted ({ $code }).
 
-## Activity log
-activity-title = Activity
-activity-intro = Everything cleaned or deleted in this app, by day. Items in the quarantine can be restored for 7 days, items in the Recycle Bin until it is emptied.
+## Cleanup history
+activity-title = Cleanup history
+activity-intro = Everything this app cleaned or removed, by day. Items in the quarantine can be restored for 7 days, items in the Recycle Bin until it is emptied.
 activity-empty = Nothing cleaned or deleted yet.
 activity-kind-clean = Clean
-activity-kind-manual = Moved to the Recycle Bin
+activity-kind-manual = Removed by hand
 activity-kind-tidy = Tidy up
 activity-kind-clean-admin = Clean (administrator)
 activity-items = { $count } item(s)
@@ -155,7 +155,7 @@ activity-mode-permanent = permanent
 
 ## Quarantine (Activity)
 quarantine-title = Quarantine
-quarantine-intro = Cleaned items are moved here, not deleted, so you can put them back. They still use their space until NANOFreeDisk deletes them for good after { $days } days — or now, if you need the space.
+quarantine-intro = Removed items wait here so you can put them back. They still use their space until they are deleted for good after { $days } days, or now if you need the space.
 quarantine-held = still on the disk
 quarantine-items = { $ops ->
     [one] items, from 1 operation
@@ -176,15 +176,35 @@ quarantine-only = Only operations with items in the quarantine
 home-free-checking = Looking for junk…
 home-free-safely = Free { $size } safely now
 home-free-nothing = No junk to clean
-home-free-sub = Caches and temp files apps rebuild by themselves — restorable for 7 days.
+home-free-sub = Caches and temp files apps rebuild by themselves, restorable for 7 days.
 home-free-hint = If you click: the Clean view opens and asks before anything moves.
 health-junk = { $size } of junk could be cleaned safely.
 health-fix-clean = Clean
 
 ## Tidy up and the delete dialog
-tidy-quarantine-note = Picked items move to the quarantine and can be restored from Activity for 7 days.
+tidy-quarantine-note = Picked items move to the quarantine and can be restored from Cleanup history for 7 days.
 tidy-quarantine-hint = If you click: you confirm first; the items move to the quarantine (restorable for 7 days).
-delete-title-quarantine = Move to the quarantine?
-delete-intro-quarantine = These items will move to the quarantine:
-delete-quarantine-note = Restorable from Activity for 7 days. Each item is checked again right before it moves.
-delete-confirm-quarantine = Move to quarantine
+delete-title-quarantine = Remove these items?
+delete-intro-quarantine = These items will be removed:
+delete-quarantine-note = Each item is checked again right before it moves.
+delete-confirm-quarantine = Remove
+
+## Every removing tool: one safety note, one confirmation, one result
+## (SafetyNote, RemoveConfirm, RunResult; clean/destination.ts)
+safety-note = Removed items go to the quarantine, a safe holding folder, and can be restored from Cleanup history for 7 days.
+safety-note-recycle = Removed items go to the Recycle Bin and can be restored from there until it is emptied.
+safety-note-permanent = Deleted for good: this cannot be undone.
+confirm-what = What goes
+confirm-where = Where it goes and how to undo
+confirm-space-later = The space is freed for good after 7 days, or right away when you empty it from Cleanup history.
+confirm-big = The quarantine keeps these { $size } on the disk for 7 days. Where should they go?
+confirm-choice-quarantine = Quarantine: you can undo it for 7 days
+confirm-choice-recycle = Recycle Bin: the space comes back when you empty the Recycle Bin
+run-title = Removed { $size }
+run-counts = { $done } done, { $stayed } stayed.
+run-held = { $size } will be freed for good in 7 days, or now from Cleanup history.
+run-fallback = Some items went to the Recycle Bin because their drive has no quarantine.
+run-history = See it in Cleanup history
+run-stayed-title = What stayed, and why
+clean-show-details = Show what is inside each item
+clean-hide-details = Hide the details

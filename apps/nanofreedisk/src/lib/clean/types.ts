@@ -86,7 +86,8 @@ export interface CleanProgress {
 
 export interface Problem {
   path: string;
-  status: "skipped" | "partial" | "failed";
+  /** `declined`: a hand-picked item the user kept at Windows' permanent-delete prompt. */
+  status: "skipped" | "partial" | "failed" | "declined";
   reason: string | null;
 }
 
@@ -187,3 +188,4 @@ export interface DeleteOutcome {
 }
 
 export type DeleteMode = "recycle-bin" | "quarantine";
+

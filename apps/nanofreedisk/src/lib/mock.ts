@@ -7,6 +7,7 @@ import { browsersHandlers } from "./browsers/mock";
 import { cleanHandlers, mockDeleted } from "./clean/mock";
 import { devHandlers } from "./devcache/mock";
 import { dupeHandlers } from "./dupes/mock";
+import { similarHandlers } from "./similar/mock";
 import { healthHandlers } from "./health/mock";
 import type { AdviceReason, DeleteItem, Filter, Node, NodeAdvice, Slice } from "./types";
 import { REST_ID } from "./types";
@@ -15,6 +16,7 @@ import { monitorHandlers } from "./monitor/mock";
 import { programsHandlers, setProgramsEmit } from "./programs/mock";
 import { recycleBinHandlers } from "./recyclebin/mock";
 import { startupHandlers } from "./startup/mock";
+import { scheduleHandlers, setScheduleRecorder } from "./schedule/mock";
 
 interface E {
   id: number;
@@ -279,6 +281,10 @@ let scanTimer: ReturnType<typeof setInterval> | undefined;
 const listeners = new Map<string, Set<(p: unknown) => void>>();
 const emit = (event: string, payload: unknown) => listeners.get(event)?.forEach((cb) => cb(payload));
 setProgramsEmit(emit);
+setScheduleRecorder((kind, items, mode) => {
+  mockDeleted(kind, items, mode);
+  emit("schedule-cleaned", { freed: items.reduce((s, i) => s + i.bytes, 0) });
+});
 
 const PROTECTED_TOP = ["windows", "program files", "program files (x86)", "programdata", "pagefile.sys", "hiberfil.sys"];
 
@@ -456,7 +462,7 @@ function classifyMock(id: number): MUnit | null {
     return mockUnit(id, "caution", "rule", "clean", bi("Downloaded crates; every project downloads them again on the next build.", "Crate đã tải; mọi dự án sẽ tải lại ở lần build sau."), { app: "Cargo", source: "rust.cargo.registry" });
   if (name === "videos" && parent === "nano") return mockUnit(id, "unknown", "personal", "none", bi("Your own photos, videos or music. Only you know what is worth keeping.", "Ảnh, video hoặc nhạc của riêng bạn. Chỉ bạn biết cái gì đáng giữ."));
   if (p.includes("\\downloads\\") && e.kind === "file" && /\.(iso|exe|msi|zip)$/.test(name))
-    return mockUnit(id, "caution", "old-installer", "recycle-bin", bi("An installer or disk image left in Downloads for more than 30 days.", "Bộ cài hoặc ảnh đĩa nằm trong Downloads hơn 30 ngày."), { untouched: bi("It goes to the Recycle Bin: you can restore it from there.", "Tệp được chuyển vào Thùng rác: có thể khôi phục từ đó.") });
+    return mockUnit(id, "caution", "old-installer", "recycle-bin", bi("An installer or disk image left in Downloads for more than 30 days.", "Bộ cài hoặc ảnh đĩa nằm trong Downloads hơn 30 ngày."), { untouched: bi("You can restore it from Cleanup history.", "Bạn có thể khôi phục trong Lịch sử dọn dẹp.") });
   if (p.startsWith("c:\\projects\\") && e.kind === "dir" && (name.startsWith("build") || name.startsWith("debug") || name.startsWith("release")))
     return mockUnit(id, name.startsWith("release") ? "caution" : "safe", "build-output", "quarantine", bi("Rust build output (`target`): the next `cargo build` creates it again.", "Kết quả build của Rust (`target`): lần `cargo build` sau sẽ tạo lại."), { source: "rust", untouched: bi("Source code and git history stay; only the build folder goes, into the quarantine.", "Mã nguồn và lịch sử git được giữ; chỉ thư mục build bị dọn, vào khu cách ly.") });
   return null;
@@ -603,10 +609,12 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   ...browsersHandlers,
   ...devHandlers,
   ...dupeHandlers,
+  ...similarHandlers,
   ...healthHandlers,
   ...programsHandlers,
   ...recycleBinHandlers,
   ...startupHandlers,
+  ...scheduleHandlers,
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
     { root: "C:\\", label: "Windows", fs: "NTFS", kind: "fixed", total: 4e12, available: 1.45e12, free: 1.45e12, ready: true, system: true },

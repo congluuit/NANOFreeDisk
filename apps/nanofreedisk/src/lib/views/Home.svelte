@@ -1,12 +1,13 @@
 <script lang="ts">
-  // Home: the figures of this PC at a glance (free space, what can go safely, the
-  // last scan, the drives), the drives to analyze, and the PC's health next to them.
+  // Home: one clear way to free space (Quick clean, with the last result), the
+  // figures of this PC at a glance, the drives to analyze and the PC's health.
   import { pickFolder } from "../api";
   import { formatDateTime, formatPercent, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, refreshVolumes, startScan } from "../state.svelte";
-  import { clean, defaultPicks, scanJunk } from "../clean/state.svelte";
-  import { advice, listenAdvice, loadAdvice } from "../advice/state.svelte";
+  import { clean, scanJunk } from "../clean/state.svelte";
+  import { totals } from "../quick/model";
+  import { openQuick, quick } from "../quick/state.svelte";
   import HealthCard from "../components/HealthCard.svelte";
   import TempCard from "../components/TempCard.svelte";
   import AiCard from "../components/AiCard.svelte";
@@ -23,38 +24,18 @@
   const low = $derived(ready.filter((v) => level(v) !== "ok").length);
 
   // G1: what the rule packs would free safely, found in the background on Home
+  // (Quick clean's own result replaces it once there is one)
   $effect(() => {
-    if (!clean.scan && !clean.scanning && !clean.running) void scanJunk();
+    if (!clean.scan && !clean.scanning && !clean.running && quick.phase !== "scanning") void scanJunk();
   });
 
-  // with a scan loaded, the free-space figure is the advice's: what the suggestions
-  // can free in it (plus the junk the rules found elsewhere)
-  $effect(() => {
-    void listenAdvice();
-  });
-  $effect(() => {
-    void app.summary;
-    void app.version;
-    if (app.summary) void loadAdvice();
-  });
-  const advised = $derived(
-    app.summary && advice.summary?.suggestions
-      ? advice.summary.suggestions.reclaim + advice.summary.elsewhere.filter((g) => g.verdict === "safe" && g.actionable).reduce((s, g) => s + g.bytes, 0)
-      : null,
-  );
-  const freeable = $derived(advised ?? clean.scan?.safe ?? null);
+  const found = $derived(quick.phase === "ready" ? totals(quick.rows, quick.ticks) : null);
+  const freeable = $derived(found ? found.bytes : (clean.scan?.safe ?? null));
+  const last = $derived(app.settings.lastQuick);
+  const busy = $derived(quick.phase === "scanning" || quick.phase === "cleaning");
 
-  function freeSafely() {
-    if (advised != null) {
-      app.view = "analyze";
-      return;
-    }
-    app.view = "clean";
-    if (clean.scan) {
-      const ids = defaultPicks(clean.scan);
-      if (ids.length) clean.confirm = ids;
-    }
-  }
+  /** The one primary action: Quick clean (it starts checking when nothing was checked yet). */
+  const goQuick = () => openQuick(true);
 
   async function scanFolder() {
     const path = await pickFolder(t("home-pick-folder"));
@@ -90,25 +71,36 @@
       <button class="btn" onclick={scanFolder} data-effect title={t("hint-scan")}>
         <Icon name="folder" />{t("home-scan-folder")}
       </button>
-      <button
-        class="btn primary"
-        data-home-free={advised != null ? "advice" : "rules"}
-        onclick={freeSafely}
-        disabled={!freeable}
-        data-effect
-        title={advised != null ? t("home-free-advice-sub") : t("home-free-hint")}
-      >
-        <Icon name="clean" />
-        {#if freeable}
-          {t("home-free-btn", { size: formatSize(freeable, loc) })}
-        {:else if freeable === 0}
-          {t("home-free-nothing")}
-        {:else}
-          {t("home-free-checking")}
-        {/if}
-      </button>
     </div>
   </header>
+
+  <div class="quick card" data-home-quick-card>
+    <span class="qic"><Icon name="clean" size={26} /></span>
+    <div class="qtext">
+      <strong>{t("nav-quick")}</strong>
+      <span class="muted">
+        {#if busy}
+          {quick.phase === "scanning" ? t("quick-scanning") : t("quick-cleaning")}…
+        {:else if found && found.bytes > 0}
+          {t("home-quick-ready", { size: formatSize(found.bytes, loc) })}
+        {:else if last}
+          {t("quick-last", { size: formatSize(last.freed, loc), date: formatDateTime(last.at, loc) })}
+        {:else}
+          {t("home-quick-never")}
+        {/if}
+      </span>
+      <span class="muted small safety"><Icon name="shield" size={13} />{t("quick-safety")}</span>
+    </div>
+    <button
+      class="btn primary big"
+      data-home-quick
+      onclick={goQuick}
+      data-effect
+      title={quick.phase === "idle" ? t("home-quick-hint") : t("home-quick-open-hint")}
+    >
+      <Icon name="clean" />{quick.phase === "idle" ? t("quick-scan") : t("home-quick-btn")}
+    </button>
+  </div>
 
   <div class="stats">
     <StatCard
@@ -122,9 +114,9 @@
       label={t("stat-safe")}
       tone="safe"
       value={freeable != null ? formatSize(freeable, loc) : null}
-      unit={freeable == null ? t("stat-checking") : advised != null ? t("stat-safe-scan") : t("stat-safe-junk")}
-      hint={advised != null ? t("home-free-advice-sub") : t("home-free-sub")}
-      onclick={freeable ? freeSafely : undefined}
+      unit={freeable == null ? t("stat-checking") : found ? t("nav-quick") : t("stat-safe-junk")}
+      hint={quick.phase === "idle" ? t("home-quick-hint") : t("home-quick-open-hint")}
+      onclick={goQuick}
       data-stat="safe"
     />
     <StatCard
@@ -194,6 +186,48 @@
 </section>
 
 <style>
+  .quick {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    flex-wrap: wrap;
+    margin-bottom: 16px;
+    padding: 18px 20px;
+    border-left: 4px solid var(--accent);
+  }
+  .qic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 52px;
+    height: 52px;
+    border-radius: 14px;
+    background: var(--accent-soft);
+    color: var(--accent-ink);
+  }
+  .qtext {
+    flex: 1;
+    min-width: 220px;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .qtext strong {
+    font-size: 1.15em;
+  }
+  .safety {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .safety :global(svg) {
+    flex: none;
+    color: var(--risk-safe-ink);
+  }
+  .btn.big {
+    padding: 0.65em 1.3em;
+    font-size: 1.04em;
+  }
   .cols {
     display: grid;
     grid-template-columns: minmax(0, 1.35fr) minmax(320px, 1fr);

@@ -2,7 +2,7 @@
   // DevCache Manager (PHASE4_DEVCACHE §2.5): developer caches by vendor → app →
   // folder, toolchains, repositories and their build output, package-store commands
   // and caches no rule knows yet. Every delete goes through the Planner → SafetyGate
-  // → Executor → quarantine and shows up in the Activity log.
+  // → Executor → quarantine and shows up in Cleanup history.
   import { formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, fail } from "../state.svelte";
@@ -11,6 +11,7 @@
   import { dev } from "../devcache/state.svelte";
   import type { DevTab } from "../devcache/types";
   import Icon from "../components/Icon.svelte";
+  import SafetyNote from "../components/SafetyNote.svelte";
   import AiTab from "../components/devcache/AiTab.svelte";
   import CacheTab from "../components/devcache/CacheTab.svelte";
   import ToolchainsTab from "../components/devcache/ToolchainsTab.svelte";
@@ -34,6 +35,7 @@
     <div>
       <h1>{t("dev-title")}</h1>
       <p>{t("dev-intro")}</p>
+      <SafetyNote />
     </div>
     <div class="page-actions">
       <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>

@@ -78,7 +78,7 @@
               <button class="btn ghost icon" onclick={() => copyText(s.commandLine)} title={t("action-copy-command")} aria-label={t("action-copy-command")}><Icon name="copy" size={14} /></button>
             </span>
             {#if !s.program}<p class="muted dc-small">{t("dev-store-missing")}</p>{/if}
-            {#if s.stores.length}<p class="muted dc-small">{t("dev-last-write", { date: s.newest ? formatDate(s.newest, loc) : "—" })}</p>{/if}
+            {#if s.stores.length}<p class="muted dc-small">{t("dev-last-write", { date: s.newest ? formatDate(s.newest, loc) : "-" })}</p>{/if}
           </div>
           <div class="dc-size">
             <b class="num">{formatSize(s.bytes, loc)}{s.truncated ? "+" : ""}</b>

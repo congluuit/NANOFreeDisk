@@ -4,7 +4,7 @@ health-title-view = Drive health
 health-subtitle = A Good / Caution / Bad verdict for every drive from its own S.M.A.R.T. or NVMe health data, the way CrystalDiskInfo judges it, plus read-only checks of each volume. Nothing here changes a drive.
 health-refresh = Read the drives again
 health-elevate = Read everything (administrator)
-health-elevate-hint = If you click this: a helper with administrator rights reads S.M.A.R.T. thresholds, drives behind USB adapters and whether a volume needs a disk check. Windows asks once — not at all if Advanced sensors or the disk monitor's file detail already started the helper — and the helper stays until you close the app. Read-only — nothing is written to any drive.
+health-elevate-hint = If you click this: a helper with administrator rights reads S.M.A.R.T. thresholds, drives behind USB adapters and whether a volume needs a disk check. Windows asks once (not at all if Advanced sensors or the disk monitor's file detail already started the helper), and the helper stays until you close the app. Read-only: nothing is written to any drive.
 health-elevated-done = Drives read with administrator rights.
 health-elevated-declined = Administrator rights were not granted; showing what a standard user can read.
 health-export-html = Save report
@@ -14,7 +14,7 @@ health-export-json-hint = If you click this: saves the report as JSON (nanofreed
 health-export-title = Save drive health report
 health-exported = Saved to { $path }
 health-serials = Include serial numbers
-health-serials-hint = If you tick this: exported reports include each drive's serial number (they identify your hardware — leave it off when sharing).
+health-serials-hint = If you tick this: exported reports include each drive's serial number (they identify your hardware, leave it off when sharing).
 health-error = Could not read the drives: { $message }
 health-loading = Reading the drives…
 health-standard-user = Read as a standard user: S.M.A.R.T. thresholds, drives behind USB adapters and the disk-check flag need administrator rights.
@@ -38,19 +38,19 @@ health-source-sat = S.M.A.R.T. through the USB adapter
 health-source-none = No health data
 
 health-note-usb-bridge = This USB adapter does not pass S.M.A.R.T. through (or administrator rights are needed to try). The drive is not necessarily unhealthy.
-health-note-needs-admin = Thresholds and full S.M.A.R.T. need administrator rights — use "Read everything".
+health-note-needs-admin = Thresholds and full S.M.A.R.T. need administrator rights. Use "Read everything".
 health-note-raid = RAID / Storage Spaces: the member drives cannot be read through the array.
 health-note-virtual = Virtual drive: it has no health data of its own.
 health-note-no-smart = This drive reports no S.M.A.R.T. or NVMe health data.
 
-health-reason-nvme-spare-low = Spare area is down to { $value } %, below the drive's own threshold — back up and plan a replacement.
-health-reason-nvme-reliability = The drive reports that its reliability has degraded (media or internal errors) — back up now.
-health-reason-nvme-read-only = The drive has switched itself to read-only mode — copy your data off it.
+health-reason-nvme-spare-low = Spare area is down to { $value } %, below the drive's own threshold. Back up and plan a replacement.
+health-reason-nvme-reliability = The drive reports that its reliability has degraded (media or internal errors). Back up now.
+health-reason-nvme-read-only = The drive has switched itself to read-only mode. Copy your data off it.
 health-reason-nvme-backup = The drive's power-loss backup has failed.
 health-reason-nvme-temperature = The drive reports a temperature warning.
 health-reason-nvme-media-errors = { $value } media or data-integrity errors were recorded.
 health-reason-worn = Only { $value } % of the drive's rated life is left.
-health-reason-ata-predict-failure = The drive itself predicts a failure — back up now.
+health-reason-ata-predict-failure = The drive itself predicts a failure. Back up now.
 health-reason-ata-threshold = Attribute { $attr } { $name } fell below its failure threshold (now { $value }).
 health-reason-ata-reallocated = { $value } bad sectors were already replaced by spares.
 health-reason-ata-pending = { $value } sectors could not be read and wait to be replaced.
@@ -119,16 +119,16 @@ health-col-bus = Connection
 health-col-size = Size
 health-report-title = Drive health report
 health-report-standard-user = read as a standard user
-health-report-footer = Made with NANOFreeDisk — read-only diagnostics; nothing was changed on these drives.
+health-report-footer = Made with NANOFreeDisk: read-only diagnostics; nothing was changed on these drives.
 
 ## Health Score findings (Home)
 
-health-drive-bad = { $folder } is failing — back up your data now.
-health-drive-caution = { $folder } needs attention (S.M.A.R.T. / NVMe health) — keep a backup.
+health-drive-bad = { $folder } is failing. Back up your data now.
+health-drive-caution = { $folder } needs attention (S.M.A.R.T. / NVMe health). Keep a backup.
 health-drive-hot = { $folder } is at { $value } °C, at or above its own critical temperature.
 health-drive-warm = { $folder } is at { $value } °C, above its own warning temperature.
 health-drive-unknown = The health of { $folder } could not be read.
-health-volume-dirty = { $drive } is marked for a disk check (chkdsk) — Windows will check it at the next restart.
+health-volume-dirty = { $drive } is marked for a disk check (chkdsk). Windows will check it at the next restart.
 health-fix-health = See drive health
 
 ## Alerts and tray (G5)

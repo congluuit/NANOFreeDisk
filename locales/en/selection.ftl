@@ -2,9 +2,9 @@
 # (SelectionBar.svelte, ConfirmTotals.svelte, GroupCheck.svelte). Every key must
 # exist in vi/selection.ftl too.
 
-sel-summary = { $count } selected · { $files } files · { $size } will be freed
-sel-summary-nofiles = { $count } selected · { $size } will be freed
-sel-none = Nothing selected yet — tick items, or use the buttons below.
+sel-summary = { $count } selected · { $files } files · { $size } in total
+sel-summary-nofiles = { $count } selected · { $size } in total
+sel-none = Nothing selected yet. Tick items, or use the buttons below.
 sel-skip = { $count } item(s) may be skipped because { $apps } is running ({ $size } not counted)
 sel-group-label = Selection
 sel-all = Select all
@@ -18,6 +18,7 @@ sel-tick-hint = Tick the box next to each item you want to remove.
 sel-clean-n = Clean { $count } item(s) ({ $size })
 sel-recycle-n = Move { $count } to the Recycle Bin ({ $size })
 sel-quarantine-n = Move { $count } to the quarantine ({ $size })
-sel-confirm-total = { $count } item(s) · { $size } will be freed
+sel-confirm-total = { $count } item(s) · { $size } in total
 sel-confirm-level = { $count } item(s) · { $size }
 sel-ack = I understand: the Caution / Advanced items above lose history or settings, or must be downloaded again.
+sel-remove-n = Remove { $count } ({ $size })

@@ -6,7 +6,7 @@ ail-intro = What AI coding agents left behind per session: worktrees, scratchpad
 ail-rescan = Scan again
 ail-rescan-hint = Looks for leftovers again (read-only: nothing is deleted).
 ail-finished = Clean finished sessions (safe only) · { $size }
-ail-finished-hint = Selects only 🟢 leftovers of sessions that are finished, then asks before anything happens. Folders go to the quarantine (restorable for 7 days); worktrees are removed by git, their branches stay.
+ail-finished-hint = Selects only Safe leftovers of finished sessions, then asks before anything happens. Folders go to the quarantine (restorable for 7 days); worktrees are removed by git, their branches stay.
 ail-loading = Looking for AI leftovers… (read-only)
 ail-summary = { $sessions } sessions, { $projects } project folders · { $size } could be cleaned.
 ail-no-git = git was not found: worktrees and common folder names (test-results, screenshots…) are not offered.
@@ -37,7 +37,7 @@ ail-keep-session-recent = Kept: its session was active in the last { $days } day
 ail-keep-recent-write = Kept: written in the last { $days } days.
 ail-kept = { $what } ({ $tool }): conversation history, always kept.
 ail-none = No AI leftovers found.
-ail-clean-hint = Moves the ticked folders to the quarantine and removes the ticked worktrees with git — after a confirmation that shows exactly what runs.
+ail-clean-hint = Moves the ticked folders to the quarantine and removes the ticked worktrees with git, after a confirmation that shows exactly what runs.
 ail-confirm-title = Clean AI leftovers?
 ail-confirm-body = { $count ->
         [one] 1 folder
@@ -47,7 +47,7 @@ ail-confirm-git = Then git runs { $count ->
         [one] this command
        *[other] these commands
     } (each worktree is checked again right before):
-ail-confirm-note = Folders can be restored from Activity for 7 days. A removed worktree is added back with “git worktree add” on its branch, which is never deleted. Conversations are never touched.
+ail-confirm-note = Folders can be restored from Cleanup history for 7 days. A removed worktree is added back with “git worktree add” on its branch, which is never deleted. Conversations are never touched.
 
 reason-tracked = git tracks files in it.
 reason-contains-history = Holds AI conversation history, which is never deleted.

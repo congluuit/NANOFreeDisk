@@ -149,7 +149,7 @@
                       <div class="dc-row">
                         <span class="dc-badge {levelOf(r)}">{t(`clean-level-${levelOf(r)}`)}</span>
                         {#if expert()}<code class="muted dc-small">{r.ruleId}</code>{/if}
-                        <span class="muted dc-small">{t("dev-last-write", { date: r.newest ? formatDate(r.newest, loc) : "—" })}</span>
+                        <span class="muted dc-small">{t("dev-last-write", { date: r.newest ? formatDate(r.newest, loc) : "-" })}</span>
                       </div>
                       <p class="impact dc-small"><span class="muted">{t("clean-if-deleted")}</span> {impactText(r)}</p>
                       {#if r.requiresClosed.length}

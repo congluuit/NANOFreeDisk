@@ -1,6 +1,6 @@
 [package]
 name = "nfd-dupes"
-description = "NANOFreeDisk Duplicates: byte-identical files by size, partial and full BLAKE3, hash cache, keeper selection, duplicate folders"
+description = "NANOFreeDisk Duplicates: byte-identical files by size, partial and full BLAKE3, hash cache, keeper selection, duplicate folders, similar photos"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,7 +14,9 @@ nfd-core = { workspace = true }
 nfd-history = { workspace = true }
 nfd-platform = { workspace = true }
 blake3 = { workspace = true }
+image = { workspace = true, features = ["png", "gif", "webp", "bmp"] }
 rayon = { workspace = true }
+zune-jpeg = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
@@ -22,6 +24,8 @@ thiserror = { workspace = true }
 windows-sys = { workspace = true, features = ["Win32_System_Com", "Win32_UI_Shell"] }
 
 [dev-dependencies]
+# tests build their pictures in memory and save them as JPEG at chosen qualities
+image = { workspace = true, features = ["jpeg", "png"] }
 proptest = { workspace = true }
 serde_json = { workspace = true }
 tempfile = { workspace = true }

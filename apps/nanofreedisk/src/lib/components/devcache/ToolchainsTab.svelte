@@ -50,7 +50,7 @@
             <div class="name">
               {#if tc.default}<span class="dc-badge safe" title={t("dev-tool-default-hint")}>★ {t("dev-tool-default")}</span>{/if}
               <strong class="ellipsis" title={tc.path}>{tc.name}</strong>
-              <span class="muted dc-small">{t("dev-last-write", { date: tc.newest ? formatDate(tc.newest, loc) : "—" })}</span>
+              <span class="muted dc-small">{t("dev-last-write", { date: tc.newest ? formatDate(tc.newest, loc) : "-" })}</span>
             </div>
             <div class="remove">
               {#if tc.command}

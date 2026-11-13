@@ -81,6 +81,9 @@ struct Last {
     paused: bool,
     /// "Pause disk monitor" in the UI language (sent by the Monitor).
     pause_text: Option<String>,
+    /// "Free up space" while a drive is low and the low space alert is on
+    /// (`docs/SCHEDULE.md`).
+    free_up: Option<String>,
 }
 
 static LAST: Mutex<Option<Last>> = Mutex::new(None);
@@ -96,6 +99,7 @@ fn menu(
     texts: &HashMap<String, String>,
 ) -> tauri::Result<Menu<tauri::Wry>> {
     let (paused, pause_text) = with_last(|l| (l.paused, l.pause_text.clone())).unwrap_or_default();
+    let free_up = with_last(|l| l.free_up.clone()).flatten();
     let menu = Menu::new(app)?;
     menu.append(&MenuItem::with_id(
         app,
@@ -104,6 +108,15 @@ fn menu(
         true,
         None::<&str>,
     )?)?;
+    if let Some(label) = free_up {
+        menu.append(&MenuItem::with_id(
+            app,
+            "free-up",
+            label,
+            true,
+            None::<&str>,
+        )?)?;
+    }
     if let Some(s) = state {
         let (head, drives) = lines(s, texts);
         menu.append(&PredefinedMenuItem::separator(app)?)?;
@@ -152,6 +165,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "open" => show_main(app),
+            "free-up" => {
+                show_main(app);
+                crate::commands::schedule::open_free_up(app);
+            }
             "pause" => {
                 let state = app.state::<MonitorState>();
                 let _ = set_paused(app, &state, !is_paused(&state));
@@ -211,6 +228,19 @@ fn rebuild(app: &AppHandle) {
 pub fn sync_paused(app: &AppHandle, paused: bool) {
     with_last(|l| l.paused = paused);
     rebuild(app);
+}
+
+/// Show "Free up space" (`Some(label)`) or hide it (`None`); rebuilt only on change.
+pub fn set_free_up(app: &AppHandle, label: Option<String>) {
+    let changed = with_last(|l| {
+        let changed = l.free_up != label;
+        l.free_up = label;
+        changed
+    })
+    .unwrap_or(false);
+    if changed {
+        rebuild(app);
+    }
 }
 
 /// "Pause disk monitor" in the UI language.

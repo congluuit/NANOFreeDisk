@@ -8,7 +8,7 @@ import { formatCount, formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
 import type { SelItem } from "../selection";
 import { afterDelete, app, expert, fail, toast } from "../state.svelte";
-import type { AdviceSummary, Verdict } from "../types";
+import type { AdviceOutcome, AdviceSummary, Verdict } from "../types";
 
 /** One line of the confirmation. */
 export interface ConfirmRow {
@@ -102,14 +102,17 @@ export async function loadAdvice(): Promise<void> {
   }
 }
 
-/** Clean what `req` names (`caution`: the user confirmed the 🟡 ones). */
-export async function cleanAdvice(req: ConfirmRequest, caution: boolean): Promise<void> {
+/** Clean what `req` names (`caution`: the user confirmed the 🟡 ones). Returns what
+ * the backend did (null when nothing ran), for Quick clean's result screen. */
+export async function cleanAdvice(req: ConfirmRequest, caution: boolean): Promise<AdviceOutcome | null> {
   const keys = req.keys;
-  if (!keys.length || advice.running) return;
+  if (!keys.length || advice.running) return null;
   advice.running = true;
   const touched = req.touched;
+  let result: AdviceOutcome | null = null;
   try {
     const out = await api.adviceClean(keys, caution, expert());
+    result = out;
     const loc = intlLocale();
     const op = out.operation;
     const recycled = out.recycled.filter((r) => r.status === "done");
@@ -128,6 +131,7 @@ export async function cleanAdvice(req: ConfirmRequest, caution: boolean): Promis
     advice.confirm = null;
     void loadAdvice();
   }
+  return result;
 }
 
 /** "Delete anyway": move what the app kept out of the way (quarantine, or git for a

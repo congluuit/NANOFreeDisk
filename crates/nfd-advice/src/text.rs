@@ -201,8 +201,8 @@ pub(crate) fn guide_untouched() -> Arc<Text> {
 
 pub(crate) fn explained_untouched() -> Arc<Text> {
     arc(
-        "Nothing proves what it belongs to here, so it is only moved to the Recycle Bin when you pick it: you can restore it from there.",
-        "Không có gì xác nhận nó thuộc về đâu, nên chỉ được chuyển vào Thùng rác khi bạn tự chọn: có thể khôi phục từ đó.",
+        "Nothing proves what it belongs to here, so it only goes when you pick it, and you can restore it from Cleanup history.",
+        "Không có gì xác nhận nó thuộc về đâu, nên chỉ bị xóa khi bạn tự chọn, và bạn có thể khôi phục trong Lịch sử dọn dẹp.",
     )
 }
 
@@ -222,8 +222,8 @@ pub(crate) fn old_installer() -> Arc<Text> {
 
 pub(crate) fn recycle_untouched() -> Arc<Text> {
     arc(
-        "It goes to the Recycle Bin: you can restore it from there.",
-        "Tệp được chuyển vào Thùng rác: có thể khôi phục từ đó.",
+        "You can restore it from Cleanup history.",
+        "Bạn có thể khôi phục trong Lịch sử dọn dẹp.",
     )
 }
 

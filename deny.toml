@@ -28,6 +28,13 @@ ignore = [
   # untrusted XML. plist 1.9 drops quick-xml but needs Rust 1.88.
   { id = "RUSTSEC-2026-0194", reason = "quick-xml via plist 1.8 (tauri); plist 1.9 needs Rust 1.88 > MSRV 1.85" },
   { id = "RUSTSEC-2026-0195", reason = "quick-xml via plist 1.8 (tauri); plist 1.9 needs Rust 1.88 > MSRV 1.85" },
+  # Bundled SQLite < 3.54 can return stale process memory when it opens a database
+  # together with a crafted `-wal` file. The only database we open is our own
+  # history.db in the user's own data folder, and no elevated process opens it
+  # (the elevated clean, leftovers and helper steps never touch nfd-history), so a
+  # party able to plant that file already runs as the same user. The fix is
+  # libsqlite3-sys 0.39 (rusqlite 0.41), which needs Rust 1.88 / 1.89.
+  { id = "RUSTSEC-2026-0459", reason = "bundled SQLite via rusqlite 0.40; only our own per-user history.db is opened, never elevated; fix needs Rust 1.89 > MSRV 1.85" },
   # Unmaintained (no vulnerability): proc-macro-error via glib-macros/gtk3-macros
   # (gtk-rs 0.18, Linux webview stack used by tao/wry/muda). No safe upgrade.
   { id = "RUSTSEC-2024-0370", reason = "unmaintained; proc-macro-error via gtk-rs 0.18 (tauri Linux runtime), no upgrade available" },

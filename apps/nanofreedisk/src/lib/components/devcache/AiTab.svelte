@@ -1,7 +1,7 @@
 <script lang="ts">
   // DevCache → AI leftovers (PLAN §13.2 C10, docs/AI_LEFTOVERS.md): what AI coding
-  // agents left behind per session — worktrees, Temp scratchpads, browser snapshots,
-  // screenshots, test output, old Playwright browsers — grouped project → tool, each
+  // agents left behind per session (worktrees, Temp scratchpads, browser snapshots,
+  // screenshots, test output, old Playwright browsers), grouped project → tool, each
   // with the session that made it. Conversations are never offered; leftovers of
   // sessions still open or active recently are listed but not pre-selected.
   // Folders go to the quarantine; worktrees are removed by git afterwards.

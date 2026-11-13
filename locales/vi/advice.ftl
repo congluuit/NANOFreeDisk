@@ -2,7 +2,7 @@
 # sao (nfd-advice). Nạp cùng app.ftl; mọi key phải có trong en/advice.ftl.
 
 ## Đánh giá
-advice-verdict-safe = Có thể xóa an toàn
+advice-verdict-safe = An toàn
 advice-verdict-caution = Thận trọng
 advice-verdict-guide = Chỉ hướng dẫn
 advice-verdict-keep = Nên giữ
@@ -11,7 +11,7 @@ advice-badge-safe = An toàn
 advice-badge-caution = Thận trọng
 advice-badge-guide = Hướng dẫn
 advice-badge-keep = Nên giữ
-advice-badge-unknown = —
+advice-badge-unknown = ?
 advice-badge-partly = Gỡ được { $size }
 advice-verdict-hint-safe = Được tạo lại tự động hoặc không còn cần nữa.
 advice-verdict-hint-caution = Có thể xóa, nhưng sẽ mất một thứ gì đó (lịch sử, phải tải lại, phải build lại lâu).
@@ -30,9 +30,9 @@ advice-headline-sub = Trong { $total } đã quét: mỗi mục bên dưới cho 
 advice-computing = Đang xem xét cái gì có thể xóa và cái gì phải giữ…
 advice-checking-git = Đang kiểm tra worktree của AI agent bằng git…
 advice-not-ready = Gợi ý sẽ hiện ở đây ngay khi xem xét xong.
-advice-section-safe = Xóa an toàn
+advice-section-safe = An toàn
 advice-section-safe-hint = Được tạo lại tự động hoặc không còn cần: đã được tích sẵn.
-advice-section-caution = Xem lại trước
+advice-section-caution = Thận trọng: xem lại trước
 advice-section-caution-hint = Sẽ mất một thứ gì đó (lịch sử, phải tải lại, phải build lại lâu): chỉ tích những gì bạn chắc chắn.
 advice-section-guide = Chỉ hướng dẫn
 advice-section-guide-hint = Lệnh của chính Windows hoặc công cụ mới thu nhỏ được các mục này; NANOFreeDisk chỉ cách làm.
@@ -90,11 +90,11 @@ advice-hard-hard = Bảo vệ cứng: Windows, chương trình, thông tin đăn
 advice-hard-inside-hard = Bảo vệ cứng: mục này nằm trong Windows, thư mục chương trình, thông tin đăng nhập hoặc lịch sử hội thoại.
 advice-hard-contains-hard = Bên trong có thứ được bảo vệ (lịch sử hội thoại, thông tin đăng nhập…) nên không thể xóa nguyên khối: hãy xóa các phần khác bên trong.
 advice-hard-root = Không xóa chính thư mục đã quét từ đây.
-advice-hard-other = SafetyGate từ chối ({ $code }).
+advice-hard-other = Bước kiểm tra an toàn từ chối ({ $code }).
 
 ## Vì sao chưa thể
 advice-blocked-git-check = Đang chờ git kiểm tra…
-advice-blocked-unverified = git chưa xác nhận: hãy kiểm tra trong Cache lập trình → Rác của AI.
+advice-blocked-unverified = git chưa xác nhận: hãy kiểm tra trong Cache lập trình > Rác của AI.
 advice-blocked-session-live = Phiên AI của nó vẫn đang làm việc (hoạt động trong 24 giờ qua).
 advice-blocked-session-open = Phiên của nó vẫn đang mở trong ứng dụng Claude: hãy lưu trữ (archive) phiên đó trước.
 advice-blocked-dirty = Còn thay đổi chưa commit.
@@ -114,11 +114,11 @@ advice-action-store = Chạy lệnh chính thức
 advice-action-duplicates = Xem tệp trùng lặp
 advice-action-guide = Cách thu nhỏ
 advice-action-show = Xem trong cây thư mục
-advice-action-hint-clean = Nếu bấm: chính quy tắc đó quét lại và chuyển những gì nó bao phủ vào khu cách ly (7 ngày để khôi phục); tệp mới ghi và đường dẫn 🔒 Giữ lại không bị đụng tới.
-advice-action-hint-quarantine = Nếu bấm: thư mục được chuyển vào khu cách ly và có thể khôi phục trong Hoạt động suốt 7 ngày.
+advice-action-hint-clean = Nếu bấm: chính quy tắc đó quét lại và chuyển những gì nó bao phủ vào khu cách ly (7 ngày để khôi phục); tệp mới ghi và đường dẫn bạn đã chọn Giữ lại không bị đụng tới.
+advice-action-hint-quarantine = Nếu bấm: thư mục được chuyển vào khu cách ly và có thể khôi phục trong Lịch sử dọn dẹp suốt 7 ngày.
 advice-action-hint-ai-leftovers = Nếu bấm: kết quả build vào khu cách ly, sau đó `git worktree remove` (không bao giờ --force) gỡ worktree; nhánh được giữ nguyên.
 advice-action-hint-recycle-bin = Nếu bấm: mục được chuyển vào Thùng rác, có thể khôi phục từ đó.
-advice-action-hint-store = Mở Cache lập trình → Package store, nơi lệnh chính xác được hiển thị trước khi chạy.
+advice-action-hint-store = Mở Cache lập trình > Package store, nơi lệnh chính xác được hiển thị trước khi chạy.
 advice-action-hint-duplicates = Mở Tệp trùng lặp để chọn bản sao được giữ lại.
 advice-action-hint-guide = Hiển thị giải thích về mục này và công cụ phù hợp.
 advice-clean-n = Dọn { $count } mục đã chọn ({ $size })
@@ -130,10 +130,10 @@ advice-confirm-body = { $count ->
    *[other] { $count } gợi ý, khoảng { $size }.
 }
 advice-confirm-ways = Quy tắc và kết quả build vào khu cách ly (khôi phục được trong 7 ngày), worktree của phiên AI đã xong được gỡ bằng git (nhánh được giữ), tệp cá nhân bạn chọn vào Thùng rác.
-advice-confirm-note = Mọi mục được SafetyGate kiểm tra lại ngay trước khi đụng tới. Lịch sử hội thoại, vị trí được bảo vệ và đường dẫn 🔒 Giữ lại không bao giờ nằm trong đó.
+advice-confirm-note = Mọi mục được kiểm tra lại ngay trước khi đụng tới. Lịch sử hội thoại, vị trí được bảo vệ và đường dẫn bạn đã chọn Giữ lại không bao giờ nằm trong đó.
 advice-confirm-go = Dọn
 advice-done = Đã giải phóng { $size } ({ $count } mục).
-advice-done-problems = { $count } mục bị bỏ qua hoặc lỗi: xem trong Hoạt động.
+advice-done-problems = { $count } mục bị bỏ qua hoặc lỗi: xem trong Lịch sử dọn dẹp.
 advice-skipped = { $count } gợi ý không được dọn (chưa xác nhận, chỉ ở chế độ Chuyên gia hoặc chứa thứ được giữ).
 
 ## Bảng chi tiết
@@ -149,7 +149,7 @@ advice-details-nothing = Không có gì bên trong mà ứng dụng có thể gi
 advice-details-open-suggestion = Xem trong Gợi ý
 
 ## Trang chủ, Điểm sức khỏe, Hoạt động
-home-free-advice = Giải phóng { $size } — xem gợi ý
+home-free-advice = Giải phóng { $size }, xem gợi ý
 home-free-advice-sub = Từ lần quét gần nhất: cái gì xóa được, cái gì cần thận trọng và cái gì phải giữ.
 health-reclaimable = Có thể giải phóng { $size } trong { $folder } (xem gợi ý).
 health-fix-suggestions = Xem gợi ý

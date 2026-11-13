@@ -28,6 +28,9 @@
 //! Nothing here deletes anything: [`keep`] picks the copy that stays, [`plan`]
 //! turns a selection into a `CleanPlan` for the Phase 3 path (SafetyGate → Executor
 //! → UndoJournal) and checks keeper and copy again right before each item.
+//!
+//! [`similar`] finds photos that look alike without being identical (perceptual
+//! hashes, nothing pre-selected): `docs/SIMILAR_PHOTOS.md`.
 
 pub mod cache;
 pub mod collect;
@@ -36,6 +39,7 @@ pub mod hash;
 pub mod keep;
 pub mod personal;
 pub mod plan;
+pub mod similar;
 
 use std::collections::{BTreeMap, HashMap};
 use std::num::NonZeroUsize;

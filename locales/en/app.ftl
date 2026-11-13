@@ -1,4 +1,4 @@
-# NANOFreeDisk desktop app — English.
+# NANOFreeDisk desktop app, English.
 # Every key here must exist in locales/vi/app.ftl too (checked by scripts/check-locales.mjs).
 
 app-name = NANOFreeDisk
@@ -58,7 +58,7 @@ stat-time = Elapsed
 scan-cancel = Cancel
 scan-cancelled = Scan cancelled.
 scan-failed = Scan failed: { $error }
-scan-hint = Links, junctions and other volumes are never followed; hard-linked files are counted once.
+scan-hint = Links and other drives are never followed; a file with several names is counted once.
 
 ## Analyze
 
@@ -180,10 +180,10 @@ delete-result = { $done } moved ({ $size }) · { $failed } not moved
 delete-declined = Kept (permanent delete declined)
 
 reason-volume-root = The root of a drive cannot be deleted.
-reason-system-dir = Inside the Windows folder — junk there is cleaned from the Clean view or with Windows tools.
+reason-system-dir = Inside the Windows folder. Junk there is cleaned from Junk files or with Windows tools.
 reason-protected = Protected location ({ $template }): Windows, programs or credentials need it.
 reason-contains-protected = Contains a protected folder ({ $template }); delete items inside it instead.
-reason-link = Links, junctions and mount points are removed in Explorer, not here.
+reason-link = Links and drives mounted as folders are removed in Explorer, not here.
 reason-contains-mount-point = Contains another drive mounted as a folder.
 reason-unresolvable = The item no longer exists or cannot be accessed.
 
@@ -218,7 +218,7 @@ donate-holder = Account holder
 donate-account = Account number
 donate-copy = Copy account number
 donate-note = Scan the VietQR code with any Vietnamese banking app. Donations are optional and change nothing in the app.
-donate-qr-alt = VietQR BIDV — LUU DUC THANH CONG — 6503695458
+donate-qr-alt = VietQR BIDV, LUU DUC THANH CONG, 6503695458
 
 token-bg = Background
 token-surface = Surface
@@ -279,7 +279,7 @@ action-copy-command = Copy command
 
 nav-oldlarge = Old & large
 ol-title = Old & large files
-ol-intro = The quickest wins: very large files, big files nobody changed for a long time, and old installers left in Downloads. Pick what you no longer need — it goes to the Recycle Bin after a safety check.
+ol-intro = Very large files, big files nobody changed for a long time, and old installers in Downloads.
 ol-only-folder = Only the folder open in Analyze
 ol-large-min = Large means at least
 ol-stale-age = Old means not modified for
@@ -307,7 +307,7 @@ ol-files = { $count ->
 }
 ol-stale-note = Windows does not reliably record when a file was last opened, so "old" means not modified.
 ol-more = Showing the { $shown } largest of { $count }.
-ol-none = Nothing here — nice and tidy.
+ol-none = Nothing here. Nice and tidy.
 
 ## Tidy up (empty folders, broken shortcuts)
 
@@ -360,12 +360,12 @@ report-treemap = What fills the space
 report-children = Largest items
 report-changes = What changed since { $date }
 report-drive-share = Share of the drive
-report-footer = Created by NANOFreeDisk { $version } — read-only analysis, nothing was changed or deleted. No telemetry.
+report-footer = Created by NANOFreeDisk { $version }. Read-only analysis: nothing was changed or deleted. No telemetry.
 
 ## What changed? (scan history)
 
 analyze-tab-changes = What changed?
-changes-history-off = Scan history is off (Settings → Scan history), so there is nothing to compare with.
+changes-history-off = Scan history is off (Settings > Scan history), so there is nothing to compare with.
 changes-not-recorded = This scan was not saved to the history, so it cannot be compared.
 changes-first = This is the first saved scan of this folder. Scan it again in a few days to see what changed.
 changes-compare = Compare with the scan of
@@ -417,9 +417,9 @@ settings-history-cleared = Scan history cleared.
 
 encyclopedia-title = What is this?
 encyclopedia-inside = Inside:
-encyclopedia-note = From the Folder Encyclopedia (rules/encyclopedia). Information only — NANOFreeDisk never deletes anything because of it.
-risk-safe = Safe to remove
-risk-caution = Remove with care
+encyclopedia-note = From the Folder Encyclopedia. Information only: NANOFreeDisk never deletes anything because of it.
+risk-safe = Safe
+risk-caution = Caution
 risk-advanced = Experts only
 risk-protected = Do not delete
 
@@ -428,10 +428,10 @@ risk-protected = Do not delete
 analyze-tab-age = Age
 age-hint = Space by when files were last modified. Darker cells hold more bytes; click a folder to open it.
 age-col-0 = < 1 month
-age-col-1 = 1–6 months
-age-col-2 = 6–12 months
-age-col-3 = 1–2 years
-age-col-4 = 2–5 years
+age-col-1 = 1 to 6 months
+age-col-2 = 6 to 12 months
+age-col-3 = 1 to 2 years
+age-col-4 = 2 to 5 years
 age-col-5 = > 5 years
 age-col-6 = No date
 age-direct = Files directly here
@@ -476,7 +476,12 @@ error-no-session = Scan a drive or folder first.
 
 ## macOS: Full Disk Access (docs/MACOS.md)
 mac-fda-title = Allow Full Disk Access for complete scans
-mac-fda-body = macOS hides Mail, Messages, Safari and other apps' data from NANOFreeDisk, so scans leave those folders out. Open System Settings → Privacy & Security → Full Disk Access, turn on NANOFreeDisk, then quit and reopen the app.
+mac-fda-body = macOS hides Mail, Messages, Safari and other apps' data from NANOFreeDisk, so scans leave those folders out. Open System Settings > Privacy & Security > Full Disk Access, turn on NANOFreeDisk, then quit and reopen the app.
 mac-fda-open = Open Privacy settings
-mac-fda-open-hint = Opens System Settings at Privacy & Security → Full Disk Access.
+mac-fda-open-hint = Opens System Settings at Privacy & Security > Full Disk Access.
 mac-fda-dismiss = Not now
+
+## Remove (Simple mode: to the quarantine)
+action-remove = Remove
+action-remove-n = Remove { $count } items
+action-remove-hint = If you do this: you confirm first, then the item goes to the quarantine and can be restored from Cleanup history for 7 days. Protected Windows, program and credential locations are refused.

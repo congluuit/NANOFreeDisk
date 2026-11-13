@@ -1,22 +1,29 @@
 <script lang="ts">
-  // Confirmation for deleting hand-picked items (Recycle Bin from Analyze / Old &
-  // Large, quarantine from Tidy up). The backend decides what is allowed
-  // (`plan_delete`); on confirm every item goes Planner → SafetyGate (live re-check)
-  // → Executor → Activity log (`delete_entries`).
+  // Confirmation for deleting hand-picked items (Analyze, Old & large, Tidy up), with
+  // the shared confirmation and result (RemoveConfirm, RunResult). Where they go
+  // comes from `askDelete` (the quarantine in Simple mode, see clean/destination.ts);
+  // a big removal in Simple mode may choose the Recycle Bin instead. The backend
+  // decides what is allowed (`plan_delete`); on confirm every item goes Planner →
+  // SafetyGate (live re-check) → Executor → Cleanup history (`delete_entries`).
   import { api } from "../api";
   import { cleanApi } from "../clean/api";
-  import { reasonText } from "../clean/state.svelte";
+  import { outcomesResult, type ShownMode } from "../clean/destination";
+  import type { OperationResult } from "../clean/types";
   import { formatCount, formatPercent, formatSize, templateLabel } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
-  import { afterDelete, app, fail, toast } from "../state.svelte";
+  import { afterDelete, app, expert, fail, toast } from "../state.svelte";
   import Icon from "./Icon.svelte";
+  import RemoveConfirm from "./RemoveConfirm.svelte";
+  import RunResult from "./RunResult.svelte";
   import type { DeleteItem, DeletePlan } from "../types";
 
   let { ids }: { ids: number[] } = $props();
   let plan = $state<DeletePlan | null>(null);
   let ack = $state(false);
   let busy = $state(false);
-  let dialog: HTMLDivElement;
+  let result = $state<OperationResult | null>(null);
+  // where the items go: set by askDelete, the big-removal choice may change it
+  let mode = $state<ShownMode>(app.deleteMode.mode);
   const loc = $derived(intlLocale());
 
   $effect(() => {
@@ -29,14 +36,9 @@
       });
   });
 
-  $effect(() => {
-    if (plan) dialog?.querySelector<HTMLElement>(".cancel")?.focus();
-  });
-
   const allowed = $derived(plan?.items.filter((i) => i.allowed) ?? []);
   const blocked = $derived(plan?.items.filter((i) => !i.allowed) ?? []);
   const canGo = $derived(!!plan && allowed.length > 0 && (!plan.extraConfirm || ack) && !busy);
-  const quarantine = $derived(app.deleteMode.mode === "quarantine");
 
   function close() {
     if (!busy) app.deleting = null;
@@ -49,76 +51,78 @@
   async function go() {
     if (!canGo) return;
     busy = true;
+    const dest = mode === "recycle-bin" ? "recycle-bin" : "quarantine";
+    const since = Math.floor(Date.now() / 1000) - 2;
     try {
-      const out = await cleanApi.deleteEntries(allowed.map((i) => i.id), app.deleteMode.mode, app.deleteMode.kind);
-      const done = out.filter((o) => o.status === "done");
-      const bytes = done.reduce((s, o) => s + o.onDisk, 0);
-      const failed = out.length - done.length;
-      toast(
-        t("delete-result", { done: done.length, size: formatSize(bytes, loc), failed }),
-        failed ? "error" : "ok",
-      );
-      for (const o of out) {
-        if (o.status === "failed" && o.message) toast(o.message, "error");
-        if (o.status === "declined") toast(t("delete-declined"));
-        if ((o.status === "blocked" || o.status === "partial") && o.reason) toast(reasonText(o.reason), "error");
-      }
-      await afterDelete(done.map((o) => o.id));
+      const out = await cleanApi.deleteEntries(allowed.map((i) => i.id), dest, app.deleteMode.kind);
+      for (const o of out) if (o.status === "failed" && o.message) toast(o.message, "error");
+      // the operation this delete wrote to Cleanup history (for what the quarantine holds)
+      const op = (await cleanApi.activity(5).catch(() => [])).find((r) => r.kind === app.deleteMode.kind && r.startedAt >= since);
+      result = outcomesResult(op?.id ?? "", out, new Map(allowed.map((i) => [i.id, i.path])));
+      mode = dest;
+      await afterDelete(out.filter((o) => o.status === "done").map((o) => o.id));
     } catch (e) {
       fail(e);
+      app.deleting = null;
     } finally {
       busy = false;
-      app.deleting = null;
     }
   }
 </script>
 
-<div
-  class="backdrop"
-  role="presentation"
-  onclick={(e) => e.target === e.currentTarget && close()}
-  onkeydown={(e) => e.key === "Escape" && close()}
->
-  <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="del-title" bind:this={dialog}>
-    <header>
-      <span class="ic"><Icon name="trash" size={22} /></span>
-      <h2 id="del-title">{quarantine ? t("delete-title-quarantine") : t("delete-title")}</h2>
-    </header>
-
-    {#if !plan}
-      <p class="muted">…</p>
+{#if result}
+  <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} onkeydown={(e) => e.key === "Escape" && close()}>
+    <div class="dialog card" role="dialog" aria-modal="true" aria-label={t("run-title", { size: formatSize(result.freed, loc) })} data-delete-result>
+      <RunResult {result} {mode} flat onhistory={close} ondismiss={close} />
+      <footer><button class="btn cancel" onclick={close}>{t("clean-dismiss")}</button></footer>
+    </div>
+  </div>
+{:else if plan}
+  <RemoveConfirm
+    title={mode === "quarantine" ? t("delete-title-quarantine") : t("delete-title")}
+    bind:mode
+    bytes={plan.onDisk}
+    paths={allowed.map((i) => i.path)}
+    choice={!expert()}
+    note={mode === "recycle-bin" ? `${t("delete-quarantine-note")} ${t("delete-nuke-note")}` : t("delete-quarantine-note")}
+    confirm={busy ? t("delete-working") : mode === "quarantine" ? t("delete-confirm-quarantine") : t("delete-confirm")}
+    disabled={!canGo}
+    {busy}
+    testid="delete"
+    onconfirm={go}
+    oncancel={close}
+  >
+    {#if allowed.length}
+      <ul class="items">
+        {#each allowed as i (i.id)}
+          <li>
+            <Icon name={i.kind === "dir" ? "folder" : "file"} size={16} />
+            <span class="ellipsis mono" title={i.path}>{i.path}</span>
+            <span class="num">{formatSize(i.onDisk, loc)}</span>
+          </li>
+        {/each}
+      </ul>
+      <p class="total">
+        <strong>{t("delete-total", { size: formatSize(plan.onDisk, loc), files: formatCount(plan.files, loc) })}</strong>
+      </p>
     {:else}
-      {#if allowed.length}
-        <p>{quarantine ? t("delete-intro-quarantine") : t("delete-intro")}</p>
-        <ul class="items">
-          {#each allowed as i (i.id)}
-            <li>
-              <Icon name={i.kind === "dir" ? "folder" : "file"} size={16} />
-              <span class="ellipsis mono" title={i.path}>{i.path}</span>
-              <span class="num">{formatSize(i.onDisk, loc)}</span>
-            </li>
-          {/each}
-        </ul>
-        <p class="total">
-          <strong>{t("delete-total", { size: formatSize(plan.onDisk, loc), files: formatCount(plan.files, loc) })}</strong>
-        </p>
-      {:else}
-        <p>{t("delete-nothing")}</p>
-      {/if}
+      <p>{t("delete-nothing")}</p>
+    {/if}
 
-      {#if blocked.length}
-        <h3><Icon name="shield" size={16} /> {t("delete-blocked-title")}</h3>
-        <ul class="items blocked">
-          {#each blocked as i (i.id)}
-            <li>
-              <span class="ellipsis mono" title={i.path}>{i.path}</span>
-              <span class="why">{reason(i)}</span>
-            </li>
-          {/each}
-        </ul>
-      {/if}
+    {#if blocked.length}
+      <h3><Icon name="shield" size={16} /> {t("delete-blocked-title")}</h3>
+      <ul class="items blocked">
+        {#each blocked as i (i.id)}
+          <li>
+            <span class="ellipsis mono" title={i.path}>{i.path}</span>
+            <span class="why">{reason(i)}</span>
+          </li>
+        {/each}
+      </ul>
+    {/if}
 
-      {#if plan.extraConfirm && allowed.length}
+    {#snippet extra()}
+      {#if plan?.extraConfirm && allowed.length}
         <label class="extra">
           <input type="checkbox" bind:checked={ack} />
           <span>
@@ -129,18 +133,13 @@
           </span>
         </label>
       {/if}
-      <p class="note muted">{quarantine ? t("delete-quarantine-note") : t("delete-nuke-note")}</p>
-    {/if}
-
-    <footer>
-      <button class="btn cancel" onclick={close} disabled={busy}>{t("delete-cancel")}</button>
-      <button class="btn danger" onclick={go} disabled={!canGo} data-effect title={t("action-recycle-hint")}>
-        <Icon name="trash" size={16} />
-        {busy ? t("delete-working") : quarantine ? t("delete-confirm-quarantine") : t("delete-confirm")}
-      </button>
-    </footer>
+    {/snippet}
+  </RemoveConfirm>
+{:else}
+  <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && close()} onkeydown={(e) => e.key === "Escape" && close()}>
+    <div class="dialog card loading"><p class="muted">…</p><footer><button class="btn cancel" onclick={close}>{t("delete-cancel")}</button></footer></div>
   </div>
-</div>
+{/if}
 
 <style>
   .backdrop {
@@ -158,24 +157,6 @@
     overflow: auto;
     padding: 22px 24px;
     box-shadow: var(--shadow);
-  }
-  header {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
-  .ic {
-    display: grid;
-    place-items: center;
-    width: 40px;
-    height: 40px;
-    border-radius: 10px;
-    background: var(--danger-soft);
-    color: var(--danger);
-  }
-  h2 {
-    margin: 0;
-    font-size: 1.2em;
   }
   h3 {
     display: flex;
@@ -221,9 +202,6 @@
     border: 1px solid var(--risk-protected);
     border-radius: var(--radius-sm);
     background: var(--danger-soft);
-  }
-  .note {
-    font-size: 0.85em;
   }
   footer {
     display: flex;

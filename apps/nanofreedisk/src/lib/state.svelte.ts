@@ -1,11 +1,12 @@
 // Application state shared by the views (Svelte 5 runes).
 
 import { api, errorText, on } from "./api";
+import { destinationFor } from "./clean/destination";
 import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "programs" | "startup" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "programs" | "startup" | "settings" | "quick" | "tools";
 export type Viz = "treemap" | "sunburst";
 /** Analyze → Explorer: the map (`viz`) or the folder list. */
 export type ExplorerLens = "map" | "folders";
@@ -57,6 +58,10 @@ export interface Settings {
   /** Drive health: notify when a drive's verdict gets worse, a drive gets too hot or
    * a volume drops below 10 % free (checked every 30 minutes while the app runs). */
   healthAlerts: boolean;
+  /** The first-run welcome was closed (shown once). */
+  welcomed: boolean;
+  /** The last Quick clean: when it finished (Unix seconds) and what it freed. */
+  lastQuick: { at: number; freed: number } | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -85,6 +90,8 @@ export const DEFAULT_SETTINGS: Settings = {
   monitorMbps: 5,
   monitorMinutes: 5,
   healthAlerts: true,
+  welcomed: false,
+  lastQuick: null,
 };
 
 interface Toast {
@@ -113,8 +120,8 @@ export const app = $state({
   version: 0,
   search: null as null | { filter: Filter; result: SearchRows },
   deleting: null as null | number[],
-  /** How the delete dialog removes `deleting`: Recycle Bin (Analyze, Old & Large) or
-   * quarantine (Tidy up), and which Activity log label it gets. */
+  /** How the delete dialog removes `deleting` (`destinationFor`: the quarantine in
+   * Simple mode) and which Cleanup history label it gets. */
   deleteMode: { mode: "recycle-bin", kind: "manual" } as { mode: "recycle-bin" | "quarantine"; kind: "manual" | "tidy" },
   /** Command palette (Ctrl+K) open. */
   palette: false,
@@ -124,7 +131,15 @@ export const app = $state({
 });
 
 let toastSeq = 0;
+/** While above 0, "ok" and "info" toasts are dropped (Quick clean runs several tools
+ * and shows one result screen instead); errors always show. */
+let mutedToasts = 0;
+export function muteToasts(on: boolean): void {
+  mutedToasts = Math.max(0, mutedToasts + (on ? 1 : -1));
+}
+
 export function toast(text: string, kind: Toast["kind"] = "info"): void {
+  if (mutedToasts > 0 && kind !== "error") return;
   const id = ++toastSeq;
   app.toasts.push({ id, text, kind });
   setTimeout(() => {
@@ -173,6 +188,9 @@ export async function loadSettings(): Promise<void> {
     console.warn("settings", e);
   }
   app.settingsLoaded = true;
+  // automatic cleaning / low space alert texts and the tray's "Free up space"
+  // (docs/SCHEDULE.md); imported late to keep state.svelte free of a cycle
+  void import("./schedule/watch.svelte").then((m) => m.startScheduleWatch()).catch(() => {});
 }
 
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -218,13 +236,28 @@ export async function listenScanEvents(): Promise<void> {
       app.focus = app.current;
       app.search = null;
       app.version++;
-      app.view = back ?? "analyze";
+      if (back !== "stay") app.view = back ?? "analyze";
     } else if (f.cancelled) {
       toast(t("scan-cancelled"));
     } else {
       toast(t("scan-failed", { error: f.error ?? "?" }), "error");
     }
+    settleScanWaiters(f);
   });
+}
+
+/** Callers waiting for the tracked scan to end (Quick clean). */
+let scanWaiters: ((f: Finished) => void)[] = [];
+function settleScanWaiters(f: Finished): void {
+  const waiting = scanWaiters;
+  scanWaiters = [];
+  for (const done of waiting) done(f);
+}
+
+/** Resolves when the scan being tracked ends (after its summary is loaded), or
+ * failed to start. Call it before `startScan` so the end is never missed. */
+export function waitScan(): Promise<Finished> {
+  return new Promise((resolve) => scanWaiters.push(resolve));
 }
 
 /** A7: the folder the app was started with (Explorer menu, command line). */
@@ -246,10 +279,11 @@ export async function loadSummary(): Promise<void> {
   }
 }
 
-/** The view a finished scan opens instead of Analyze (Tidy up's "Scan drive C:"). */
-let scanReturnView: View | null = null;
+/** The view a finished scan opens instead of Analyze (Tidy up's "Scan drive C:"), or
+ * "stay" to leave the user where they are (Quick clean). */
+let scanReturnView: View | "stay" | null = null;
 
-export async function startScan(path: string, returnTo?: View): Promise<void> {
+export async function startScan(path: string, returnTo?: View | "stay"): Promise<void> {
   scanReturnView = returnTo ?? null;
   try {
     await listenScanEvents();
@@ -260,6 +294,7 @@ export async function startScan(path: string, returnTo?: View): Promise<void> {
   } catch (e) {
     app.scanning = null;
     fail(e);
+    settleScanWaiters({ scan: -1, ok: false, cancelled: false, error: String((e as { message?: unknown })?.message ?? e), snapshot: null, historyError: null });
   }
 }
 
@@ -279,10 +314,13 @@ export function select(id: number, additive = false): void {
   app.focus = id;
 }
 
-export function askDelete(ids: number[], mode: "recycle-bin" | "quarantine" = "recycle-bin", kind: "manual" | "tidy" = "manual"): void {
+/** Ask before deleting hand-picked entries (DeleteDialog). Where they go follows the
+ *  one rule of `destinationFor`: the quarantine in Simple mode, the tool's own default
+ *  in Expert mode (Recycle Bin for Analyze / Old & large, quarantine for Tidy up). */
+export function askDelete(ids: number[], kind: "manual" | "tidy" = "manual"): void {
   const list = ids.filter((id) => id !== (app.summary?.rootId ?? 0));
   if (!list.length) return;
-  app.deleteMode = { mode, kind };
+  app.deleteMode = { mode: destinationFor(kind, expert()), kind };
   app.deleting = list;
 }
 

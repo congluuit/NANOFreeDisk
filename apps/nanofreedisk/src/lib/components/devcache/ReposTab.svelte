@@ -109,7 +109,7 @@
       <p class="muted dc-small">
         {#if r.git}.git {formatSize(r.gitBytes, loc)} · {/if}
         {#if r.lastCommit}{t("dev-repo-commit", { date: formatDate(r.lastCommit, loc) })} {r.lastCommitSubject ?? ""} · {/if}
-        {t("dev-repo-activity", { date: r.lastActivity ? formatDate(r.lastActivity, loc) : "—" })}
+        {t("dev-repo-activity", { date: r.lastActivity ? formatDate(r.lastActivity, loc) : "-" })}
       </p>
       {#if r.git && app.settings.mode === "expert"}
         <span class="dc-code dc-small" title={t("dev-gc-hint")}><span class="muted">{t("dev-gc")}</span><code class="mono">{gc(r.path)}</code>

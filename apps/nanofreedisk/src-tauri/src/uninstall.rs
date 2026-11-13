@@ -148,6 +148,8 @@ pub fn run(args: &[String]) -> i32 {
         Lang::En => &EN,
     };
     let _ = nfd_platform::shell_menu::unregister();
+    // the "start with Windows" entry would point at an exe that is about to go
+    crate::commands::schedule::autostart_remove();
 
     if !opts.silent {
         while app_running() {

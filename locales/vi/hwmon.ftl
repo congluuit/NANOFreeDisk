@@ -2,7 +2,7 @@
 
 nav-hardware = Phần cứng
 hw-title = Phần cứng
-hw-subtitle = Linh kiện của máy, cảm biến trực tiếp và các tiến trình đang chạy — chỉ đọc, không cần driver.
+hw-subtitle = Linh kiện của máy, cảm biến trực tiếp và các tiến trình đang chạy. Chỉ đọc, không cần driver.
 hw-tab-overview = Tổng quan
 hw-tab-sensors = Cảm biến
 hw-tab-tasks = Tasks
@@ -14,7 +14,7 @@ hw-copied = Đã sao chép tóm tắt phần cứng vào clipboard.
 hw-export-json = Xuất JSON
 hw-export-title = Lưu danh mục phần cứng
 hw-exported = Đã lưu danh mục vào { $path }.
-hw-text-header = Tóm tắt phần cứng NANOFreeDisk — { $date }
+hw-text-header = Tóm tắt phần cứng NANOFreeDisk, { $date }
 hw-privacy = Không bao giờ thu thập số serial, địa chỉ MAC hay IP, nên bản tóm tắt an toàn để chia sẻ.
 hw-none = Không phát hiện thiết bị nào.
 
@@ -100,7 +100,7 @@ hw-net-wifi = Wi-Fi
 hw-net-ethernet = Ethernet
 hw-net-status = Trạng thái
 hw-net-up = Đã kết nối
-hw-net-up-speed = Đã kết nối — { $mbps } Mbps
+hw-net-up-speed = Đã kết nối, { $mbps } Mbps
 hw-net-down = Chưa kết nối
 hw-net-alias = Tên trong Windows
 
@@ -136,7 +136,7 @@ hw-kind-level = Mức
 hw-kind-energy = Dung lượng
 hw-kind-data = Dữ liệu
 hw-kind-throughput = Tốc độ truyền
-hw-note-needs-pawnio = Cần Cảm biến nâng cao (PawnIO) — không có nếu thiếu.
+hw-note-needs-pawnio = Cần Cảm biến nâng cao (PawnIO). Không có nếu thiếu.
 hw-note-gpu-asleep = GPU đang ngủ để tiết kiệm điện; giá trị sẽ hiện khi GPU thức dậy.
 hw-note-not-reported = Driver không cung cấp thông số này.
 
@@ -190,7 +190,7 @@ home-temp-cpu = CPU
 home-temp-gpu = GPU
 home-temp-disk = Ổ nóng nhất
 home-temp-load = tải { $percent } %
-home-temp-why-needs-pawnio = cần Cảm biến nâng cao — bấm để thiết lập
+home-temp-why-needs-pawnio = cần Cảm biến nâng cao, bấm để thiết lập
 home-temp-why-gpu-asleep = GPU đang ngủ (tiết kiệm điện)
 home-temp-why-not-reported = không có dữ liệu
 home-temp-why-none = không khả dụng
@@ -224,7 +224,7 @@ task-col-path = Đường dẫn
 task-menu-close = Đóng ứng dụng
 task-menu-kill = Kết thúc tiến trình…
 task-menu-kill-tree = Kết thúc cây tiến trình…
-task-menu-blocked = Windows cần tiến trình này — không thể kết thúc ở đây
+task-menu-blocked = Windows cần tiến trình này. Không thể kết thúc ở đây
 task-menu-reveal = Mở vị trí tệp
 task-menu-copy-path = Sao chép đường dẫn
 task-menu-copy-cmd = Sao chép dòng lệnh
@@ -247,7 +247,7 @@ task-what-kill-tree = Tiến trình và tất cả tiến trình nó mở sẽ d
 task-warn-service-host = Tiến trình này chứa các dịch vụ Windows. Kết thúc nó sẽ dừng tất cả; Windows có thể tự khởi động lại một số, số khác sẽ tắt cho đến khi bạn khởi động lại máy.
 task-warn-explorer = Đây là Windows Explorer: thanh tác vụ, menu Start và màn hình nền sẽ biến mất cho đến khi nó chạy lại. Thường nên khởi động lại nó từ Task Manager.
 task-warn-windows-component = Chương trình này là một phần của Windows. Kết thúc nó có thể làm Windows chạy không ổn định cho đến khi khởi động lại.
-task-ack = Tôi hiểu — vẫn kết thúc
+task-ack = Tôi hiểu, vẫn kết thúc
 task-no-undo = Không thể hoàn tác. Thao tác được ghi vào nhật ký hoạt động.
 task-cancel = Hủy
 task-working = Đang xử lý…
@@ -260,7 +260,7 @@ task-ended = Đã kết thúc { $count ->
     [one] { $name }
    *[other] { $count } tiến trình
 }.
-task-not-ended = Chưa kết thúc: { $name } — { $reason }
+task-not-ended = Chưa kết thúc: { $name } ({ $reason })
 task-block-kernel = Đây là nhân Windows.
 task-block-system-core = Windows không thể chạy nếu thiếu tiến trình này.
 task-block-critical = Windows đánh dấu tiến trình này là tối quan trọng: kết thúc nó sẽ làm sập hệ thống.
@@ -274,15 +274,15 @@ task-outcome-needs-confirm = Cần xác nhận lần hai.
 ## Cảm biến nâng cao (PawnIO, ADR 0002)
 
 hw-adv-on = Đã bật Cảm biến nâng cao (PawnIO, chỉ đọc)
-hw-adv-not-installed = Nhiệt độ, công suất và điện áp CPU cần PawnIO — driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng.
+hw-adv-not-installed = Nhiệt độ, công suất và điện áp CPU cần PawnIO: driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng.
 hw-adv-not-running = Đã cài PawnIO nhưng driver chưa chạy. Nếu Memory Integrity chặn, Windows Security sẽ nêu lý do.
 hw-adv-no-module = Đã cài PawnIO; còn cần tải module chính thức cho CPU này (IntelMSR hoặc AMDFamily17).
 hw-adv-setup = Thiết lập Cảm biến nâng cao
-hw-adv-setup-hint = Tải bộ cài chính thức của PawnIO và module cho CPU này từ trang GitHub của tác giả, kiểm tra dấu vân tay (SHA-256), rồi cài PawnIO — Windows sẽ hỏi quyền quản trị. Chỉ đọc cảm biến; không bao giờ ghi gì vào phần cứng.
+hw-adv-setup-hint = Tải bộ cài chính thức của PawnIO và module cho CPU này từ trang GitHub của tác giả, kiểm tra dấu vân tay (SHA-256), rồi cài PawnIO. Windows sẽ hỏi quyền quản trị. Chỉ đọc cảm biến; không bao giờ ghi gì vào phần cứng.
 hw-adv-setup-module-hint = Tải module chính thức cho CPU này từ trang GitHub của PawnIO và kiểm tra dấu vân tay.
 hw-adv-setting-up = Đang thiết lập…
 hw-adv-about = Về PawnIO
-hw-adv-about-hint = pawnio.eu — driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng
+hw-adv-about-hint = pawnio.eu: driver miễn phí, có chữ ký, cũng được LibreHardwareMonitor và Fan Control dùng
 hw-adv-restart = Đã cài PawnIO. Hãy khởi động lại Windows rồi bật Cảm biến nâng cao tại đây.
 hw-adv-setup-declined = Chưa cài PawnIO: chưa được cấp quyền quản trị.
 hw-adv-download-failed = Không tải được PawnIO: { $message }
@@ -343,8 +343,8 @@ hw-24h-empty = Chưa ghi nhận gì. Nhiệt độ được ghi lại khi màn h
 hw-24h-ago = 24 giờ trước
 hw-24h-now = bây giờ
 
-health-hot-cpu = Bộ xử lý ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
-health-hot-gpu = Card đồ họa ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua — hãy kiểm tra tản nhiệt.
+health-hot-cpu = Bộ xử lý ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua. Hãy kiểm tra tản nhiệt.
+health-hot-gpu = Card đồ họa ({ $folder }) đã lên tới { $value } °C trong 24 giờ qua. Hãy kiểm tra tản nhiệt.
 health-hot-disk = { $folder } đã lên tới { $value } °C trong 24 giờ qua; nóng như vậy lâu dài sẽ làm giảm tuổi thọ ổ.
 health-warm-cpu = Bộ xử lý ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.
 health-warm-gpu = Card đồ họa ({ $folder }) chạy khá nóng, tới { $value } °C, trong 24 giờ qua.

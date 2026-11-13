@@ -4,13 +4,15 @@
   // mode opens on one button (the personal folders) with the full form under
   // "Options"; Expert mode shows the form. One copy per group always stays, the
   // planner refuses anything else, and each removed copy and its keeper are hashed
-  // again right before the move (Recycle Bin, or the quarantine in Expert mode;
-  // Activity log, Restore).
+  // again right before the move. Simple mode has one Remove button: the quarantine
+  // (a big removal may choose the Recycle Bin in the shared confirmation); Expert
+  // mode keeps Recycle Bin, Quarantine and Replace with links. Cleanup history
+  // restores either way.
   import { inTauri, pickFolder, pickSaveFile } from "../api";
   import { formatCount, formatDate, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail, toast } from "../state.svelte";
-  import { reasonText } from "../clean/state.svelte";
+  import { destinationFor, removeKeys, type ShownMode } from "../clean/destination";
   import { dupesApi } from "../dupes/api";
   import {
     applyStrategy,
@@ -21,6 +23,7 @@
     findDupes,
     findPersonal,
     folderPickIds,
+    folderSelections,
     folderTotals,
     linkPlan,
     loadThumb,
@@ -28,6 +31,7 @@
     risky,
     runDupes,
     searchAgain,
+    selections,
     selectedTotals,
     setFilePicks,
     setFolderKeep,
@@ -45,8 +49,14 @@
   import ConfirmTotals from "../components/ConfirmTotals.svelte";
   import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
+  import RemoveConfirm from "../components/RemoveConfirm.svelte";
+  import RunResult from "../components/RunResult.svelte";
+  import SafetyNote from "../components/SafetyNote.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
   import StatCard from "../components/StatCard.svelte";
+  import ModeSwitch from "../components/dupes/ModeSwitch.svelte";
+  import SimilarPhotos from "../components/dupes/SimilarPhotos.svelte";
+  import { similar } from "../similar/state.svelte";
 
   const loc = $derived(intlLocale());
   const KINDS: FileKind[] = ["all", "images", "videos", "music", "documents", "archives"];
@@ -183,16 +193,22 @@
   function nameOf(path: string): string {
     return path.slice(Math.max(path.lastIndexOf("\\"), path.lastIndexOf("/")) + 1);
   }
+  /** Where the confirmed copies go (the big-removal choice may change it). */
+  let removeMode = $state<ShownMode>("quarantine");
+  const dest = $derived(destinationFor("dupes", expert()));
+  /** The copies (or folders) the confirmation is about, for the big-removal test. */
+  const confirmPaths = $derived(dupes.confirm ? (folderTab ? folderSelections() : selections()).flatMap((x) => x.remove) : []);
   function ask(action: DupeAction) {
     acknowledged = false;
     otherTypes = false;
+    removeMode = action === "recycle" ? "recycle-bin" : "quarantine";
     dupes.confirm = action;
   }
   async function go() {
     const action = dupes.confirm;
     dupes.confirm = null;
     if (action === "link") await runDupes("link", links.selections);
-    else if (action) await runDupes(action, undefined, folderTab);
+    else if (action) await runDupes(removeMode === "recycle-bin" ? "recycle" : "quarantine", undefined, folderTab);
   }
   async function exportAs(format: "json" | "csv") {
     try {
@@ -211,6 +227,7 @@
     <div>
       <h1>{t("dupes-title")}</h1>
       <p>{t("dupes-intro")}</p>
+      <SafetyNote mode={dest} />
     </div>
     <div class="page-actions">
       <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
@@ -218,6 +235,11 @@
       </button>
     </div>
   </header>
+
+  <ModeSwitch />
+  {#if similar.mode === "similar"}
+  <SimilarPhotos />
+  {:else}
 
   {#snippet searchForm()}
     <div class="row wrap" role="radiogroup" aria-label={t("dupes-scope")}>
@@ -328,26 +350,7 @@
       <p class="muted small ellipsis mono">{dupes.running.path}</p>
     </div>
   {:else if dupes.last}
-    {@const r = dupes.last}
-    <div class="card result" class:bad={r.failed > 0}>
-      <Icon name={r.failed ? "alert" : "check"} size={22} />
-      <div class="grow">
-        <strong>{t("clean-done-title", { size: formatSize(r.freed, loc) })}</strong>
-        <p class="muted small">{t("clean-done-detail", { done: r.done, partial: r.partial, skipped: r.skipped, failed: r.failed })}</p>
-        {#if r.problems.length}
-          <details>
-            <summary class="small">{t("clean-problems", { count: r.problems.length })}</summary>
-            <ul class="problems">
-              {#each r.problems.slice(0, 20) as p (p.path)}
-                <li class="small"><span class="mono ellipsis" title={p.path}>{p.path}</span><span class="muted">{t(`clean-status-${p.status}`)}{p.reason ? ` · ${reasonText(p.reason)}` : ""}</span></li>
-              {/each}
-            </ul>
-          </details>
-        {/if}
-      </div>
-      <button class="btn" onclick={() => (app.view = "activity")}><Icon name="undo" size={16} />{t("clean-undo")}</button>
-      <button class="btn ghost icon" onclick={() => (dupes.last = null)} aria-label={t("clean-dismiss")}><Icon name="x" size={16} /></button>
-    </div>
+    <RunResult result={dupes.last} mode={dupes.lastAction === "recycle" ? "recycle-bin" : "quarantine"} ondismiss={() => (dupes.last = null)} />
   {/if}
 
   {#if report && !dupes.searching}
@@ -369,10 +372,14 @@
     {/if}
     <div class="summary">
       <div class="grow">
-        <p class="muted small">
-          {t("dupes-stats", { files: formatCount(report.scannedFiles, loc), read: formatSize(report.hashedBytes, loc), cached: formatCount(report.cacheHits, loc), seconds: (report.elapsedMs / 1000).toFixed(1) })}
-          {#if report.totalGroups > report.groups.length}· {t("dupes-capped", { count: formatCount(report.groups.length, loc) })}{/if}
-        </p>
+        {#if expert()}
+          <p class="muted small">
+            {t("dupes-stats", { files: formatCount(report.scannedFiles, loc), read: formatSize(report.hashedBytes, loc), cached: formatCount(report.cacheHits, loc), seconds: (report.elapsedMs / 1000).toFixed(1) })}
+            {#if report.totalGroups > report.groups.length}· {t("dupes-capped", { count: formatCount(report.groups.length, loc) })}{/if}
+          </p>
+        {:else if report.totalGroups > report.groups.length}
+          <p class="muted small">{t("dupes-capped", { count: formatCount(report.groups.length, loc) })}</p>
+        {/if}
       </div>
       <label class="field" title={t("dupes-keep-hint")}>
         {t("dupes-keep")}
@@ -462,10 +469,14 @@
       <SelectionBar items={folderItems} picked={folderPicked} onchange={setFolderPicks} expert busy={!!dupes.running} scope={page} primary>
         {#if expert()}
           <button class="btn" disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
+          <button class="btn danger" data-recycle-folders data-dupes-remove-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
+            <Icon name="trash" size={16} />{t("sel-recycle-n", { count: ftotals.folders, size: formatSize(ftotals.bytes, loc) })}
+          </button>
+        {:else}
+          <button class="btn danger" data-dupes-remove-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("action-remove-hint")}>
+            <Icon name="trash" size={16} />{t(removeKeys(dest).bar, { count: ftotals.folders, size: formatSize(ftotals.bytes, loc) })}
+          </button>
         {/if}
-        <button class="btn danger" data-recycle-folders disabled={!ftotals.folders || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
-          <Icon name="trash" size={16} />{t("sel-recycle-n", { count: ftotals.folders, size: formatSize(ftotals.bytes, loc) })}
-        </button>
       </SelectionBar>
     {:else}
     {#each groups as g (g.id)}
@@ -525,76 +536,75 @@
       {#if expert()}
         <button class="btn" data-link disabled={!totals.files || !!dupes.running} onclick={() => ask("link")} data-effect title={t("dupes-link-hint")}><Icon name="link" size={16} />{t("dupes-link")}</button>
         <button class="btn" disabled={!totals.files || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
+        <button class="btn danger" data-recycle data-dupes-remove disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
+          <Icon name="trash" size={16} />{t("sel-recycle-n", { count: totals.files, size: formatSize(totals.bytes, loc) })}
+        </button>
+      {:else}
+        <button class="btn danger" data-dupes-remove disabled={!totals.files || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("action-remove-hint")}>
+          <Icon name="trash" size={16} />{t(removeKeys(dest).bar, { count: totals.files, size: formatSize(totals.bytes, loc) })}
+        </button>
       {/if}
-      <button class="btn danger" data-recycle disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
-        <Icon name="trash" size={16} />{t("sel-recycle-n", { count: totals.files, size: formatSize(totals.bytes, loc) })}
-      </button>
     </SelectionBar>
     {/if}
   {:else if !dupes.searching && expert()}
     <div class="card empty"><Icon name="duplicates" size={22} /><span>{t("dupes-start")}</span></div>
   {/if}
+  {/if}
 </section>
 
 {#if dupes.confirm}
   {@const action = dupes.confirm}
-  <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (dupes.confirm = null)} onkeydown={(e) => e.key === "Escape" && (dupes.confirm = null)}>
-    <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="dupes-confirm-title">
-      <h2 id="dupes-confirm-title"><Icon name={action === "recycle" ? "trash" : action === "link" ? "link" : "shield"} size={20} />{t(`dupes-confirm-${action}`)}</h2>
-      {#if action === "link"}
-        <p>{t("dupes-link-body", { files: links.files, size: formatSize(links.bytes, loc) })}</p>
-        {#if links.kinds.has("hardlink")}<p class="warn small"><Icon name="alert" size={16} />{t("dupes-link-hardlink-note")}</p>{/if}
-        {#if links.kinds.has("clone")}<p class="muted small">{t("dupes-link-clone-note")}</p>{/if}
-        {#if links.skipped}<p class="muted small">{t("dupes-link-skipped", { count: links.skipped })}</p>{/if}
-        {#if links.otherTypes || otherTypes}
-          <label class="small other"><input type="checkbox" bind:checked={otherTypes} data-effect title={t("dupes-link-other-types-hint")} />{t("dupes-link-other-types")}</label>
-        {/if}
-        <p class="muted small">{t("dupes-link-undo")}</p>
-      {:else if folderTab}
-        <p>{t("dupes-confirm-folders-body", { folders: ftotals.folders, files: formatCount(ftotals.files, loc), size: formatSize(ftotals.bytes, loc) })}</p>
-        <p class="muted small">{t("dupes-confirm-folders-note")}</p>
-      {:else}
-        <p>{t("dupes-confirm-body", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</p>
-        <p class="muted small">{t("dupes-confirm-note")}</p>
+  <RemoveConfirm
+    title={t(action === "link" ? "dupes-confirm-link" : removeMode === "recycle-bin" ? "dupes-confirm-recycle" : "dupes-confirm-quarantine")}
+    icon={action === "link" ? "link" : "trash"}
+    bind:mode={removeMode}
+    bytes={action === "link" ? links.bytes : folderTab ? ftotals.bytes : totals.bytes}
+    paths={confirmPaths}
+    choice={action !== "link" && !expert()}
+    note={action === "link" ? t("dupes-link-undo") : folderTab ? t("dupes-confirm-folders-note") : t("dupes-confirm-note")}
+    confirm={t(action === "link" ? "dupes-go-link" : removeMode === "recycle-bin" ? "dupes-go-recycle" : "dupes-go-quarantine")}
+    disabled={action === "link" ? !links.files : (folderTab ? ftotals.risky.length : totals.risky.length) > 0 && !acknowledged}
+    testid="dupes"
+    onconfirm={go}
+    oncancel={() => (dupes.confirm = null)}
+  >
+    {#if action === "link"}
+      <p>{t("dupes-link-body", { files: links.files, size: formatSize(links.bytes, loc) })}</p>
+      {#if links.kinds.has("hardlink")}<p class="warn small"><Icon name="alert" size={16} />{t("dupes-link-hardlink-note")}</p>{/if}
+      {#if links.kinds.has("clone")}<p class="muted small">{t("dupes-link-clone-note")}</p>{/if}
+      {#if links.skipped}<p class="muted small">{t("dupes-link-skipped", { count: links.skipped })}</p>{/if}
+      {#if links.otherTypes || otherTypes}
+        <label class="small other"><input type="checkbox" bind:checked={otherTypes} data-effect title={t("dupes-link-other-types-hint")} />{t("dupes-link-other-types")}</label>
       {/if}
-      {#if folderTab && ftotals.risky.length && action !== "link"}
-        <div class="warn">
-          <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: ftotals.risky.length })}</p>
-          <ul>
-            {#each ftotals.risky.slice(0, 8) as f (f.path)}
-              <li class="small"><span class="mono ellipsis" title={f.path}>{f.path}</span>{#each flagsOf(f) as fl (fl)}<span class="tag {fl}">{t(`dupes-flag-${fl}`)}</span>{/each}</li>
-            {/each}
-          </ul>
-          <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
-        </div>
-      {:else if !folderTab && totals.risky.length && action !== "link"}
-        <div class="warn">
-          <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: totals.risky.length })}</p>
-          <ul>
-            {#each totals.risky.slice(0, 8) as c (c.path)}
-              <li class="small"><span class="mono ellipsis" title={c.path}>{c.path}</span>{#each flagsOf(c) as f (f)}<span class="tag {f}">{t(`dupes-flag-${f}`)}</span>{/each}</li>
-            {/each}
-          </ul>
-          <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
-        </div>
-      {/if}
-      {#if action !== "link"}<ConfirmTotals summary={confirmSummary} />{/if}
-      <CliHint command={cliCommand(action)} />
-      <footer>
-        <button class="btn" onclick={() => (dupes.confirm = null)}>{t("delete-cancel")}</button>
-        <button
-          class="btn danger"
-          data-confirm
-          onclick={go}
-          disabled={action === "link" ? !links.files : (folderTab ? ftotals.risky.length : totals.risky.length) > 0 && !acknowledged}
-          data-effect
-          title={t(action === "link" ? "dupes-link-undo" : "dupes-confirm-note")}
-        >
-          <Icon name={action === "recycle" ? "trash" : action === "link" ? "link" : "shield"} size={16} />{t(`dupes-go-${action}`)}
-        </button>
-      </footer>
-    </div>
-  </div>
+    {:else if folderTab}
+      <p>{t("dupes-confirm-folders-body", { folders: ftotals.folders, files: formatCount(ftotals.files, loc), size: formatSize(ftotals.bytes, loc) })}</p>
+    {:else}
+      <p>{t("dupes-confirm-body", { files: totals.files, groups: totals.groups, size: formatSize(totals.bytes, loc) })}</p>
+    {/if}
+    {#if folderTab && ftotals.risky.length && action !== "link"}
+      <div class="warn">
+        <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: ftotals.risky.length })}</p>
+        <ul>
+          {#each ftotals.risky.slice(0, 8) as f (f.path)}
+            <li class="small"><span class="mono ellipsis" title={f.path}>{f.path}</span>{#each flagsOf(f) as fl (fl)}<span class="tag {fl}">{t(`dupes-flag-${fl}`)}</span>{/each}</li>
+          {/each}
+        </ul>
+        <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
+      </div>
+    {:else if !folderTab && totals.risky.length && action !== "link"}
+      <div class="warn">
+        <p><Icon name="alert" size={16} />{t("dupes-confirm-risky", { count: totals.risky.length })}</p>
+        <ul>
+          {#each totals.risky.slice(0, 8) as c (c.path)}
+            <li class="small"><span class="mono ellipsis" title={c.path}>{c.path}</span>{#each flagsOf(c) as f (f)}<span class="tag {f}">{t(`dupes-flag-${f}`)}</span>{/each}</li>
+          {/each}
+        </ul>
+        <label class="small"><input type="checkbox" bind:checked={acknowledged} />{t("dupes-confirm-ack")}</label>
+      </div>
+    {/if}
+    {#if action !== "link"}<ConfirmTotals summary={confirmSummary} />{/if}
+    <CliHint command={cliCommand(action)} />
+  </RemoveConfirm>
 {/if}
 
 <style>
@@ -608,7 +618,6 @@
     margin-bottom: 0;
   }
   .running,
-  .result,
   .empty {
     padding: 14px 16px;
   }
@@ -745,34 +754,14 @@
     height: 8px;
   }
   .running p,
-  .result p,
   .summary p {
     margin: 2px 0 0;
   }
-  .result,
   .summary {
     display: flex;
     gap: 12px;
     align-items: center;
     flex-wrap: wrap;
-  }
-  .result {
-    border-left: 4px solid var(--risk-safe);
-  }
-  .result.bad {
-    border-left-color: var(--danger);
-  }
-  .problems {
-    margin: 6px 0 0;
-    padding: 0;
-    list-style: none;
-    max-height: 180px;
-    overflow: auto;
-  }
-  .problems li {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
   }
   .tag {
     margin: 0 4px;
@@ -878,35 +867,6 @@
   }
   .more {
     align-self: center;
-  }
-  .backdrop {
-    position: fixed;
-    inset: 0;
-    z-index: 45;
-    display: grid;
-    place-items: center;
-    background: color-mix(in srgb, var(--bg) 65%, transparent);
-    backdrop-filter: blur(2px);
-  }
-  .dialog {
-    width: min(640px, 94vw);
-    max-height: 86vh;
-    overflow: auto;
-    padding: 22px 24px;
-    box-shadow: var(--shadow);
-  }
-  .dialog h2 {
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    margin: 0 0 8px;
-    font-size: 1.2em;
-  }
-  .dialog footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 16px;
   }
   .warn {
     margin: 10px 0;

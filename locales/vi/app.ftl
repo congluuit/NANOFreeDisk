@@ -1,4 +1,4 @@
-# NANOFreeDisk desktop app — Tiếng Việt.
+# NANOFreeDisk desktop app, Tiếng Việt.
 # Mọi key ở đây phải có trong locales/en/app.ftl (kiểm tra bởi scripts/check-locales.mjs).
 
 app-name = NANOFreeDisk
@@ -58,7 +58,7 @@ stat-time = Thời gian
 scan-cancel = Hủy
 scan-cancelled = Đã hủy quét.
 scan-failed = Quét thất bại: { $error }
-scan-hint = Không bao giờ đi theo liên kết, junction hay ổ khác; tệp hardlink chỉ được tính một lần.
+scan-hint = Không bao giờ đi theo liên kết hay sang ổ khác; tệp có nhiều tên chỉ được tính một lần.
 
 ## Analyze
 
@@ -180,10 +180,10 @@ delete-result = Đã chuyển { $done } mục ({ $size }) · { $failed } mục k
 delete-declined = Giữ lại (đã từ chối xóa vĩnh viễn)
 
 reason-volume-root = Không thể xóa thư mục gốc của ổ đĩa.
-reason-system-dir = Nằm trong thư mục Windows — rác ở đó được dọn trong màn hình Dọn dẹp hoặc bằng công cụ của Windows.
+reason-system-dir = Nằm trong thư mục Windows. Rác ở đó được dọn trong Tệp rác hoặc bằng công cụ của Windows.
 reason-protected = Vị trí được bảo vệ ({ $template }): Windows, chương trình hoặc thông tin đăng nhập cần nó.
 reason-contains-protected = Chứa thư mục được bảo vệ ({ $template }); hãy xóa từng mục bên trong.
-reason-link = Liên kết, junction và điểm gắn ổ được gỡ trong Explorer, không phải ở đây.
+reason-link = Liên kết và ổ gắn vào thư mục được gỡ trong Explorer, không phải ở đây.
 reason-contains-mount-point = Chứa một ổ đĩa khác được gắn dưới dạng thư mục.
 reason-unresolvable = Mục không còn tồn tại hoặc không truy cập được.
 
@@ -218,7 +218,7 @@ donate-holder = Chủ tài khoản
 donate-account = Số tài khoản
 donate-copy = Sao chép số tài khoản
 donate-note = Quét mã VietQR bằng bất kỳ ứng dụng ngân hàng nào. Ủng hộ là tùy ý và không thay đổi gì trong ứng dụng.
-donate-qr-alt = VietQR BIDV — LUU DUC THANH CONG — 6503695458
+donate-qr-alt = VietQR BIDV, LUU DUC THANH CONG, 6503695458
 
 token-bg = Nền
 token-surface = Bề mặt
@@ -279,7 +279,7 @@ action-copy-command = Sao chép lệnh
 
 nav-oldlarge = Cũ & lớn
 ol-title = Tệp cũ & lớn
-ol-intro = Cách giải phóng nhanh nhất: tệp rất lớn, tệp lớn lâu không ai sửa, và bộ cài cũ còn trong Downloads. Chọn thứ bạn không cần nữa — sau khi kiểm tra an toàn, chúng được chuyển vào Thùng rác.
+ol-intro = Tệp rất lớn, tệp lớn lâu không ai sửa, và bộ cài cũ trong Downloads.
 ol-only-folder = Chỉ thư mục đang mở trong Phân tích
 ol-large-min = Lớn nghĩa là từ
 ol-stale-age = Cũ nghĩa là không sửa trong
@@ -298,7 +298,7 @@ ol-installers-hint = .exe .msi .iso .zip… trong Downloads, cũ hơn { $days } 
 ol-files = { $count } tệp
 ol-stale-note = Windows không ghi lại chính xác lần mở tệp gần nhất, nên "cũ" nghĩa là không bị sửa đổi.
 ol-more = Đang hiện { $shown } tệp lớn nhất trong { $count }.
-ol-none = Không có gì — gọn gàng rồi.
+ol-none = Không có gì. Gọn gàng rồi.
 
 ## Dọn gọn (thư mục rỗng, shortcut hỏng)
 
@@ -339,12 +339,12 @@ report-treemap = Thứ gì chiếm dung lượng
 report-children = Mục lớn nhất
 report-changes = Thay đổi kể từ { $date }
 report-drive-share = Tỷ lệ trên ổ đĩa
-report-footer = Tạo bởi NANOFreeDisk { $version } — chỉ phân tích, không thay đổi hay xóa gì. Không thu thập dữ liệu.
+report-footer = Tạo bởi NANOFreeDisk { $version }. Chỉ phân tích: không thay đổi hay xóa gì. Không thu thập dữ liệu.
 
 ## Có gì thay đổi? (lịch sử quét)
 
 analyze-tab-changes = Có gì thay đổi?
-changes-history-off = Lịch sử quét đang tắt (Cài đặt → Lịch sử quét) nên chưa có gì để so sánh.
+changes-history-off = Lịch sử quét đang tắt (Cài đặt > Lịch sử quét) nên chưa có gì để so sánh.
 changes-not-recorded = Lần quét này không được lưu vào lịch sử nên không so sánh được.
 changes-first = Đây là lần quét đầu tiên được lưu của thư mục này. Quét lại sau vài ngày để xem có gì thay đổi.
 changes-compare = So với lần quét lúc
@@ -392,9 +392,9 @@ settings-history-cleared = Đã xóa lịch sử quét.
 
 encyclopedia-title = Đây là gì?
 encyclopedia-inside = Nằm trong:
-encyclopedia-note = Từ Bách khoa thư mục (rules/encyclopedia). Chỉ để tham khảo — NANOFreeDisk không bao giờ tự xóa gì dựa trên nó.
-risk-safe = Xóa an toàn
-risk-caution = Xóa cẩn thận
+encyclopedia-note = Từ Bách khoa thư mục. Chỉ để tham khảo: NANOFreeDisk không bao giờ tự xóa gì dựa trên nó.
+risk-safe = An toàn
+risk-caution = Thận trọng
 risk-advanced = Chỉ dành cho chuyên gia
 risk-protected = Không được xóa
 
@@ -403,10 +403,10 @@ risk-protected = Không được xóa
 analyze-tab-age = Tuổi tệp
 age-hint = Dung lượng theo thời điểm tệp được sửa lần cuối. Ô càng đậm càng nhiều dữ liệu; bấm vào thư mục để mở.
 age-col-0 = < 1 tháng
-age-col-1 = 1–6 tháng
-age-col-2 = 6–12 tháng
-age-col-3 = 1–2 năm
-age-col-4 = 2–5 năm
+age-col-1 = 1 đến 6 tháng
+age-col-2 = 6 đến 12 tháng
+age-col-3 = 1 đến 2 năm
+age-col-4 = 2 đến 5 năm
 age-col-5 = > 5 năm
 age-col-6 = Không có ngày
 age-direct = Tệp nằm ngay ở đây
@@ -451,7 +451,12 @@ error-no-session = Hãy quét một ổ đĩa hoặc thư mục trước.
 
 ## macOS: Quyền truy cập toàn bộ ổ đĩa (docs/MACOS.md)
 mac-fda-title = Cho phép Truy cập toàn bộ ổ đĩa để quét đầy đủ
-mac-fda-body = macOS ẩn dữ liệu của Mail, Tin nhắn, Safari và các ứng dụng khác với NANOFreeDisk, nên khi quét các thư mục đó bị bỏ qua. Mở Cài đặt hệ thống → Quyền riêng tư & Bảo mật → Truy cập toàn bộ ổ đĩa, bật NANOFreeDisk, rồi thoát và mở lại ứng dụng.
+mac-fda-body = macOS ẩn dữ liệu của Mail, Tin nhắn, Safari và các ứng dụng khác với NANOFreeDisk, nên khi quét các thư mục đó bị bỏ qua. Mở Cài đặt hệ thống > Quyền riêng tư & Bảo mật > Truy cập toàn bộ ổ đĩa, bật NANOFreeDisk, rồi thoát và mở lại ứng dụng.
 mac-fda-open = Mở cài đặt Quyền riêng tư
-mac-fda-open-hint = Mở Cài đặt hệ thống tại Quyền riêng tư & Bảo mật → Truy cập toàn bộ ổ đĩa.
+mac-fda-open-hint = Mở Cài đặt hệ thống tại Quyền riêng tư & Bảo mật > Truy cập toàn bộ ổ đĩa.
 mac-fda-dismiss = Để sau
+
+## Xóa (chế độ Đơn giản: vào khu cách ly)
+action-remove = Xóa
+action-remove-n = Xóa { $count } mục
+action-remove-hint = Nếu bấm: bạn xác nhận trước, rồi mục được chuyển vào khu cách ly và khôi phục được trong Lịch sử dọn dẹp suốt 7 ngày. Các vị trí được bảo vệ của Windows, chương trình và thông tin đăng nhập sẽ bị từ chối.

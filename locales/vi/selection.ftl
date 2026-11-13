@@ -2,9 +2,9 @@
 # (SelectionBar.svelte, ConfirmTotals.svelte, GroupCheck.svelte). Mọi khóa phải có
 # trong en/selection.ftl.
 
-sel-summary = Đã chọn { $count } mục · { $files } tệp · { $size } sẽ được giải phóng
-sel-summary-nofiles = Đã chọn { $count } mục · { $size } sẽ được giải phóng
-sel-none = Chưa chọn mục nào — hãy tick từng mục hoặc dùng các nút bên dưới.
+sel-summary = Đã chọn { $count } mục · { $files } tệp · tổng { $size }
+sel-summary-nofiles = Đã chọn { $count } mục · tổng { $size }
+sel-none = Chưa chọn mục nào. Hãy tick từng mục hoặc dùng các nút bên dưới.
 sel-skip = { $count } mục có thể bị bỏ qua vì { $apps } đang chạy ({ $size } không tính vào tổng)
 sel-group-label = Lựa chọn
 sel-all = Chọn tất cả
@@ -18,6 +18,7 @@ sel-tick-hint = Đánh dấu vào ô bên cạnh từng mục bạn muốn bỏ 
 sel-clean-n = Dọn { $count } mục ({ $size })
 sel-recycle-n = Chuyển { $count } mục vào Thùng rác ({ $size })
 sel-quarantine-n = Chuyển { $count } mục vào khu cách ly ({ $size })
-sel-confirm-total = { $count } mục · { $size } sẽ được giải phóng
+sel-confirm-total = { $count } mục · tổng { $size }
 sel-confirm-level = { $count } mục · { $size }
 sel-ack = Tôi hiểu: các mục Thận trọng / Nâng cao ở trên sẽ mất lịch sử hoặc thiết lập, hoặc phải tải lại.
+sel-remove-n = Xóa { $count } mục ({ $size })

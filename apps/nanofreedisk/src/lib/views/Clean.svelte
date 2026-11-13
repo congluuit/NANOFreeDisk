@@ -1,15 +1,16 @@
 <script lang="ts">
-  // Clean (PHASE3_CLEAN §2.5): junk found by the rule packs, grouped by pack and rule,
-  // with what each deletion costs. Everything goes to the quarantine (restorable for
-  // 7 days from the Activity log); 🟢 Safe rules are ticked by default, 🟡 Caution
-  // must be ticked by hand, 🟠 Advanced shows in Expert mode only and 🔴 Protected is
-  // guidance only.
+  // Junk files (PHASE3_CLEAN §2.5): junk found by the rule packs, grouped by pack and
+  // rule, with what each deletion costs. Everything goes to the quarantine (restorable
+  // for 7 days from Cleanup history); Safe rules are ticked by default, Caution must be
+  // ticked by hand, Advanced shows in Expert mode only and Protected is guidance only.
+  // Simple mode keeps the per-rule previews and the per-website panel behind one
+  // "show details" switch; the confirmation and the result are the shared ones.
   import { formatCount, formatDate, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail } from "../state.svelte";
   import { cleanApi } from "../clean/api";
-  import { bytesOf, clean, cleanable, cleanAsAdmin, impactText, levelOf, reasonText, retryLeftovers, runClean, scanJunk } from "../clean/state.svelte";
-  import { ACTION_KEYS, leftoverAction, leftoverBody, leftoverGroups, leftoverTitle, toolKey, type LeftoverAction } from "../clean/leftovers";
+  import { bytesOf, clean, cleanable, cleanAsAdmin, impactText, levelOf, retryLeftovers, runClean, scanJunk } from "../clean/state.svelte";
+  import { leftoverGroups, toolKey, type LeftoverAction } from "../clean/leftovers";
   import type { Candidate, RuleSummary } from "../clean/types";
   import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../selection";
   import BrowserSites from "../components/BrowserSites.svelte";
@@ -17,6 +18,9 @@
   import ConfirmTotals from "../components/ConfirmTotals.svelte";
   import GroupCheck from "../components/GroupCheck.svelte";
   import Icon from "../components/Icon.svelte";
+  import RemoveConfirm from "../components/RemoveConfirm.svelte";
+  import RunResult from "../components/RunResult.svelte";
+  import SafetyNote from "../components/SafetyNote.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
   import StatCard from "../components/StatCard.svelte";
 
@@ -25,6 +29,9 @@
   let permanent = $state(false);
   let typed = $state("");
   let showGuide = $state(false);
+  /** Simple mode: the per-rule previews and the per-website panel are shown. */
+  let showDetails = $state(false);
+  const details = $derived(expert() || showDetails);
   let ack = $state(false);
   let page = $state<HTMLElement | null>(null);
 
@@ -92,7 +99,6 @@
   // what the last clean left behind, by cause, with one action each
   const groups = $derived(leftoverGroups(clean.last));
   const adminGroup = $derived(groups.find((g) => g.cause === "needs-admin") ?? null);
-  const SHOWN = 6;
 
   function act(a: LeftoverAction) {
     if (a === "retry") void retryLeftovers("in-use");
@@ -125,6 +131,7 @@
     <div>
       <h1>{t("clean-title")}</h1>
       <p>{t("clean-intro")}</p>
+      <SafetyNote />
     </div>
     <div class="page-actions actions-top">
       <button class="btn ghost" onclick={() => (app.view = "activity")} title={t("clean-activity-hint")}>
@@ -153,62 +160,7 @@
       <p class="muted small ellipsis mono">{clean.running.path}</p>
     </div>
   {:else if clean.last}
-    {@const r = clean.last}
-    <div class="card result" class:bad={r.failed > 0}>
-      <Icon name={r.failed ? "alert" : "check"} size={22} />
-      <div class="grow">
-        <strong>{t("clean-done-title", { size: formatSize(r.freed, loc) })}</strong>
-        <p class="muted small">
-          {t("clean-done-detail", { done: r.done, partial: r.partial, skipped: r.skipped, failed: r.failed })}
-          {#if r.cancelled}· {t("clean-was-cancelled")}{/if}
-        </p>
-        {#if r.problems.length}
-          <details>
-            <summary class="small">{t("clean-problems", { count: r.problems.length })}</summary>
-            <ul class="problems">
-              {#each r.problems.slice(0, 20) as p (p.path)}
-                <li class="small"><span class="mono ellipsis" title={p.path}>{p.path}</span><span class="muted">{t(`clean-status-${p.status}`)}{p.reason ? ` · ${reasonText(p.reason)}` : ""}</span></li>
-              {/each}
-            </ul>
-          </details>
-        {/if}
-        {#if groups.length}
-          <div class="left" data-testid="clean-leftovers">
-            <h3 class="small">{t("clean-left-title")}</h3>
-            {#each groups as g (g.cause)}
-              {@const title = leftoverTitle(g)}
-              {@const action = leftoverAction(g)}
-              <div class="left-group {g.cause}" data-left-cause={g.cause}>
-                <div class="row">
-                  <Icon name={g.cause === "in-use" ? "lock" : g.cause === "needs-admin" ? "shield" : "info"} size={16} />
-                  <strong class="grow">{t(title.key, title.args)}</strong>
-                  <span class="muted small num">{t("clean-left-size", { size: formatSize(g.bytes, loc) })}</span>
-                </div>
-                <p class="muted small">{t(leftoverBody(g))}</p>
-                <ul class="left-items">
-                  {#each g.items.slice(0, SHOWN) as i (i.path)}
-                    <li class="small">
-                      <span class="mono ellipsis" title={i.path}>{i.path}</span>
-                      <span class="muted">{i.programs.length ? i.programs.join(", ") : i.reason ? reasonText(i.reason) : ""}</span>
-                    </li>
-                  {/each}
-                </ul>
-                {#if g.items.length > SHOWN}
-                  <p class="muted small">{t("clean-left-more", { count: g.items.length - SHOWN })}</p>
-                {/if}
-                {#if action}
-                  <button class="btn small" class:primary={action === "admin"} data-left-action={action} onclick={() => act(action)}>
-                    <Icon name={action === "admin" ? "shield" : "refresh"} size={14} />{t(ACTION_KEYS[action])}
-                  </button>
-                {/if}
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </div>
-      <button class="btn" onclick={() => (app.view = "activity")}><Icon name="undo" size={16} />{t("clean-undo")}</button>
-      <button class="btn ghost icon" onclick={() => (clean.last = null)} aria-label={t("clean-dismiss")}><Icon name="x" size={16} /></button>
-    </div>
+    <RunResult result={clean.last} mode={clean.lastMode} onaction={act} ondismiss={() => (clean.last = null)} />
   {/if}
 
   {#if !clean.scan}
@@ -225,6 +177,11 @@
       {/if}
       <StatCard label={t("stat-checked")} value={formatDate(clean.scan.at, loc)} unit={t("stat-rules", { count: visible.length })} />
     </div>
+    {#if !expert() && packs.length}
+      <button class="btn ghost small details-toggle" data-clean-details aria-expanded={showDetails} onclick={() => (showDetails = !showDetails)}>
+        <Icon name="chevron" size={14} />{showDetails ? t("clean-hide-details") : t("clean-show-details")}
+      </button>
+    {/if}
 
     {#each packs as p (p.id)}
       <div class="panel pack">
@@ -274,12 +231,14 @@
               <div class="size">
                 <b class="num">{formatSize(r.bytes, loc)}</b>
                 <span class="muted small">{t("clean-files", { count: formatCount(r.files, loc) })}</span>
-                <button class="btn ghost small" onclick={() => showItems(r)}>{preview?.ruleId === r.ruleId ? t("clean-hide") : t("clean-preview")}</button>
+                {#if details}
+                  <button class="btn ghost small" onclick={() => showItems(r)}>{preview?.ruleId === r.ruleId ? t("clean-hide") : t("clean-preview")}</button>
+                {/if}
               </div>
             </li>
           {/each}
         </ul>
-        {#if p.id === "browsers"}
+        {#if p.id === "browsers" && details}
           <BrowserSites />
         {/if}
       </div>
@@ -333,17 +292,26 @@
 </section>
 
 {#if clean.confirm}
-  <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (clean.confirm = null)} onkeydown={(e) => e.key === "Escape" && (clean.confirm = null)}>
-    <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="clean-confirm-title">
-      <h2 id="clean-confirm-title"><Icon name="clean" size={20} />{t("clean-confirm-title")}</h2>
-      <p>{t("clean-confirm-body", { size: formatSize(bytesOf(clean.confirm), loc), rules: confirmRules.length })}</p>
-      <ul class="confirm-list">
-        {#each confirmRules as r (r.ruleId)}
-          <li><span class="tag {levelOf(r)}">{levelLabel(r)}</span><span class="ellipsis">{r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
-        {/each}
-      </ul>
-      <ConfirmTotals summary={confirmSummary} bind:ack />
-      <p class="muted small">{permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}</p>
+  <RemoveConfirm
+    title={t("clean-confirm-title")}
+    icon="clean"
+    mode={permanent && canPermanent ? "permanent" : "quarantine"}
+    bytes={bytesOf(clean.confirm)}
+    note={t("clean-confirm-note")}
+    confirm={permanent && canPermanent ? t("clean-confirm-permanent") : t("clean-confirm-go")}
+    disabled={(permanent && canPermanent && typed !== "DELETE") || (needsAck(confirmSummary) && !ack)}
+    testid="clean"
+    onconfirm={go}
+    oncancel={() => (clean.confirm = null)}
+  >
+    <p>{t("clean-confirm-body", { size: formatSize(bytesOf(clean.confirm), loc), rules: confirmRules.length })}</p>
+    <ul class="confirm-list">
+      {#each confirmRules as r (r.ruleId)}
+        <li><span class="tag {levelOf(r)}">{levelLabel(r)}</span><span class="ellipsis">{r.app}</span><span class="num">{formatSize(r.bytes, loc)}</span></li>
+      {/each}
+    </ul>
+    <ConfirmTotals summary={confirmSummary} bind:ack />
+    {#snippet extra()}
       {#if canPermanent}
         <label class="perm">
           <input type="checkbox" bind:checked={permanent} />
@@ -356,14 +324,8 @@
           </label>
         {/if}
       {/if}
-      <footer>
-        <button class="btn" onclick={() => (clean.confirm = null)}>{t("delete-cancel")}</button>
-        <button class="btn danger" data-confirm-go onclick={go} disabled={(permanent && canPermanent && typed !== "DELETE") || (needsAck(confirmSummary) && !ack)} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
-          <Icon name="clean" size={16} />{permanent && canPermanent ? t("clean-confirm-permanent") : t("clean-confirm-go")}
-        </button>
-      </footer>
-    </div>
-  </div>
+    {/snippet}
+  </RemoveConfirm>
 {/if}
 
 {#if clean.adminConfirm && adminGroup}
@@ -409,9 +371,7 @@
     align-items: center;
   }
   .running,
-  .result,
-  .loading,
-  .summary {
+  .loading {
     padding: 14px 16px;
   }
   .running .bar {
@@ -421,72 +381,17 @@
   .running p {
     margin: 0;
   }
-  .result {
-    display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    border-left: 4px solid var(--risk-safe);
-  }
-  .result.bad {
-    border-left-color: var(--danger);
-  }
-  .result p {
-    margin: 2px 0 0;
-  }
-  .problems {
-    margin: 6px 0 0;
-    padding: 0;
-    list-style: none;
-    max-height: 180px;
-    overflow: auto;
-  }
-  .problems li {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
-  }
   .loading {
     display: flex;
     gap: 10px;
     align-items: center;
     color: var(--text-muted);
   }
-  .left {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 10px;
+  .details-toggle {
+    align-self: flex-start;
   }
-  .left h3 {
-    margin: 0;
-    font-weight: 600;
-  }
-  .left-group {
-    padding: 8px 10px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-2);
-    border-left: 3px solid var(--border);
-  }
-  .left-group.in-use {
-    border-left-color: var(--risk-caution);
-  }
-  .left-group.needs-admin {
-    border-left-color: var(--accent);
-  }
-  .left-group p {
-    margin: 4px 0;
-  }
-  .left-items {
-    margin: 4px 0 6px;
-    padding: 0;
-    list-style: none;
-    max-height: 140px;
-    overflow: auto;
-  }
-  .left-items li {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 8px;
+  .details-toggle[aria-expanded="true"] :global(svg) {
+    transform: rotate(90deg);
   }
   .tag.admin {
     display: inline-flex;

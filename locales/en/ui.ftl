@@ -5,8 +5,8 @@
 
 stat-free = Free right now
 stat-of = of { $total }
-stat-safe = Safe to remove
-stat-review = Needs review
+stat-safe = Safe
+stat-review = Caution
 stat-items = { $count ->
     [one] 1 item
    *[other] { $count } items
@@ -44,7 +44,7 @@ explorer-lens-folders = Folders
 explorer-mapped = { $size } mapped
 explorer-color-type = File type
 explorer-color-cleanup = Cleanup
-legend-safe = Safe to clear
+legend-safe = Safe
 explorer-idle = Click a tile or a row to select it · double-click to open a folder
 details-show = Show details
 details-hide = Hide details

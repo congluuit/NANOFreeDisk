@@ -191,7 +191,13 @@ fn check(app: &AppHandle) {
     if let Ok(json) = serde_json::to_string(&last) {
         let _ = std::fs::write(&path, json);
     }
-    for a in alerts {
+    // the low disk space alert (docs/SCHEDULE.md), when on, owns low space: one
+    // notification per full drive, not two
+    let own_low_space = super::schedule::low_space_on(app);
+    for a in alerts
+        .into_iter()
+        .filter(|a| !(own_low_space && a.kind == AlertKind::LowSpace))
+    {
         let _ = app
             .notification()
             .builder()

@@ -16,6 +16,7 @@
   } from "../theme";
   import Icon from "../components/Icon.svelte";
   import { currentOs, hasFeature } from "../platform";
+  import ScheduleSettings from "../schedule/ScheduleSettings.svelte";
 
   // macOS has no Explorer menu, Monitor or Drive health
   const os = $derived(currentOs(app.info?.os));
@@ -271,6 +272,7 @@
         </button>
       {/each}
     </div>
+    <button class="btn ghost small welcome-again" data-welcome-again onclick={() => (app.settings.welcomed = false)}>{t("settings-welcome-again")}</button>
   </div>
 
   {#if hasFeature(os, "shell-menu")}
@@ -339,6 +341,8 @@
     <p class="muted small">{t("settings-health-alerts-note")}</p>
   </div>
   {/if}
+
+  <ScheduleSettings />
 
   <div class="block panel" data-settings="devcache">
     <h2>{t("settings-devcache")}</h2>

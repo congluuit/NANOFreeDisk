@@ -1,7 +1,7 @@
 <script lang="ts">
   // What a confirmation repeats from the selection bar: count and size per risk
-  // level, what is likely skipped (and not counted), and — when 🟡 Caution or
-  // 🟠 Advanced items are included — a tick the user must give before going on.
+  // level, what is likely skipped (and not counted), and, when Caution or Advanced
+  // items are included, a tick the user must give before going on.
   import { formatCount, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
   import { needsAck, type SelSummary } from "../selection";

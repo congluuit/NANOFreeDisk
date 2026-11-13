@@ -1,8 +1,8 @@
-# Monitor — Disk Activity (docs/PHASE6_MONITOR.md). Read-only: nothing here ends
+# Monitor, Disk Activity (docs/PHASE6_MONITOR.md). Read-only: nothing here ends
 # or changes a process.
 
 mon-title = Disk activity
-mon-subtitle = What is reading and writing your disks right now, file by file when detail is on. Read-only — nothing is stopped or changed.
+mon-subtitle = What is reading and writing your disks right now, file by file when detail is on. Read-only: nothing is stopped or changed.
 mon-tab-activity = Live
 mon-tab-history = 24 hours
 mon-tab-who = Who touched this?

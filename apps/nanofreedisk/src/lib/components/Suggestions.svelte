@@ -1,10 +1,10 @@
 <script lang="ts">
   // Analyze → Recommendations: right after a scan, what can be freed and what must
   // stay, grouped the way a person thinks about it ("82 GB of AI agent worktrees in
-  // NANOFreeDisk\.claude", "35 GB of Rust build output in 12 folders", "Windows —
+  // NANOFreeDisk\.claude", "35 GB of Rust build output in 12 folders", "Windows:
   // keep"), each with what happens if it goes and what is not touched. Ticked groups
   // are cleaned through `advice_clean` (rule walk / quarantine / git / Recycle Bin);
-  // 🟢 groups are ticked for the user, 🟡 need an explicit tick and an acknowledgement,
+  // Safe groups are ticked for the user, Caution ones need an explicit tick and an acknowledgement,
   // what must stay (conversation history, Windows…) never gets a checkbox.
   import { api } from "../api";
   import { SECTIONS, actionTarget, bi, blockedKey, sections, selItems, titleOf, type Section } from "../advice";

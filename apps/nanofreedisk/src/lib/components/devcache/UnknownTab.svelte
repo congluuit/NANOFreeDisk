@@ -1,7 +1,7 @@
 <script lang="ts">
-  // DevCache → Unknown (PLAN §4.3): cache-like folders no rule knows yet. Always 🟡
-  // "unverified", shown with their size and why they look like a cache; never cleaned
-  // — the user can open them or propose a rule (pre-filled GitHub issue, the folder
+  // DevCache → Unknown (PLAN §4.3): cache-like folders no rule knows yet. Always Caution
+  // ("unverified"), shown with their size and why they look like a cache; never
+  // cleaned: the user can open them or propose a rule (pre-filled GitHub issue, the folder
   // written as a variable so no user name leaves the machine).
   import { formatCount, formatDate, formatSize } from "../../format";
   import { intlLocale, t } from "../../i18n.svelte";
@@ -41,7 +41,7 @@
               <strong>{f.name}</strong>
               <span class="muted dc-small mono ellipsis" title={f.path}>{f.path}</span>
             </div>
-            <p class="dc-small muted">{t("dev-unknown-why", { signals: f.signals.map(why).join(", ") })} · {t("dev-last-write", { date: f.newest ? formatDate(f.newest, loc) : "—" })}</p>
+            <p class="dc-small muted">{t("dev-unknown-why", { signals: f.signals.map(why).join(", ") })} · {t("dev-last-write", { date: f.newest ? formatDate(f.newest, loc) : "-" })}</p>
           </div>
           <div class="dc-size">
             <b class="num">{formatSize(f.bytes, loc)}{f.truncated ? "+" : ""}</b>

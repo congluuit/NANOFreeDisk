@@ -2,8 +2,8 @@
   // Tidy up (PLAN §13 A3): empty folder trees (folders holding only what Windows or
   // macOS made on their own count as empty), empty files outside program folders and
   // shortcuts whose target is gone. Picked items go to the quarantine through the
-  // SafetyGate (restorable from the Activity log for 7 days); broken junctions are
-  // listed only, for Expert mode (links are removed in Explorer).
+  // SafetyGate (restorable from Cleanup history for 7 days) in both modes; broken
+  // junctions are listed only, for Expert mode (links are removed in Explorer).
   import { api } from "../api";
   import { itemMenu } from "../actions";
   import { formatCount } from "../format";
@@ -14,7 +14,9 @@
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
+  import SafetyNote from "../components/SafetyNote.svelte";
   import StatCard from "../components/StatCard.svelte";
+  import { destinationFor, removeKeys } from "../clean/destination";
   import type { SelItem } from "../selection";
   import type { EmptyRow, EmptyRows, Located, ShortcutRow, ShortcutRows, ZeroRows } from "../types";
 
@@ -29,6 +31,7 @@
   const rootId = $derived(app.summary?.rootId ?? 0);
   const system = $derived(app.volumes.find((v) => v.system && v.ready));
   let page = $state<HTMLElement | null>(null);
+  const dest = $derived(destinationFor("tidy", expert()));
   // empty folders, empty files and broken shortcuts; broken junctions are listed only
   // (removed in Explorer), so Select all never picks them
   const selItems = $derived<SelItem[]>([
@@ -78,7 +81,6 @@
     const ok = new Set(selItems.map((i) => i.id));
     askDelete(
       selected.filter((id) => ok.has(String(id))),
-      "quarantine",
       "tidy",
     );
   }
@@ -117,8 +119,8 @@
       <div>
         <h1>{t("tidy-title")}</h1>
         <p>{t("tidy-intro")}</p>
+        <SafetyNote mode={dest} />
       </div>
-      <span class="tag safe note"><Icon name="shield" size={13} />{t("tidy-quarantine-note")}</span>
     </header>
 
     <div class="stats">
@@ -212,7 +214,7 @@
       primary
       noLevels
       sticky={false}
-      action={{ label: (count, size) => t("sel-quarantine-n", { count, size }), hint: t("tidy-quarantine-hint"), testid: "tidy", run: quarantine }}
+      action={{ label: (count, size) => t(removeKeys(dest).bar, { count, size }), hint: t("tidy-quarantine-hint"), testid: "tidy", run: quarantine }}
     />
   </section>
 {/if}
@@ -262,10 +264,6 @@
   .tidy > .page-head,
   .tidy > .stats {
     margin-bottom: 0;
-  }
-  .note {
-    flex: none;
-    font-weight: 500;
   }
   .tidy > .hint {
     margin: -4px 0 0;

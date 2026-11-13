@@ -1,8 +1,9 @@
 <script lang="ts">
-  // Details panel: "Can I delete this?" for the focused entry — its verdict, what
+  // Details panel: "Can I delete this?" for the focused entry: its verdict, what
   // happens if it goes, what is not touched, what it holds by verdict and the right
-  // action (clean by rule / quarantine / git, the official command, the guide, or the
-  // Recycle Bin for what nothing knows about). Kept items get no delete button.
+  // action (clean by rule / quarantine / git, the official command, the guide, or a
+  // plain delete for what nothing knows about: the quarantine in Simple mode, the
+  // Recycle Bin in Expert mode). Kept items get no delete button.
   import { api } from "../api";
   import { actionTarget, bi, blockedKey, hardKey, PROTECTED_TOKEN, segments, titleOf, VERDICT_TOKEN } from "../advice";
   import { advice } from "../advice/state.svelte";
@@ -190,7 +191,7 @@
         <button class="btn" onclick={follow} title={t(`advice-action-hint-${unit.action}`)}><Icon name={unit.action === "store" ? "devcache" : "duplicates"} size={16} />{t(`advice-action-${unit.action}`)}</button>
       {/if}
       {#if unit && unit.action === "recycle-bin" && isRoot && actionable}
-        <button class="btn danger-outline" data-advice-action="recycle-bin" onclick={() => askDelete([detail.id])} title={t("advice-action-hint-recycle-bin")}><Icon name="trash" size={16} />{t("advice-action-recycle-bin")}</button>
+        <button class="btn danger-outline" data-advice-action="recycle-bin" onclick={() => askDelete([detail.id])} title={expert() ? t("advice-action-hint-recycle-bin") : t("action-remove-hint")}><Icon name="trash" size={16} />{expert() ? t("advice-action-recycle-bin") : t("action-remove")}</button>
       {/if}
       {#if canOverride}
         <button class="btn danger-outline" data-advice-action="override" onclick={askOverride} title={t("advice-override-hint")}><Icon name="trash" size={16} />{t("advice-override")}</button>

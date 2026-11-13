@@ -2,7 +2,7 @@
 
 nav-hardware = Hardware
 hw-title = Hardware
-hw-subtitle = Your machine's parts, live sensors and running tasks — read-only, no driver needed.
+hw-subtitle = Your machine's parts, live sensors and running tasks. Read-only, no driver needed.
 hw-tab-overview = Overview
 hw-tab-sensors = Sensors
 hw-tab-tasks = Tasks
@@ -14,7 +14,7 @@ hw-copied = Hardware summary copied to the clipboard.
 hw-export-json = Export JSON
 hw-export-title = Save the hardware inventory
 hw-exported = Inventory saved to { $path }.
-hw-text-header = NANOFreeDisk hardware summary — { $date }
+hw-text-header = NANOFreeDisk hardware summary, { $date }
 hw-privacy = Serial numbers, MAC and IP addresses are never collected, so the summary is safe to share.
 hw-none = Nothing detected.
 
@@ -100,7 +100,7 @@ hw-net-wifi = Wi-Fi
 hw-net-ethernet = Ethernet
 hw-net-status = Status
 hw-net-up = Connected
-hw-net-up-speed = Connected — { $mbps } Mbps
+hw-net-up-speed = Connected, { $mbps } Mbps
 hw-net-down = Not connected
 hw-net-alias = Windows name
 
@@ -136,7 +136,7 @@ hw-kind-level = Levels
 hw-kind-energy = Capacity
 hw-kind-data = Data
 hw-kind-throughput = Throughput
-hw-note-needs-pawnio = Needs Advanced sensors (PawnIO) — not available without it.
+hw-note-needs-pawnio = Needs Advanced sensors (PawnIO). Not available without it.
 hw-note-gpu-asleep = The GPU is asleep to save power; its values appear when it wakes up.
 hw-note-not-reported = The driver does not report this.
 
@@ -190,7 +190,7 @@ home-temp-cpu = CPU
 home-temp-gpu = GPU
 home-temp-disk = Hottest disk
 home-temp-load = load { $percent } %
-home-temp-why-needs-pawnio = needs Advanced sensors — click to set up
+home-temp-why-needs-pawnio = needs Advanced sensors, click to set up
 home-temp-why-gpu-asleep = GPU asleep (saving power)
 home-temp-why-not-reported = not reported
 home-temp-why-none = not available
@@ -224,7 +224,7 @@ task-col-path = Path
 task-menu-close = Close app
 task-menu-kill = End process…
 task-menu-kill-tree = End process tree…
-task-menu-blocked = Windows needs this process — it cannot be ended here
+task-menu-blocked = Windows needs this process. It cannot be ended here
 task-menu-reveal = Open file location
 task-menu-copy-path = Copy path
 task-menu-copy-cmd = Copy command line
@@ -247,7 +247,7 @@ task-what-kill-tree = The process and all the processes it started stop immediat
 task-warn-service-host = This process hosts Windows services. Ending it stops all of them; Windows may restart some, others stay off until you restart.
 task-warn-explorer = This is Windows Explorer: the taskbar, Start menu and desktop disappear until it starts again. Restarting it from Task Manager is usually the better choice.
 task-warn-windows-component = This program is part of Windows. Ending it can make Windows unstable until you restart.
-task-ack = I understand — end it anyway
+task-ack = I understand, end it anyway
 task-no-undo = This cannot be undone. The action is recorded in the activity log.
 task-cancel = Cancel
 task-working = Working…
@@ -260,7 +260,7 @@ task-ended = Ended { $count ->
     [one] { $name }
    *[other] { $count } processes
 }.
-task-not-ended = Not ended: { $name } — { $reason }
+task-not-ended = Not ended: { $name } ({ $reason })
 task-block-kernel = This is the Windows kernel.
 task-block-system-core = Windows cannot run without this process.
 task-block-critical = Windows marks this process as critical: ending it would crash the system.
@@ -278,11 +278,11 @@ hw-adv-not-installed = CPU temperatures, power and voltages need PawnIO, the fre
 hw-adv-not-running = PawnIO is installed but its driver is not running. If Memory Integrity blocks it, Windows Security shows why.
 hw-adv-no-module = PawnIO is installed; the official module for this CPU (IntelMSR or AMDFamily17) still has to be downloaded.
 hw-adv-setup = Set up Advanced sensors
-hw-adv-setup-hint = Downloads PawnIO's official installer and the module for this CPU from its author's GitHub releases, checks their fingerprints, then installs PawnIO — Windows asks for administrator rights. Only reads sensors; nothing is ever written to the hardware.
+hw-adv-setup-hint = Downloads PawnIO's official installer and the module for this CPU from its author's GitHub releases, checks their fingerprints, then installs PawnIO. Windows asks for administrator rights. Only reads sensors; nothing is ever written to the hardware.
 hw-adv-setup-module-hint = Downloads the official module for this CPU from PawnIO's GitHub releases and checks its fingerprint.
 hw-adv-setting-up = Setting up…
 hw-adv-about = About PawnIO
-hw-adv-about-hint = pawnio.eu — the free, signed driver also used by LibreHardwareMonitor and Fan Control
+hw-adv-about-hint = pawnio.eu: the free, signed driver also used by LibreHardwareMonitor and Fan Control
 hw-adv-restart = PawnIO is installed. Restart Windows, then turn on Advanced sensors here.
 hw-adv-setup-declined = PawnIO was not installed: administrator rights were not granted.
 hw-adv-download-failed = Could not download PawnIO: { $message }
@@ -343,8 +343,8 @@ hw-24h-empty = Nothing recorded yet. Temperatures are logged while this view is 
 hw-24h-ago = 24 h ago
 hw-24h-now = now
 
-health-hot-cpu = The processor ({ $folder }) reached { $value } °C in the last 24 hours — check its cooling.
-health-hot-gpu = The graphics card ({ $folder }) reached { $value } °C in the last 24 hours — check its cooling.
+health-hot-cpu = The processor ({ $folder }) reached { $value } °C in the last 24 hours. Check its cooling.
+health-hot-gpu = The graphics card ({ $folder }) reached { $value } °C in the last 24 hours. Check its cooling.
 health-hot-disk = { $folder } reached { $value } °C in the last 24 hours; long periods that hot shorten a drive's life.
 health-warm-cpu = The processor ({ $folder }) ran warm, up to { $value } °C, in the last 24 hours.
 health-warm-gpu = The graphics card ({ $folder }) ran warm, up to { $value } °C, in the last 24 hours.

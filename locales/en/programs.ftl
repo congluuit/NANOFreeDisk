@@ -4,7 +4,7 @@
 nav-programs = Programs
 pg-title = Programs
 pg-intro = Uninstall programs with their own uninstaller, then remove what they leave behind. Software junk lists the caches, logs and crash dumps installed programs pile up.
-pg-safety-note = Nothing is gone for good: files go to the quarantine, registry keys to a .reg backup — undo from the Activity log.
+pg-safety-note = Nothing is gone for good: files go to the quarantine and registry keys to a .reg backup. Undo from Cleanup history.
 pg-tab-installed = Installed
 pg-tab-junk = Software junk
 
@@ -115,14 +115,14 @@ pg-left-group-services = Services (information)
 pg-left-pick = Select
 pg-left-blocked = Kept
 pg-left-also = the name also fits { $name }
-pg-left-large = large: look inside first — it may hold your own files (saves, libraries, chats)
+pg-left-large = large: look inside first. It may hold your own files (saves, libraries, chats)
 pg-left-machine-hint = For every user: removed with administrator rights.
 pg-left-admin = { $count ->
     [one] 1 item is
    *[other] { $count } items are
 } for every user: Windows asks for administrator rights once.
 pg-left-remove = Remove { $count } ({ $size })
-pg-left-remove-hint = Files go to the quarantine (7 days), registry keys to a .reg backup; undo from the Activity log.
+pg-left-remove-hint = Files go to the quarantine (7 days), registry keys to a .reg backup; undo from Cleanup history.
 pg-left-nothing-picked = Nothing is ticked.
 pg-left-done = Leftovers removed: { $done } items, { $size } freed.
 pg-admin-declined = { $count } all-users items were kept: the administrator prompt was declined.
@@ -168,13 +168,13 @@ pg-junk-impact-log = Diagnostic logs; some apps keep useful history in them.
 pg-junk-impact-temp = Temporary files; an app that is running may still use some.
 pg-junk-impact-update = The app keeps the newest version; older ones only allow rolling back.
 pg-junk-clean = Clean { $count } ({ $size })
-pg-junk-clean-hint = To the quarantine for 7 days; undo from the Activity log.
+pg-junk-clean-hint = To the quarantine for 7 days; undo from Cleanup history.
 pg-junk-confirm-title = Clean the software junk?
 pg-junk-confirm-body = The ticked items go to the quarantine. Close the programs that use them first; files in use are skipped.
 pg-junk-confirm-go = Clean
 pg-junk-done = Software junk cleaned: { $done } items, { $size } freed.
 
-# Activity log and reasons
+# Cleanup history and reasons
 activity-kind-uninstall = Leftovers of an uninstalled program
 activity-kind-software-junk = Software junk cleaned
 activity-mode-registry = registry (.reg backup)

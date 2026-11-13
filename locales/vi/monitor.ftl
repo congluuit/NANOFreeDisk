@@ -1,8 +1,8 @@
-# Monitor — Hoạt động ổ đĩa (docs/PHASE6_MONITOR.md). Chỉ đọc: không có gì ở đây
+# Monitor, Hoạt động ổ đĩa (docs/PHASE6_MONITOR.md). Chỉ đọc: không có gì ở đây
 # kết thúc hay thay đổi một tiến trình.
 
 mon-title = Hoạt động ổ đĩa
-mon-subtitle = Cái gì đang đọc và ghi ổ đĩa ngay lúc này, tới từng tệp khi bật chi tiết. Chỉ đọc — không dừng hay thay đổi gì.
+mon-subtitle = Cái gì đang đọc và ghi ổ đĩa ngay lúc này, tới từng tệp khi bật chi tiết. Chỉ đọc: không dừng hay thay đổi gì.
 mon-tab-activity = Trực tiếp
 mon-tab-history = 24 giờ
 mon-tab-who = Ai đã chạm vào đây?

@@ -1,7 +1,8 @@
 <script lang="ts">
   // Old & Large (PLAN §13 A2): very large files, large files untouched for a long
   // time and old installers in Downloads. The user picks; deleting goes through the
-  // usual Recycle Bin dialog and its safety checks.
+  // shared delete dialog and its safety checks (the quarantine in Simple mode, the
+  // Recycle Bin in Expert mode, see clean/destination.ts).
   import { api } from "../api";
   import { itemMenu } from "../actions";
   import { nfdScan, sizeFlag } from "../cli";
@@ -12,6 +13,8 @@
   import ContextMenu, { type MenuItem } from "../components/ContextMenu.svelte";
   import Icon from "../components/Icon.svelte";
   import ItemTable from "../components/ItemTable.svelte";
+  import SafetyNote from "../components/SafetyNote.svelte";
+  import { destinationFor, removeKeys } from "../clean/destination";
   import SelectionBar from "../components/SelectionBar.svelte";
   import type { SelItem } from "../selection";
   import type { Located, OldLargeRows, SearchRows } from "../types";
@@ -38,6 +41,7 @@
   const scope = $derived(onlyFolder ? app.current : rootId);
   const rows = $derived<SearchRows | null>(data ? data[list] : null);
   let page = $state<HTMLElement | null>(null);
+  const dest = $derived(destinationFor("manual", expert()));
   const asItem = (r: Located): SelItem => ({ id: String(r.id), bytes: r.onDisk, files: r.kind === "dir" ? r.files : 1 });
   /** The shown list (Select all, Ctrl+A) and every list (totals: a file can be in two). */
   const listItems = $derived((rows?.rows ?? []).map(asItem));
@@ -98,6 +102,7 @@
       <div>
         <h1>{t("ol-title")}</h1>
         <p>{t("ol-intro")}</p>
+        <SafetyNote mode={dest} />
       </div>
       <div class="page-actions">
         {#if app.current !== rootId}
@@ -117,7 +122,7 @@
         {@const r = data?.[l.id]}
         <button role="tab" class="tab card" class:on={list === l.id} aria-selected={list === l.id} onclick={() => (list = l.id)} title={t(`ol-${l.id}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })}>
           <span class="label"><Icon name={l.icon} size={15} />{t(`ol-${l.id}-title`)}</span>
-          <span class="value"><b>{r ? formatSize(r.matchedOnDisk, loc) : "—"}</b><span class="muted">{r ? t("ol-files", { count: r.matched }) : ""}</span></span>
+          <span class="value"><b>{r ? formatSize(r.matchedOnDisk, loc) : "-"}</b><span class="muted">{r ? t("ol-files", { count: r.matched }) : ""}</span></span>
         </button>
       {/each}
     </div>
@@ -189,7 +194,7 @@
       primary
       noLevels
       sticky={false}
-      action={{ label: (count, size) => t("sel-recycle-n", { count, size }), icon: "trash", hint: t("action-recycle-hint"), testid: "old-large", run: () => askDelete(selected) }}
+      action={{ label: (count, size) => t(removeKeys(dest).bar, { count, size }), icon: "trash", hint: t(removeKeys(dest).hint), testid: "old-large", run: () => askDelete(selected) }}
     />
   </section>
 {/if}

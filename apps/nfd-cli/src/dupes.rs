@@ -18,6 +18,10 @@ use nfd_dupes::cache::HashCache;
 use nfd_dupes::hash::LiveSource;
 use nfd_dupes::keep::{KeepStrategy, auto_select, auto_select_folders};
 use nfd_dupes::plan::{Action, Verifier, link_selection, plan, plan_folders};
+use nfd_dupes::similar::cache::ImageCache;
+use nfd_dupes::similar::{
+    Preset, SIMILAR_MIN_SIZE, SimilarOptions, SimilarPhase, SimilarProgress, SimilarReport,
+};
 use nfd_dupes::{DupeOptions, DupeReport, Phase, Progress, flag_text, write_csv};
 use nfd_platform::Platform;
 
@@ -103,6 +107,17 @@ pub struct DupesArgs {
     /// Do not ask for confirmation.
     #[arg(long, requires = "apply")]
     yes: bool,
+
+    /// List photos that look alike (resized, compressed again by a chat app,
+    /// exported twice, slightly cropped) instead of identical files. List only:
+    /// look-alikes are never pre-selected, pick and remove them in the app.
+    /// Pictures from 10 KB unless --min-size is given.
+    #[arg(long, conflicts_with_all = ["folders", "csv", "paranoid", "apply"])]
+    similar: bool,
+
+    /// With --similar, how alike: strict, normal or loose.
+    #[arg(long, default_value = "strict", value_name = "LEVEL")]
+    similarity: Preset,
 }
 
 #[derive(clap::ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -118,6 +133,14 @@ fn parse_size_arg(s: &str) -> Result<u64, String> {
 }
 
 pub fn run(args: DupesArgs) -> anyhow::Result<ExitCode> {
+    if args.similar {
+        if args.action != DupeAction::List {
+            anyhow::bail!(
+                "--similar only lists look-alike photos: nothing is pre-selected, pick and remove them in the app"
+            );
+        }
+        return similar(&args);
+    }
     let report = search(&args)?;
     if args.action != DupeAction::List {
         return act(&args, &report);
@@ -319,6 +342,142 @@ fn act(args: &DupesArgs, report: &DupeReport) -> anyhow::Result<ExitCode> {
     Ok(crate::quarantine::exit_code(&op))
 }
 
+/// JSON schema id of `nfd dupes --similar --json`.
+const SIMILAR_SCHEMA: &str = "nanofreedisk.similar.v1";
+
+/// `--similar`: scan every path and list the look-alike photos.
+fn similar(args: &DupesArgs) -> anyhow::Result<ExitCode> {
+    let platform = nfd_platform::Native;
+    let resolve = platform.resolver();
+    let gate = SafetyGate::new(&resolve);
+    let mut trees = Vec::new();
+    for p in &args.paths {
+        trees.push(scan(p)?);
+    }
+    // the 1 MB default of identical files would leave out most chat photos
+    let min_size = if Some(args.min_size) == parse_size("1MB").ok() {
+        SIMILAR_MIN_SIZE
+    } else {
+        args.min_size
+    };
+    let opts = SimilarOptions {
+        min_size,
+        include_app_dirs: args.include_app_dirs,
+        threads: args.threads,
+        app_dir_paths: nfd_dupes::collect::default_app_dirs(&resolve),
+        cancel: None,
+    };
+    let mut history = if args.no_cache {
+        None
+    } else {
+        crate::diff::open_history(args.db.clone()).ok()
+    };
+    let bar = ProgressBar::new_spinner().with_style(
+        ProgressStyle::with_template("{spinner} {msg}  [{elapsed}]")
+            .unwrap_or_else(|_| ProgressStyle::default_spinner()),
+    );
+    bar.enable_steady_tick(Duration::from_millis(100));
+    let refs: Vec<&ScanTree> = trees.iter().collect();
+    let (report, _) = nfd_dupes::similar::find(
+        &refs,
+        &gate,
+        &opts,
+        args.similarity,
+        history.as_mut().map(|h| h as &mut dyn ImageCache),
+        &LiveSource,
+        &|p: &SimilarProgress| {
+            let what = match p.phase {
+                SimilarPhase::Collect => "looking for photos",
+                SimilarPhase::Hash => "reading photos",
+                SimilarPhase::Compare => "comparing photos",
+            };
+            bar.set_message(format!(
+                "{what} {}/{}",
+                format_count(p.done),
+                format_count(p.total)
+            ));
+        },
+    )?;
+    bar.finish_and_clear();
+    let stdout = io::stdout();
+    let mut out = BufWriter::new(stdout.lock());
+    let written = if args.json {
+        let mut v = serde_json::to_value(&report)?;
+        v["schema"] = SIMILAR_SCHEMA.into();
+        v["version"] = env!("CARGO_PKG_VERSION").into();
+        serde_json::to_writer_pretty(&mut out, &v)
+            .map_err(io::Error::from)
+            .and_then(|()| writeln!(out))
+    } else {
+        print_similar(&report, args.top, &mut out)
+    };
+    match written.and_then(|()| out.flush()) {
+        Err(e) if e.kind() != io::ErrorKind::BrokenPipe => Err(e).context("writing output"),
+        _ => Ok(ExitCode::SUCCESS),
+    }
+}
+
+fn print_similar(r: &SimilarReport, top: usize, out: &mut impl Write) -> io::Result<()> {
+    for g in r.groups.iter().take(top) {
+        writeln!(
+            out,
+            "\n#{:<4} {} look-alike photos, {} besides the best one",
+            g.id,
+            g.photos.len(),
+            format_size(g.extra)
+        )?;
+        for (i, p) in g.photos.iter().enumerate() {
+            let flags = flag_text(p.flags);
+            let mut notes = Vec::new();
+            if i > 0 {
+                notes.push(format!("{} bits apart", p.distance));
+            }
+            if p.identical_to.is_some() {
+                notes.push("identical copy".to_owned());
+            }
+            if !flags.is_empty() {
+                notes.push(flags);
+            }
+            let pixels = format!("{}x{}", p.width, p.height);
+            writeln!(
+                out,
+                "   {} {pixels:>11} {:>10}  {}  {}{}",
+                if i == 0 { "best" } else { "    " },
+                format_size(p.size),
+                date(p.mtime),
+                p.path.display(),
+                if notes.is_empty() {
+                    String::new()
+                } else {
+                    format!("  [{}]", notes.join(", "))
+                }
+            )?;
+        }
+    }
+    if r.groups.len() > top {
+        writeln!(
+            out,
+            "\n… {} more group(s) (--top N to list more)",
+            r.groups.len() - top
+        )?;
+    }
+    writeln!(
+        out,
+        "\n{} group(s) of look-alike photos ({}), {} besides the best ones. Compared {} photos ({} read, {} from the cache), {:.1} s.",
+        format_count(r.groups.len() as u64),
+        r.preset.as_str(),
+        format_size(r.extra_bytes),
+        format_count(r.images),
+        format_count(r.decoded),
+        format_count(r.cache_hits),
+        r.elapsed_ms as f64 / 1000.0
+    )?;
+    writeln!(
+        out,
+        "Similar is not identical: nothing is selected. Check each group and remove photos in the app."
+    )
+}
+
 fn date(ts: i64) -> String {
     let (y, m, d, h, mi, _) = nfd_core::exec::civil(ts);
     format!("{y:04}-{m:02}-{d:02} {h:02}:{mi:02}")
@@ -467,5 +626,44 @@ mod tests {
         assert!(lines[1].contains("\"D:/a,b.jpg\""));
         assert!(lines[2].contains("D:/link.jpg"));
         assert!(lines[3].ends_with("cloud-sync git"));
+    }
+
+    #[test]
+    fn similar_photos_are_listed_best_first_and_never_selected() {
+        use nfd_dupes::similar::{Photo, SimilarGroup};
+        let photo = |path: &str, w: u32, size: u64, distance: u32| Photo {
+            path: PathBuf::from(path),
+            links: Vec::new(),
+            size,
+            mtime: 1_700_000_000,
+            width: w,
+            height: w * 3 / 4,
+            volume: 1,
+            file_id: None,
+            flags: CopyFlags::default(),
+            distance,
+            identical_to: None,
+        };
+        let mut copy = photo("D:/Downloads/chat (1).jpg", 1280, 200_000, 12);
+        copy.identical_to = Some(PathBuf::from("D:/Downloads/chat.jpg"));
+        let report = SimilarReport {
+            groups: vec![SimilarGroup {
+                id: 1,
+                photos: vec![
+                    photo("D:/Pictures/IMG_1.jpg", 4000, 3_800_000, 0),
+                    photo("D:/Downloads/chat.jpg", 1280, 200_000, 12),
+                    copy,
+                ],
+                extra: 200_000,
+            }],
+            extra_bytes: 200_000,
+            ..SimilarReport::default()
+        };
+        let mut out = Vec::new();
+        print_similar(&report, 20, &mut out).expect("print");
+        let text = String::from_utf8(out).expect("utf8");
+        assert!(text.contains("best   4000x3000"), "{text}");
+        assert!(text.contains("12 bits apart, identical copy"), "{text}");
+        assert!(text.contains("nothing is selected"), "{text}");
     }
 }

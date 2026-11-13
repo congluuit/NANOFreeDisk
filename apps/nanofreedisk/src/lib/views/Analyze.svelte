@@ -25,6 +25,7 @@
   import ItemTable from "../components/ItemTable.svelte";
   import SelectionBar from "../components/SelectionBar.svelte";
   import type { SelItem } from "../selection";
+  import { destinationFor, removeKeys } from "../clean/destination";
   import Sunburst from "../components/Sunburst.svelte";
   import Treemap from "../components/Treemap.svelte";
   import TreeList from "../components/TreeList.svelte";
@@ -45,6 +46,13 @@
   let children = $state<Node[]>([]);
   /** Sizes of selected entries not in a list shown here (picked in the treemap). */
   let known = $state<Record<number, { onDisk: number; files: number }>>({});
+
+  /** Where a delete from here goes (the quarantine in Simple mode). */
+  const dest = $derived(destinationFor("manual", expert()));
+  // "What changed?" and "Unreadable" are Expert tabs: back to the map when they go
+  $effect(() => {
+    if (!expert() && (lens === "changes" || lens === "issues")) lens = "map";
+  });
 
   function setLens(l: Lens) {
     lens = l;
@@ -167,7 +175,7 @@
     <button class="btn primary" onclick={() => (app.view = "home")}>{t("nav-home")}</button>
   </div>
 {:else}
-  <section class="analyze" bind:this={section}>
+  <section class="analyze" bind:this={section} data-mode={expert() ? "expert" : "simple"}>
     <header class="page-head">
       <div class="title">
         <h1 class="ellipsis">{t("analyze-title", { name: s.root })}</h1>
@@ -258,7 +266,9 @@
           <button role="tab" data-lens="top" aria-selected={lens === "top"} onclick={() => setLens("top")}>{t("analyze-tab-top")}</button>
           <button role="tab" data-lens="ext" aria-selected={lens === "ext"} onclick={() => setLens("ext")}>{t("analyze-tab-ext")}</button>
           <button role="tab" data-lens="age" data-tab="age" aria-selected={lens === "age"} onclick={() => setLens("age")}>{t("analyze-tab-age")}</button>
-          <button role="tab" data-lens="changes" data-tab="changes" aria-selected={lens === "changes"} onclick={() => setLens("changes")}>{t("analyze-tab-changes")}</button>
+          {#if expert()}
+            <button role="tab" data-lens="changes" data-tab="changes" aria-selected={lens === "changes"} onclick={() => setLens("changes")}>{t("analyze-tab-changes")}</button>
+          {/if}
           {#if app.search}
             <button role="tab" data-lens="search" aria-selected={lens === "search"} onclick={() => setLens("search")}>
               {t("analyze-tab-search")}<span class="count">{formatCount(app.search.result.matched, loc)}</span>
@@ -384,7 +394,7 @@
           compact
           idle={t("explorer-idle")}
           sticky={false}
-          action={{ label: (count, size) => t("sel-recycle-n", { count, size }), icon: "trash", hint: t("action-recycle-hint"), testid: "analyze", run: () => askDelete(app.selected) }}
+          action={{ label: (count, size) => t(removeKeys(dest).bar, { count, size }), icon: "trash", hint: t(removeKeys(dest).hint), testid: "analyze", run: () => askDelete(app.selected) }}
         />
       </section>
 

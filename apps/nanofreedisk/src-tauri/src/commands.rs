@@ -16,6 +16,8 @@ pub mod diskhealth;
 pub mod dupes;
 pub mod programs;
 pub mod recyclebin;
+pub mod schedule;
+pub mod similar;
 pub mod startup;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};

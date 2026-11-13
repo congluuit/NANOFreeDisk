@@ -6,6 +6,7 @@ import { formatSize } from "../format";
 import { i18n, intlLocale, t } from "../i18n.svelte";
 import { app, fail, toast } from "../state.svelte";
 import { cleanApi } from "./api";
+import type { ShownMode } from "./destination";
 import type { CleanProgress, CleanScan, LeftoverCause, Level, OperationResult, RuleSummary } from "./types";
 
 export const clean = $state({
@@ -20,6 +21,8 @@ export const clean = $state({
   /** The last clean asked to delete permanently (the administrator dialog says what
    *  that means for its items). */
   lastPermanent: false,
+  /** Where the last run sent its items (the elevated run uses the Recycle Bin). */
+  lastMode: "quarantine" as ShownMode,
   /** The "clean with administrator rights" dialog is open. */
   adminConfirm: false,
 });
@@ -85,6 +88,7 @@ let progressOff: (() => void) | null = null;
 /** Clean `ruleIds` (already confirmed). */
 export async function runClean(ruleIds: string[], expert: boolean, permanent: boolean): Promise<void> {
   clean.lastPermanent = permanent;
+  clean.lastMode = permanent ? "permanent" : "quarantine";
   await cleanWith(() => cleanApi.run(ruleIds, expert, permanent));
 }
 
@@ -97,6 +101,7 @@ export function retryLeftovers(cause: "in-use" | "other"): Promise<void> {
 /** Clean the "needs administrator rights" leftovers through one Windows prompt
  *  (already confirmed in the dialog). */
 export function cleanAsAdmin(): Promise<void> {
+  clean.lastMode = clean.lastPermanent ? "permanent" : "recycle-bin";
   return cleanWith(() => cleanApi.elevated(), "needs-admin");
 }
 

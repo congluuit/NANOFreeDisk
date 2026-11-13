@@ -7,12 +7,13 @@ import type { MenuItem } from "./components/ContextMenu.svelte";
 import { minBytesFor } from "./treemap";
 import { intlLocale, t } from "./i18n.svelte";
 import { buildReport } from "./report";
-import { app, askDelete, fail, navigate, oldLargeOptions, select, toast } from "./state.svelte";
+import { app, askDelete, expert, fail, navigate, oldLargeOptions, select, toast } from "./state.svelte";
+import { destinationFor, removeKeys } from "./clean/destination";
 import { openDupesFor } from "./dupes/state.svelte";
 import { paletteVars, resolvePalette } from "./theme";
 
 export interface ItemMenuOptions {
-  /** Offer "Move to Recycle Bin" (default true). Read-only lists pass false. */
+  /** Offer "Remove" (or "Move to Recycle Bin" in Expert mode; default true). Read-only lists pass false. */
   recycle?: boolean;
   /** Ids the delete acts on when the item is part of a multi-selection. */
   selection?: number[];
@@ -66,8 +67,8 @@ export function itemMenu(id: number, opts: ItemMenuOptions = {}): MenuItem[] {
   if (opts.recycle !== false) {
     items.push({
       icon: "trash",
-      label: "action-recycle",
-      hint: t("action-recycle-hint"),
+      label: removeKeys(destinationFor("manual", expert())).one,
+      hint: t(removeKeys(destinationFor("manual", expert())).hint),
       danger: true,
       disabled: id === rootId,
       run: () => askDelete(opts.selection?.length ? opts.selection : [id]),

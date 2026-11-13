@@ -21,7 +21,8 @@
 //!
 //! The same file holds the [`journal`] of clean/delete operations (Activity log,
 //! restore, quarantine purge), and [`audit`] writes a plain-text copy of it, and the
-//! duplicate finder's content-hash cache ([`hashes`]).
+//! duplicate finder's content-hash cache ([`hashes`]) and picture-hash cache
+//! ([`image_hashes`]).
 
 use std::cmp::Reverse;
 use std::collections::{HashMap, HashSet};
@@ -37,12 +38,14 @@ use thiserror::Error;
 
 pub mod audit;
 pub mod hashes;
+pub mod image_hashes;
 pub mod journal;
 pub mod monitor;
 pub mod recycle_bin;
 pub mod uninstall;
 
 pub use hashes::{HashKey, HashRow};
+pub use image_hashes::ImageHashRow;
 pub use journal::{ItemRow, OperationRow, PurgeResult, QuarantineSummary, RestoreResult};
 
 /// Application identifier: the desktop app keeps its data in a folder of this name.
@@ -408,6 +411,7 @@ impl History {
         }
         journal::add_item_columns(&conn)?;
         conn.execute_batch(hashes::SCHEMA)?;
+        conn.execute_batch(image_hashes::SCHEMA)?;
         conn.execute_batch(monitor::SCHEMA)?;
         Ok(Self { conn })
     }
@@ -617,7 +621,8 @@ impl History {
     /// SQLite write failure.
     pub fn clear(&mut self) -> Result<()> {
         self.conn.execute_batch(
-            "DELETE FROM scans; DELETE FROM file_hashes; DELETE FROM monitor_minutes; VACUUM;",
+            "DELETE FROM scans; DELETE FROM file_hashes; DELETE FROM image_hashes;
+             DELETE FROM monitor_minutes; VACUUM;",
         )?;
         Ok(())
     }

@@ -105,6 +105,8 @@ export const dupes = $state({
   confirm: null as null | DupeAction,
   running: null as CleanProgress | null,
   last: null as OperationResult | null,
+  /** What the last removal did (where its copies went, for the result block). */
+  lastAction: null as DupeAction | null,
   thumbs: {} as Record<string, string | null>,
 });
 
@@ -360,6 +362,7 @@ export async function runDupes(action: DupeAction, only?: Selection[], folders =
   if (dupes.running || !sel.length) return;
   dupes.running = { done: 0, total: 0, freed: 0, path: "" };
   dupes.last = null;
+  dupes.lastAction = action;
   try {
     cleanOff ??= await on<CleanProgress>("clean-progress", (p) => {
       if (dupes.running) dupes.running = p;

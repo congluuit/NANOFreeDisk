@@ -239,7 +239,23 @@ function result(row: OperationRow, items: OperationItem[], carry: LeftoverGroup[
 export function mockDeleted(kind: string, items: { path: string; bytes: number; isDir: boolean }[], mode: OperationItem["mode"]): void {
   record(
     kind,
-    items.map((x, n) => ({ n, path: x.path, ruleId: null, mode, isDir: x.isDir, bytes: x.bytes, files: 1, freed: x.bytes, status: "done", reason: null, stored: null, restored: false, message: null, purged: false })),
+    items.map((x, n) => ({
+      n,
+      path: x.path,
+      ruleId: null,
+      mode,
+      isDir: x.isDir,
+      bytes: x.bytes,
+      files: 1,
+      freed: x.bytes,
+      status: "done",
+      reason: null,
+      // the quarantine holds it (Cleanup history can delete it for good)
+      stored: HELD_MODES.includes(mode) ? `${QUARANTINE_ROOT}\\${kind}\\${n}\\${x.path.split("\\").pop()}` : null,
+      restored: false,
+      message: null,
+      purged: false,
+    })),
   );
 }
 

@@ -10,7 +10,6 @@
     openStartupPath,
     refreshVolumes,
     saveSettingsSoon,
-    type View,
   } from "./lib/state.svelte";
   import { applyPalette, resolvePalette } from "./lib/theme";
   import { startThermalSync } from "./lib/hw/thermal.svelte";
@@ -34,55 +33,24 @@
   import Monitor from "./lib/views/Monitor.svelte";
   import { startMonitorSync } from "./lib/monitor/sync.svelte";
   import Health from "./lib/views/Health.svelte";
+  import QuickClean from "./lib/views/QuickClean.svelte";
+  import Tools from "./lib/views/Tools.svelte";
+  import Welcome from "./lib/components/Welcome.svelte";
+  import { quick } from "./lib/quick/state.svelte";
+  import { activeEntry, isGroup, sidebar, type NavGroup, type NavItem } from "./lib/nav";
   import { scheduleReminder } from "./lib/devcache/state.svelte";
   import { openStartupDupes } from "./lib/dupes/state.svelte";
   import { currentOs, hasFeature, modKey, viewAvailable } from "./lib/platform";
   import MacAccessHint from "./lib/components/MacAccessHint.svelte";
 
-  type NavItem = { id: View; icon: string; label: string };
-  type NavGroup = { group: string; icon: string; label: string; items: NavItem[] };
-
-  // Grouped by what the user wants to do; the cleanup history always stays last.
-  const NAV: (NavItem | NavGroup)[] = [
-    { id: "home", icon: "home", label: "nav-home" },
-    { id: "analyze", icon: "analyze", label: "nav-analyze" },
-    {
-      group: "free",
-      icon: "clean",
-      label: "nav-group-free",
-      items: [
-        { id: "clean", icon: "clean", label: "nav-clean" },
-        { id: "devcache", icon: "devcache", label: "nav-devcache" },
-        { id: "duplicates", icon: "duplicates", label: "nav-duplicates" },
-        { id: "programs", icon: "apps", label: "nav-programs" },
-        { id: "oldlarge", icon: "drive", label: "nav-oldlarge" },
-        { id: "tidy", icon: "folder", label: "nav-tidy" },
-      ],
-    },
-    {
-      group: "pc",
-      icon: "health",
-      label: "nav-group-pc",
-      items: [
-        { id: "health", icon: "health", label: "nav-health" },
-        { id: "hardware", icon: "cpu", label: "nav-hardware" },
-        { id: "monitor", icon: "monitor", label: "nav-monitor" },
-        { id: "startup", icon: "power", label: "nav-startup" },
-      ],
-    },
-  ];
-
-  const isGroup = (entry: NavItem | NavGroup): entry is NavGroup => "group" in entry;
-
-  // what this platform has (macOS: no Clean, Health, Hardware or Monitor)
+  // Simple mode: Home, Quick clean, the disk map and one Tools entry; Expert mode:
+  // every tool, grouped by what the user wants to do (src/lib/nav.ts). The cleanup
+  // history always stays last. What this platform lacks is left out (macOS: no
+  // Clean, Health, Hardware or Monitor).
   const os = $derived(currentOs(app.info?.os));
-  const nav = $derived(
-    NAV.flatMap((entry): (NavItem | NavGroup)[] => {
-      if (!isGroup(entry)) return viewAvailable(os, entry.id) ? [entry] : [];
-      const items = entry.items.filter((item) => viewAvailable(os, item.id));
-      return items.length ? [{ ...entry, items }] : [];
-    }),
-  );
+  const nav = $derived(sidebar(app.settings.mode, (v) => viewAvailable(os, v)));
+  /** The sidebar entry lit for the open view (a tool lights up Tools in Simple mode). */
+  const lit = $derived(activeEntry(app.settings.mode, app.view));
   $effect(() => {
     if (!viewAvailable(os, app.view)) app.view = "home";
   });
@@ -95,7 +63,7 @@
   $effect(() => {
     // jumping to a view (palette, Home buttons, shortcuts) reopens its group
     const view = app.view;
-    for (const entry of NAV) {
+    for (const entry of nav) {
       if (isGroup(entry) && entry.items.some((item) => item.id === view)) opened[entry.group] = true;
     }
   });
@@ -174,11 +142,11 @@
       <button
         class="nav"
         class:child
-        class:active={item.id === app.view}
+        class:active={item.id === lit}
         data-view={item.id}
         title={t(item.label)}
         onclick={() => (app.view = item.id)}
-        aria-current={item.id === app.view ? "page" : undefined}
+        aria-current={item.id === lit ? "page" : undefined}
       >
         <Icon name={item.icon} size={child ? 16 : 18} />
         <span class="ellipsis">{t(item.label)}</span>
@@ -270,13 +238,17 @@
       <Monitor />
     {:else if app.view === "health"}
       <Health />
+    {:else if app.view === "quick"}
+      <QuickClean />
+    {:else if app.view === "tools"}
+      <Tools />
     {:else}
       <Settings />
     {/if}
   </main>
 </div>
 
-{#if app.scanning}
+{#if app.scanning && !quick.ownsScan}
   <ScanProgress />
 {/if}
 {#if app.deleting}
@@ -284,6 +256,9 @@
 {/if}
 {#if app.palette}
   <CommandPalette />
+{/if}
+{#if app.settingsLoaded && !app.settings.welcomed}
+  <Welcome />
 {/if}
 
 <div class="toasts" aria-live="polite">

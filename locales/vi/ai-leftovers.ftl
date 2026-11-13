@@ -6,7 +6,7 @@ ail-intro = Những gì AI coding agent để lại theo từng phiên: worktree
 ail-rescan = Quét lại
 ail-rescan-hint = Tìm lại rác của AI (chỉ đọc: không xóa gì).
 ail-finished = Dọn phiên đã xong (chỉ an toàn) · { $size }
-ail-finished-hint = Chỉ chọn rác 🟢 của các phiên đã xong, rồi hỏi lại trước khi làm. Thư mục vào quarantine (khôi phục được trong 7 ngày); worktree được git gỡ, nhánh vẫn giữ nguyên.
+ail-finished-hint = Chỉ chọn rác An toàn của các phiên đã xong, rồi hỏi lại trước khi làm. Thư mục vào khu cách ly (khôi phục được trong 7 ngày); worktree được git gỡ, nhánh vẫn giữ nguyên.
 ail-loading = Đang tìm rác của AI… (chỉ đọc)
 ail-summary = { $sessions } phiên, { $projects } thư mục dự án · có thể dọn { $size }.
 ail-no-git = Không tìm thấy git: worktree và thư mục tên chung (test-results, screenshots…) không được đề xuất.
@@ -28,21 +28,21 @@ ail-wt-changes = { $count ->
         [0] không có thay đổi
        *[other] { $count } thay đổi
     }
-ail-wt-ignored = { $size } bị git bỏ qua (vào quarantine trước)
+ail-wt-ignored = { $size } bị git bỏ qua (vào khu cách ly trước)
 ail-wt-artifacts = Không gỡ được, nhưng có thể dọn build output của nó:
 ail-keep-session-open = Giữ lại: phiên của nó vẫn đang mở trong ứng dụng Claude.
 ail-keep-session-recent = Giữ lại: phiên của nó hoạt động trong { $days } ngày gần đây.
 ail-keep-recent-write = Giữ lại: được ghi trong { $days } ngày gần đây.
 ail-kept = { $what } ({ $tool }): lịch sử hội thoại, luôn được giữ.
 ail-none = Không tìm thấy rác của AI.
-ail-clean-hint = Chuyển các thư mục đã tích vào quarantine và gỡ các worktree đã tích bằng git — sau hộp xác nhận cho thấy chính xác lệnh sẽ chạy.
+ail-clean-hint = Chuyển các thư mục đã tích vào khu cách ly và gỡ các worktree đã tích bằng git, sau hộp xác nhận cho thấy chính xác lệnh sẽ chạy.
 ail-confirm-title = Dọn rác của AI?
-ail-confirm-body = { $count } thư mục vào quarantine; giải phóng tổng cộng { $size }.
+ail-confirm-body = { $count } thư mục vào khu cách ly; giải phóng tổng cộng { $size }.
 ail-confirm-git = Sau đó git chạy { $count ->
         [one] lệnh này
        *[other] các lệnh này
     } (mỗi worktree được kiểm tra lại ngay trước khi gỡ):
-ail-confirm-note = Thư mục khôi phục được trong Hoạt động trong 7 ngày. Worktree đã gỡ được tạo lại bằng “git worktree add” trên nhánh của nó — nhánh không bao giờ bị xóa. Cuộc hội thoại không bao giờ bị động tới.
+ail-confirm-note = Thư mục khôi phục được trong Lịch sử dọn dẹp suốt 7 ngày. Worktree đã gỡ được tạo lại bằng “git worktree add” trên nhánh của nó; nhánh không bao giờ bị xóa. Cuộc hội thoại không bao giờ bị động tới.
 
 reason-tracked = Có tệp được git theo dõi bên trong.
 reason-contains-history = Chứa lịch sử hội thoại AI, thứ không bao giờ bị xóa.
@@ -54,7 +54,7 @@ reason-not-merged = Nhánh chưa được merge vào nhánh mặc định và ch
 reason-locked = Worktree đang bị khóa.
 reason-too-many-ignored = Quá nhiều tệp bị bỏ qua để liệt kê hết.
 reason-foreign-worktree = Worktree của một repository khác.
-reason-ignored-left = Một số tệp bị bỏ qua không chuyển được vào quarantine nên git không gỡ worktree.
+reason-ignored-left = Một số tệp bị bỏ qua không chuyển được vào khu cách ly nên git không gỡ worktree.
 reason-session-live = Phiên của nó hoạt động trong 24 giờ qua và có thể vẫn đang làm việc: không động tới.
 reason-not-a-worktree = git không còn liệt kê nó là worktree.
 

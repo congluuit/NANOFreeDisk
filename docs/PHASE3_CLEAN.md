@@ -103,3 +103,22 @@ Người dùng báo một số rác "không bao giờ hết": tệp đang bị c
 **"Xóa khi khởi động lại" (`MoveFileExW` + `MOVEFILE_DELAY_UNTIL_REBOOT`): không làm.** Đường dẫn được ghi vào `PendingFileRenameOperations` và Session Manager xóa nó lúc khởi động với quyền SYSTEM, theo đường dẫn lúc đó, không kiểm tra gì. Tệp còn lại nằm trong thư mục người dùng (hoặc `C:\Windows\Temp`, nơi Users được tạo thư mục) có thể bị đổi thư mục cha thành junction trước khi khởi động lại, biến lệnh xóa thành "xóa tệp tùy ý với quyền SYSTEM", một lỗ hổng leo thang quyền đã biết (cùng họ với CVE-2025-21420 của Disk Cleanup). Không có cách kiểm tra lại lúc khởi động, nên phương án an toàn là: đóng chương trình rồi thử lại, hoặc khởi động lại máy rồi dọn.
 
 **Kho của Windows** (WinSxS, Windows.old, điểm khôi phục, pagefile/hiberfil, Delivery Optimization) vẫn là mục Được bảo vệ, chỉ hướng dẫn: không bao giờ chiếm quyền sở hữu hay xóa trực tiếp. Trường `tool` của quy tắc (danh sách đóng, loader từ chối giá trị lạ, không bao giờ là dòng lệnh) cho nút "Mở công cụ của Windows": `disk-cleanup` (`cleanmgr.exe`, "Clean up system files" có Windows Update Cleanup cho kho thành phần, với tiến trình riêng của nó), `storage-settings` (`ms-settings:storagesense`), `system-protection` (`SystemPropertiesProtection.exe`), `performance-options` (`SystemPropertiesPerformance.exe`). Chương trình lấy từ `System32` của thư mục Windows mà Windows báo, không qua `PATH`. Chưa chạy `Dism /StartComponentCleanup` từ app: Disk Cleanup làm cùng việc và tự hiện tiến trình.
+
+## 9. Simple mode: one destination (2026-11)
+
+Trước đây mỗi công cụ gửi mục bị xóa tới một nơi khác nhau (Tệp rác và Dọn gọn vào khu cách ly, Tệp trùng lặp và Cũ & lớn vào Thùng rác, xóa tay trong Phân tích có lựa chọn riêng), nên người mới không biết lấy lại tệp ở đâu. Quy tắc mới nằm trong `src/lib/clean/destination.ts` (`destinationFor`, có test trong `destination.test.ts`):
+
+| Công cụ | Đơn giản | Chuyên gia |
+|---|---|---|
+| Tệp rác (`clean_run`) | khu cách ly | khu cách ly (hoặc xóa vĩnh viễn, chỉ mục An toàn, gõ DELETE) |
+| Dọn gọn (`delete_entries`, kind `tidy`) | khu cách ly | khu cách ly |
+| Cũ & lớn, Phân tích, Chi tiết (`delete_entries`, kind `manual`) | khu cách ly | Thùng rác |
+| Tệp trùng lặp (`dupes_run`) | khu cách ly | Thùng rác, hoặc Khu cách ly / Thay bằng liên kết |
+| Lần dọn với quyền quản trị | Thùng rác (mục 8) | Thùng rác (mục 8) |
+| Gỡ chương trình | không đổi (khu cách ly + `.reg`) | không đổi |
+
+- **Một câu duy nhất** (`safety-note`, component `SafetyNote.svelte`) ở đầu mỗi công cụ và trong mọi hộp xác nhận: mục bị xóa vào khu cách ly và khôi phục được trong Lịch sử dọn dẹp suốt 7 ngày.
+- **Một hộp xác nhận** (`RemoveConfirm.svelte`): xóa gì, bao nhiêu, đi đâu, hoàn tác thế nào. **Một khối kết quả** (`RunResult.svelte`): dung lượng đã dọn, số xong / còn lại, những gì còn lại nhóm theo lý do, nút "Xem trong Lịch sử dọn dẹp".
+- **Chi phí của khu cách ly**: mục trong khu cách ly vẫn chiếm chỗ tới khi bị xóa hẳn. Kết quả lấy số byte đang giữ từ nhật ký (`activity_list`, trường `held`) và nói "X sẽ được giải phóng hẳn sau 7 ngày, hoặc ngay bây giờ trong Lịch sử dọn dẹp". Nếu ổ không có khu cách ly (FAT32, ổ mạng), Executor đã tự chuyển sang Thùng rác (`QuarantineRoots::root_for`); kết quả báo điều đó khi `held` nhỏ hơn số đã dọn.
+- **Xóa lớn**: trên 20 GB, hoặc khi ổ chứa mục còn dưới 10 % trống (`isBigRemoval`), hộp xác nhận ở chế độ Đơn giản cho chọn rõ ràng giữa khu cách ly (mặc định, hoàn tác được 7 ngày) và Thùng rác. Chỉ có ở những công cụ mà backend nhận nơi đến (`delete_entries`, `dupes_run`). Câu chữ không hứa "giải phóng ngay": Thùng rác của Windows cũng giữ chỗ cho tới khi được dọn; cách giải phóng ngay thật sự là "Xóa vĩnh viễn" trong Lịch sử dọn dẹp, có xác nhận riêng.
+- Không có kiểm tra an toàn nào bị nới: mọi lần xóa vẫn đi Planner, SafetyGate (kiểm tra lại ngay trước khi chuyển), Executor và nhật ký hoàn tác. Mặc định của backend (`delete_entries` không có `mode` là Thùng rác, `dupes` mặc định `recycle`) giữ nguyên cho CLI; giao diện luôn gửi nơi đến rõ ràng.

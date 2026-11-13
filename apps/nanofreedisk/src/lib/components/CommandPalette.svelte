@@ -40,7 +40,12 @@
     const items: Item[] = [];
     const nav: [View, string, string][] = [
       ["home", "nav-home", "home"],
+      ["quick", "nav-quick", "clean"],
       ["analyze", "nav-analyze", "analyze"],
+      ["clean", "nav-clean", "trash"],
+      ["activity", "nav-activity", "undo"],
+      ["hardware", "nav-hardware", "cpu"],
+      ["tools", "nav-tools", "grid"],
       ["oldlarge", "nav-oldlarge", "drive"],
       ["tidy", "nav-tidy", "folder"],
       ["devcache", "nav-devcache", "devcache"],

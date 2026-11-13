@@ -4,6 +4,7 @@
   import { i18n, intlLocale, t } from "../i18n.svelte";
   import { renderArticle } from "../md";
   import { app, askDelete, expert, fail, navigate, toast } from "../state.svelte";
+  import { destinationFor, removeKeys } from "../clean/destination";
   import AdviceCard from "./AdviceCard.svelte";
   import Icon from "./Icon.svelte";
   import type { Article, Detail } from "../types";
@@ -12,6 +13,8 @@
   let article = $state<Article | null>(null);
   let showArticle = $state(true);
   let owner = $state<string | null>(null);
+  /** Labels of the delete button: "Remove" with the quarantine (Simple mode). */
+  const keys = $derived(removeKeys(destinationFor("manual", expert())));
 
   // A9: owner account of the focused entry (read from its security descriptor)
   $effect(() => {
@@ -146,11 +149,11 @@
           class="btn danger-outline"
           data-effect
           disabled={!targets.length}
-          title={t("action-recycle-hint")}
+          title={t(keys.hint)}
           onclick={() => askDelete(targets)}
         >
           <Icon name="trash" size={16} />
-          {targets.length > 1 ? t("action-recycle-n", { count: targets.length }) : t("action-recycle")}
+          {targets.length > 1 ? t(keys.many, { count: targets.length }) : t(keys.one)}
         </button>
       {/if}
     </div>

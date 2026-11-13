@@ -8,6 +8,7 @@
 mod commands;
 mod elevated_clean;
 mod paths;
+mod schedule;
 mod session;
 mod tray;
 mod uninstall;
@@ -27,6 +28,10 @@ fn path_argument(args: &[String], cwd: &str) -> Option<String> {
     };
     Some(full.to_string_lossy().into_owned())
 }
+
+/// Started with Windows ("Start NANOFreeDisk with Windows (in the tray)",
+/// `docs/SCHEDULE.md`): the window stays hidden, the app waits in the tray.
+pub const TRAY_FLAG: &str = "--tray";
 
 /// "Find duplicates here" (`--dupes <folder>`) rather than "Analyze".
 fn wants_dupes(args: &[String]) -> bool {
@@ -87,6 +92,7 @@ pub fn run() {
     } else {
         state.set_startup_path(path_argument(&args, &cwd));
     }
+    let tray_start = args.iter().skip(1).any(|a| a == TRAY_FLAG);
 
     tauri::Builder::default()
         // must come first: a second launch hands its folder to this window and exits
@@ -100,6 +106,11 @@ pub fn run() {
                 let _ = app.emit(event, path);
             }
             if let Some(window) = app.get_webview_window("main") {
+                // the window may be hidden in the tray (`--tray`); another start
+                // with Windows does not bring it up
+                if !argv.iter().skip(1).any(|a| a == TRAY_FLAG) {
+                    let _ = window.show();
+                }
                 let _ = window.unminimize();
                 let _ = window.set_focus();
             }
@@ -115,15 +126,40 @@ pub fn run() {
         .manage(commands::advice::AdviceState::default())
         .manage(commands::browsers::BrowserState::default())
         .manage(commands::dupes::DupeState::default())
+        .manage(commands::similar::SimilarState::default())
         .manage(commands::hwmon::HwState::default())
         .manage(commands::monitor::MonitorState::default())
         .manage(commands::diskhealth::HealthState::default())
         .manage(commands::programs::ProgramsState::default())
         .manage(commands::startup::StartupState::default())
-        .setup(|app| {
+        .manage(commands::schedule::ScheduleState::default())
+        .on_window_event(|window, event| {
+            // started with Windows: closing the window keeps the app in the tray
+            // (automatic cleaning and the low space alert need it running);
+            // "Quit" in the tray menu ends it
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                if window.label() == "main"
+                    && app.state::<commands::schedule::ScheduleState>().tray_start()
+                {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
+            }
+        })
+        .setup(move |app| {
             // the main window comes from tauri.conf.json ("create": false) so
             // portable mode can keep the WebView2 profile next to the exe
             paths::main_window(app.handle())?;
+            if tray_start {
+                app.state::<commands::schedule::ScheduleState>()
+                    .set_tray_start(true);
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.hide();
+                }
+            }
+            // automatic cleaning and the low space alert (opt-in, docs/SCHEDULE.md)
+            commands::schedule::start(app.handle());
             // downloads and replaced files of an earlier in-app update
             commands::update::clean_leftovers();
             // the notification-area icon (G5); the app works without it
@@ -222,6 +258,13 @@ pub fn run() {
             commands::dupes::dupes_reveal,
             commands::dupes::dupes_thumbnail,
             commands::dupes::dupes_export,
+            commands::similar::similar_find,
+            commands::similar::similar_regroup,
+            commands::similar::similar_cancel,
+            commands::similar::similar_report,
+            commands::similar::similar_run,
+            commands::similar::similar_reveal,
+            commands::similar::similar_thumbnail,
             commands::take_startup_dupes,
             commands::hwmon::hw_inventory,
             commands::hwmon::hw_export,
@@ -273,6 +316,12 @@ pub fn run() {
             commands::startup::startup_set,
             commands::startup::startup_icons,
             commands::startup::startup_open_task_manager,
+            commands::schedule::schedule_get,
+            commands::schedule::schedule_set,
+            commands::schedule::schedule_texts,
+            commands::schedule::schedule_preview,
+            commands::schedule::schedule_run_now,
+            commands::schedule::autostart_set,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

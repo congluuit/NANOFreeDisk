@@ -467,14 +467,23 @@ async function scan(path, record = true) {
   throw new Error(`scan ${id} of ${path} did not finish`);
 }
 
-// sidebar entries by view id (the sidebar is grouped, so positions are not stable);
-// a number still means "the i-th entry" for the lookups below
-const nav = (v) =>
-  evaluate(
-    typeof v === "number"
-      ? `document.querySelectorAll('.side .nav')[${v}].click()`
-      : `document.querySelector('.side .nav[data-view="${v}"]').click()`,
-  );
+// Views by id. Expert mode lists every tool in the (grouped) sidebar; Simple mode
+// keeps Home, Quick clean, the disk map, Tools, the cleanup history and Settings, and
+// reaches every other tool through the Tools page, whose cards carry `data-view` too.
+const findView = (v) => `(async () => {
+    let b = document.querySelector('.side .nav[data-view="${v}"]');
+    if (!b) {
+      document.querySelector('.side .nav[data-view="tools"]')?.click();
+      for (let i = 0; i < 40 && !document.querySelector('main [data-view="${v}"]'); i++) await new Promise((r) => setTimeout(r, 50));
+      b = document.querySelector('main [data-view="${v}"]');
+    }
+    return b;
+  })()`;
+const nav = (v) => evaluate(`${findView(v)}.then((b) => b.click())`);
+/** The sidebar entry or Tools card of `v` exists and its label matches `label`. */
+const reachable = (v, label) => evaluate(`${findView(v)}.then((b) => !!b && ${label}.test(b.innerText))`);
+/** Switch Simple / Expert mode with the sidebar's own switch. */
+const setMode = (m) => evaluate(`document.querySelectorAll('.side .mode button')[${m === "expert" ? 1 : 0}]?.click()`);
 // Analyze → Explorer opens on the map: the folder list (and its details) on demand
 async function showFolders(details = false) {
   await evaluate("document.querySelector('[data-lens=folders]')?.click()");
@@ -498,6 +507,13 @@ try {
     }
   };
   for (let i = 0; i < 40 && !(await evaluate("!!window.__TAURI_INTERNALS__ && !!document.querySelector('.side')")); i++) await sleep(250);
+  // the first-run welcome (a fresh profile): skippable, and gone for good once closed
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('[data-welcome]')")); i++) await sleep(100);
+  if (await evaluate("!!document.querySelector('[data-welcome]')")) {
+    await evaluate("document.querySelector('[data-welcome-skip]')?.click()");
+    await sleep(200);
+    check("the welcome can be skipped", await evaluate("!document.querySelector('[data-welcome]')"));
+  }
   await send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 800, deviceScaleFactor: 1, mobile: false });
   await sleep(800);
   await shot("1-home");
@@ -657,6 +673,9 @@ try {
   // per-website browser caches on their own fixture (never the real profiles)
   await evaluate(`window.__nfdBrowserFixture = ${JSON.stringify(brFixture)}`);
   await nav("clean");
+  // Simple mode keeps the per-website panel behind "Show what is inside each item"
+  for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-br-toggle], [data-clean-details]')")); i++) await sleep(150);
+  await evaluate("document.querySelector('[data-clean-details][aria-expanded=false]')?.click()");
   for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-br-toggle]')")); i++) await sleep(150);
   await evaluate("document.querySelector('[data-br-toggle]')?.click()");
   const siteBox = (b, s) => `document.querySelector('[data-br-browser="${b}"] [data-br-site="${s}"] input')`;
@@ -807,6 +826,13 @@ try {
   await evaluate(`(() => { const row = [...document.querySelectorAll('.tree .row')][0]; row.dispatchEvent(new MouseEvent('click', {bubbles: true})); document.querySelector('.tree').dispatchEvent(new KeyboardEvent('keydown', {key: 'Delete', bubbles: true})); })()`);
   await sleep(800);
   await shot("3-delete-dialog");
+  // one rule: Simple mode sends a hand-picked delete to the quarantine, Expert mode to the Recycle Bin
+  check(
+    "the delete dialog says where the items go",
+    await evaluate(
+      "(() => { const w = document.querySelector('[data-remove-confirm=delete] [data-confirm-where]')?.dataset.confirmWhere; return document.querySelector('section.analyze')?.dataset.mode === 'expert' ? w === 'recycle-bin' : w === 'quarantine'; })()",
+    ),
+  );
   await evaluate("document.querySelector('.dialog .cancel')?.click()");
   await sleep(300);
 
@@ -842,11 +868,17 @@ try {
   // What changed? tab and the Health Score on Home
   await nav("analyze");
   await sleep(800);
-  await evaluate("document.querySelector('[data-tab=changes]')?.click()");
-  for (let i = 0; i < 30 && !(await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false")); i++) await sleep(150);
-  check("What changed? tab lists the new clip", await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false"));
-  await shot("7-changes");
+  // "What changed?" is an Expert tab; Simple mode leaves it out
+  if (await evaluate("document.querySelector('section.analyze')?.dataset.mode === 'expert'")) {
+    await evaluate("document.querySelector('[data-tab=changes]')?.click()");
+    for (let i = 0; i < 30 && !(await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false")); i++) await sleep(150);
+    check("What changed? tab lists the new clip", await evaluate("document.querySelector('.changes')?.innerText.includes('new-clip.mp4') ?? false"));
+    await shot("7-changes");
+  } else {
+    check("What changed? is left out of Simple mode", await evaluate("!document.querySelector('[data-tab=changes]')"));
+  }
   await nav("home");
+  check("Home's primary action opens Quick clean", await evaluate("!!document.querySelector('main [data-home-quick].primary') && !document.querySelector('main [data-home-free]')"));
   for (let i = 0; i < 100 && !(await evaluate("!!document.querySelector('.health .num b')")); i++) await sleep(100);
   check("Home shows the health score", await evaluate("!!document.querySelector('.health .num b')"));
   for (let i = 0; i < 50 && !(await evaluate("!!document.querySelector('.temps [data-temp=gpu]')")); i++) await sleep(100);
@@ -972,15 +1004,41 @@ try {
   await sleep(500);
 
   // Phase 4: DevCache with a pack that only matches its own fixture
-  const devNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Dev caches|Cache lập trình/.test(b.innerText))");
-  check("Dev caches is in the sidebar", devNav >= 0);
-  const sideViews = await evaluate("[...document.querySelectorAll('.side .nav')].map((b) => b.dataset.view ?? 'settings')");
+  const devNav = "devcache";
+  check("Dev caches is in the sidebar or on the Tools page", await reachable(devNav, "/Dev caches|Cache lập trình/"));
+  // the sidebar in both modes (the run goes on in the mode it started in)
+  const sideViewsNow = () => evaluate("[...document.querySelectorAll('.side .nav')].map((b) => b.dataset.view ?? 'settings')");
+  const startExpert = await evaluate("document.querySelectorAll('.side .mode button')[1]?.getAttribute('aria-checked') === 'true'");
+  await setMode("simple");
+  await sleep(200);
+  const simpleViews = await sideViewsNow();
   check(
-    "sidebar groups the tasks and keeps the cleanup history last",
+    "Simple mode: a short sidebar, every other tool on the Tools page",
+    simpleViews.join() === "home,quick,analyze,tools,activity,settings" && (await evaluate("document.querySelectorAll('.side .group-head').length")) === 0,
+    simpleViews.join(),
+  );
+  await nav("tools");
+  for (let i = 0; i < 20 && !(await evaluate("!!document.querySelector('section.tools')")); i++) await sleep(100);
+  check(
+    "the Tools page lists the tools, each with when to use it",
+    await evaluate("['clean','devcache','duplicates','oldlarge','tidy'].every((v) => !!document.querySelector(`section.tools [data-view=${v}] .muted`))"),
+  );
+  await shot("12b-tools");
+  await nav("tidy");
+  await sleep(200);
+  check("a tool lights up Tools in the Simple sidebar", await evaluate("document.querySelector('.side .nav[data-view=tools]')?.classList.contains('active') ?? false"));
+  await setMode("expert");
+  await sleep(200);
+  const sideViews = await sideViewsNow();
+  check(
+    "Expert mode: the sidebar groups the tasks and keeps the cleanup history last",
     (await evaluate("document.querySelectorAll('.side .group-head').length")) === 2 &&
+      sideViews.includes("quick") &&
       sideViews.slice(-2).join() === "activity,settings",
     sideViews.join(),
   );
+  if (!startExpert) await setMode("simple");
+  await sleep(200);
   await evaluate(`window.__nfdDevRulesDir = ${JSON.stringify(devRulesDir)}`);
   await nav(devNav);
   for (let i = 0; i < 80 && !(await evaluate("document.querySelector('main').innerText.includes('NANO Dev')")); i++) await sleep(150);
@@ -1200,8 +1258,8 @@ try {
   }
   // the view: search the current scan of the fixture from the UI
   await scan(dupeFixture, false);
-  const dupNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Duplicates|Tệp trùng/.test(b.innerText))");
-  check("Duplicates is in the sidebar", dupNav >= 0);
+  const dupNav = "duplicates";
+  check("Duplicates is in the sidebar or on the Tools page", await reachable(dupNav, "/Duplicates|Tệp trùng/"));
   await nav(dupNav);
   await sleep(500);
   await evaluate("document.querySelector('[data-find]')?.click()");
@@ -1219,9 +1277,15 @@ try {
     await evaluate("[...document.querySelectorAll('[data-group] .copies li')].map((li) => `${li.querySelector('.keepbox input').checked}/${li.querySelector('.rmbox input').checked}/${li.querySelector('.rmbox input').disabled}`).join(' ')"),
   );
   await shot("14-duplicates");
-  await evaluate("document.querySelector('[data-recycle]')?.click()");
+  await evaluate("document.querySelector('[data-dupes-remove]')?.click()");
   await sleep(300);
   check("Duplicates asks before moving anything", await evaluate("!!document.querySelector('.dialog [data-confirm]')"));
+  check(
+    "the confirmation says where the copies go and how to undo it",
+    await evaluate(
+      "(() => { const w = document.querySelector('[data-remove-confirm] [data-confirm-where]'); const mode = document.querySelector('.dupes')?.dataset.mode; return !!w && (mode === 'expert' ? w.dataset.confirmWhere === 'recycle-bin' : w.dataset.confirmWhere === 'quarantine' && !!w.querySelector('[data-safety-note=quarantine]')); })()",
+    ),
+  );
   await evaluate("document.querySelector('.dialog footer .btn').click()");
   await sleep(200);
   // Replace with links is Expert-only; Simple mode shows the headline and "Not compared" instead
@@ -1290,8 +1354,8 @@ try {
   await evaluate("document.querySelector('[data-pgtab=junk]').click()");
   for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-pg-junk]')")); i++) await sleep(250);
   check("Software junk tab renders", await evaluate("!!document.querySelector('[data-pg-junk]')"));
-  const monNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Disk activity|Hoạt động ổ đĩa/.test(b.innerText))");
-  check("Disk activity is in the sidebar", monNav >= 0);
+  const monNav = "monitor";
+  check("Disk activity is in the sidebar or on the Tools page", await reachable(monNav, "/Disk activity|Hoạt động ổ đĩa/"));
   await nav(monNav);
   for (let i = 0; i < 30 && !(await evaluate("document.querySelectorAll('[data-procs] .row').length > 0")); i++) await sleep(200);
   await sleep(1500);
@@ -1320,8 +1384,8 @@ try {
   check("health: JSON export leaves serial numbers out", exported?.drives?.every((d) => d.serial == null), JSON.stringify(exported?.drives?.map((d) => d.serial)));
   const badHealthExport = await invoke("health_export", { path: join(fixture, "health.exe"), serials: false });
   check("health: export only writes *.json", badHealthExport?.__error?.code === "bad-path", JSON.stringify(badHealthExport));
-  const healthNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Drive health|Sức khỏe ổ đĩa/.test(b.innerText))");
-  check("Health is in the sidebar", healthNav >= 0);
+  const healthNav = "health";
+  check("Health is in the sidebar or on the Tools page", await reachable(healthNav, "/Drive health|Sức khỏe ổ đĩa/"));
   await nav(healthNav);
   for (let i = 0; i < 40 && !(await evaluate("!!document.querySelector('[data-drive]')")); i++) await sleep(250);
   check("Health view shows a card per drive", await evaluate(`document.querySelectorAll('[data-drive]').length === ${driveHealth.drives.length}`));
@@ -1332,7 +1396,7 @@ try {
 
   // G4: every control that changes something explains what happens
   const untitled = [];
-  for (const [i, view] of [["home", "home"], ["analyze", "analyze"], ["oldlarge", "oldlarge"], ["tidy", "tidy"], ["clean", "clean"], ["activity", "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"]]) {
+  for (const [i, view] of [["home", "home"], ["analyze", "analyze"], ["oldlarge", "oldlarge"], ["tidy", "tidy"], ["clean", "clean"], ["activity", "activity"], [devNav, "devcache"], [dupNav, "duplicates"], [monNav, "monitor"], [healthNav, "health"], ["quick", "quick"], ...((await evaluate("!!document.querySelector('.side .nav[data-view=tools]')")) ? [["tools", "tools"]] : [])]) {
     await nav(i);
     await sleep(600);
     const missing = await evaluate("[...document.querySelectorAll('[data-effect]')].filter((e) => !(e.getAttribute('title') ?? '').trim()).map((e) => e.outerHTML.slice(0, 60))");
@@ -1365,8 +1429,8 @@ try {
     `${inv.cpu.name}, ${inv.cpu.cores}C/${inv.cpu.threads}T, ${inv.gpus?.length} GPU, ${inv.disks?.length} disk(s)`,
   );
   check("hw inventory carries no serial numbers", !/serial/i.test(JSON.stringify(inv)));
-  const hwNav = await evaluate("[...document.querySelectorAll('.side .nav')].findIndex((b) => /Hardware|Phần cứng/.test(b.innerText))");
-  check("Hardware is in the sidebar", hwNav >= 0);
+  const hwNav = "hardware";
+  check("Hardware is in the sidebar or on the Tools page", await reachable(hwNav, "/Hardware|Phần cứng/"));
   await nav(hwNav);
   await evaluate("document.querySelector('[data-hwtab=overview]')?.click()");
   for (let i = 0; i < 60 && !(await evaluate("!!document.querySelector('[data-sec=cpu]')")); i++) await sleep(150);
