@@ -15,6 +15,8 @@ pub mod devcache;
 pub mod diskhealth;
 pub mod dupes;
 pub mod programs;
+pub mod recyclebin;
+pub mod startup;
 
 use nfd_core::health::{self, HealthScore, JunkFacts, ScanFacts, VolumeFacts};
 use nfd_core::insights::OldLargeOptions;
@@ -508,6 +510,22 @@ pub fn empty_folders(state: State<'_, AppState>, id: u32, limit: usize) -> CmdRe
     let resolve = platform.resolver();
     with_session(&state, |s| s.empty_folders(id, limit.min(10_000), &resolve))?
         .ok_or_else(|| err("not-found", id))
+}
+
+/// Files of size 0 below `id` (A3), outside program folders and without marker
+/// files; read-only.
+#[tauri::command]
+pub fn zero_byte_files(
+    state: State<'_, AppState>,
+    id: u32,
+    limit: usize,
+) -> CmdResult<session::ZeroRows> {
+    let platform = nfd_platform::Native;
+    let resolve = platform.resolver();
+    with_session(&state, |s| {
+        s.zero_byte_files(id, limit.min(10_000), &resolve)
+    })?
+    .ok_or_else(|| err("not-found", id))
 }
 
 /// Shortcuts below `id` whose target is gone (A3); read-only. Reads each `.lnk`

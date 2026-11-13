@@ -46,6 +46,7 @@
       ["devcache", "nav-devcache", "devcache"],
       ["duplicates", "nav-duplicates", "duplicates"],
       ["programs", "nav-programs", "apps"],
+      ["startup", "nav-startup", "power"],
       ["monitor", "nav-monitor", "monitor"],
       ["health", "nav-health", "health"],
       ["settings", "nav-settings", "settings"],

@@ -21,6 +21,37 @@ export interface RuleSummary {
   skipped: number;
   refused: number;
   truncated: boolean;
+  /** Cleaning needs administrator rights (what stays can go through one UAC prompt). */
+  admin?: boolean;
+  /** The Windows tool for this space (guidance rules). */
+  tool?: Tool | null;
+}
+
+/** Windows tools a guidance rule can open (`nfd_rules::Tool`). */
+export type Tool = "disk-cleanup" | "storage-settings" | "system-protection" | "performance-options";
+
+export type LeftoverCause = "in-use" | "needs-admin" | "other";
+
+/** One item a clean left behind (`nfd_core::exec::Leftover`). */
+export interface Leftover {
+  n: number;
+  path: string;
+  ruleId: string | null;
+  isDir: boolean;
+  /** Bytes still on the disk. */
+  bytes: number;
+  status: string;
+  reason: string | null;
+  /** Programs holding it open, when known. */
+  programs: string[];
+}
+
+/** Leftovers of one cause (`nfd_core::exec::LeftoverGroup`). */
+export interface LeftoverGroup {
+  cause: LeftoverCause;
+  programs: string[];
+  bytes: number;
+  items: Leftover[];
 }
 
 export interface CleanPack {
@@ -69,6 +100,8 @@ export interface OperationResult {
   cancelled: boolean;
   problems: Problem[];
   journalError: string | null;
+  /** Clean view only: what stayed, grouped by why (absent when nothing stayed). */
+  leftovers?: LeftoverGroup[];
 }
 
 /** One entry of the Activity log (`nfd_history::OperationRow`). */

@@ -163,12 +163,20 @@ export interface OldLargeRows {
 export interface EmptyRow extends Located {
   /** Empty sub-folders inside it. */
   nested: number;
+  /** Files the system made on its own (desktop.ini, Thumbs.db…); they go with it. */
+  clutter: number;
 }
 
 export interface EmptyRows {
   rows: EmptyRow[];
   matched: number;
   totalDirs: number;
+}
+
+/** Files of size 0 outside program folders, markers left out (A3). */
+export interface ZeroRows {
+  rows: Located[];
+  matched: number;
 }
 
 export type ShortcutStatus = "ok" | "missing" | "drive_missing" | "unchecked";

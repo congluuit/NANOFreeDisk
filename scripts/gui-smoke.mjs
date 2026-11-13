@@ -1224,11 +1224,19 @@ try {
   check("Duplicates asks before moving anything", await evaluate("!!document.querySelector('.dialog [data-confirm]')"));
   await evaluate("document.querySelector('.dialog footer .btn').click()");
   await sleep(200);
-  await evaluate("document.querySelector('[data-link]')?.click()");
-  await sleep(300);
-  check("Replace with links explains the shared content first", await evaluate("!!document.querySelector('.dialog [data-confirm]') && document.querySelector('.dialog').innerText.length > 80"));
-  await evaluate("document.querySelector('.dialog footer .btn').click()");
-  await sleep(200);
+  // Replace with links is Expert-only; Simple mode shows the headline and "Not compared" instead
+  if (await evaluate("document.querySelector('.dupes')?.dataset.mode === 'expert'")) {
+    await evaluate("document.querySelector('[data-link]')?.click()");
+    await sleep(300);
+    check("Replace with links explains the shared content first", await evaluate("!!document.querySelector('.dialog [data-confirm]') && document.querySelector('.dialog').innerText.length > 80"));
+    await evaluate("document.querySelector('.dialog footer .btn').click()");
+    await sleep(200);
+  } else {
+    check(
+      "Duplicates (Simple): one-click start, no Replace with links, left-out files explained",
+      await evaluate("!!document.querySelector('[data-find-personal]') && !document.querySelector('[data-link]') && !!document.querySelector('[data-not-compared] [data-skip=small]')"),
+    );
+  }
   await evaluate("document.querySelector('[data-dupetab=folders]')?.click()");
   await sleep(200);
 

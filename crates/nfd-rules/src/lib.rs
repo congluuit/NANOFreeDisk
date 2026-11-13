@@ -5,6 +5,7 @@
 //! the binary ([`builtin_packs`]) and the [`matcher`] that finds what a rule would
 //! clean on this machine.
 
+pub mod elevated;
 pub mod encyclopedia;
 pub mod matcher;
 
@@ -77,6 +78,82 @@ pub struct Rule {
     #[serde(default)]
     pub docs: Option<String>,
     pub verified_on: toml::value::Datetime,
+    /// Cleaning needs administrator rights (`%SystemRoot%\Temp`, CBS logs, kernel
+    /// dumps…). What the normal run could not remove may then go through the one
+    /// elevated run (`--elevated-clean`, [`elevated`]), which loads the packs itself
+    /// and only cleans what such a rule matches. Only machine-wide locations
+    /// ([`MACHINE_VARS`]) are allowed in an `admin` rule.
+    #[serde(default)]
+    pub admin: bool,
+    /// The Windows tool that frees this space properly ("use the proper tool" items
+    /// such as WinSxS or Windows.old). A closed list: the app opens a fixed target
+    /// for each value and never runs a command line from a pack.
+    #[serde(default)]
+    pub tool: Option<Tool>,
+}
+
+/// The rule-pack variables that name machine-wide folders. An `admin` rule may use
+/// only these: the elevated run resolves them from Windows itself, never from the
+/// user's environment, and it never touches a user profile.
+pub const MACHINE_VARS: &[&str] = &[
+    "SYSTEMROOT",
+    "SYSTEMDRIVE",
+    "PROGRAMDATA",
+    "PROGRAMFILES",
+    "PROGRAMFILES_X86",
+];
+
+/// A Windows tool a rule can point to instead of deleting anything.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Tool {
+    /// Disk Cleanup (`cleanmgr.exe`). "Clean up system files" there covers Windows
+    /// Update Cleanup (the component store), Delivery Optimization files and previous
+    /// Windows installations, with its own progress.
+    DiskCleanup,
+    /// Settings, System, Storage (`ms-settings:storagesense`): temporary files,
+    /// previous Windows installations, Delivery Optimization files.
+    StorageSettings,
+    /// System Protection (`SystemPropertiesProtection.exe`): restore points and the
+    /// space they may use.
+    SystemProtection,
+    /// Performance Options (`SystemPropertiesPerformance.exe`): the page file size
+    /// (Advanced, Virtual memory).
+    PerformanceOptions,
+}
+
+/// What opening a [`Tool`] starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ToolTarget {
+    /// A Settings page URI.
+    Settings(&'static str),
+    /// A program of `System32` (file name only; the caller joins it to the system
+    /// folder it resolved itself, never to `PATH`).
+    System32(&'static str),
+}
+
+impl Tool {
+    /// The fixed target of this tool.
+    #[must_use]
+    pub const fn target(self) -> ToolTarget {
+        match self {
+            Self::DiskCleanup => ToolTarget::System32("cleanmgr.exe"),
+            Self::StorageSettings => ToolTarget::Settings("ms-settings:storagesense"),
+            Self::SystemProtection => ToolTarget::System32("SystemPropertiesProtection.exe"),
+            Self::PerformanceOptions => ToolTarget::System32("SystemPropertiesPerformance.exe"),
+        }
+    }
+
+    /// The pack / wire name.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::DiskCleanup => "disk-cleanup",
+            Self::StorageSettings => "storage-settings",
+            Self::SystemProtection => "system-protection",
+            Self::PerformanceOptions => "performance-options",
+        }
+    }
 }
 
 /// `(name, revision)` of a versioned tool folder (`chromium_headless_shell-1248` →
@@ -334,9 +411,55 @@ pub fn validate(packs: &[Pack]) -> Vec<Finding> {
                     );
                 }
             }
+
+            for (error, message) in admin_and_tool_findings(rule) {
+                push(error, message);
+            }
         }
     }
     findings
+}
+
+/// Checks of the `admin` and `tool` fields: `(error, message)`.
+fn admin_and_tool_findings(rule: &Rule) -> Vec<(bool, String)> {
+    let mut out = Vec::new();
+    let windows_only = rule.platform.iter().all(|p| p == "windows");
+    if rule.admin {
+        if !rule.level.is_deletable() {
+            out.push((
+                true,
+                "admin = true on a rule that cleans nothing (level protected)".into(),
+            ));
+        }
+        if !windows_only {
+            out.push((true, "admin = true needs platform = [\"windows\"]".into()));
+        }
+        for path in rule.paths.iter().chain(rule.exclude.iter()) {
+            let first = extract_vars(path).into_iter().next();
+            let machine = path.starts_with("${")
+                && first.is_some_and(|v| MACHINE_VARS.contains(&v.as_str()))
+                && extract_vars(path).len() == 1;
+            if !machine {
+                out.push((
+                    true,
+                    format!(
+                        "admin rule paths must start with one machine-wide variable ({}): `{path}`",
+                        MACHINE_VARS.join(", ")
+                    ),
+                ));
+            }
+        }
+    } else if rule.level.is_deletable() && rule.paths.iter().any(|p| p.starts_with("${SYSTEMROOT}"))
+    {
+        out.push((
+            false,
+            "a rule inside ${SYSTEMROOT} normally needs admin = true".into(),
+        ));
+    }
+    if rule.tool.is_some() && !windows_only {
+        out.push((true, "tool needs platform = [\"windows\"]".into()));
+    }
+    out
 }
 
 /// `true` when any finding is an error.
@@ -454,6 +577,123 @@ verified_on = 2026-10-16
     fn rejects_unknown_fields() {
         let bad = MINIMAL.replace("regenerates = true", "regenerates = true\nfoo = 1");
         assert!(parse_pack(&bad, None).is_err());
+    }
+
+    #[test]
+    fn admin_rules_stay_in_machine_locations() {
+        let admin = MINIMAL
+            .replace("${LOCALAPPDATA}/App/Cache/**", "${SYSTEMROOT}/Temp/**")
+            .replace("regenerates = true", "regenerates = true\nadmin = true");
+        let pack = parse_pack(&admin, None).expect("parse");
+        assert!(pack.rules[0].admin);
+        assert!(!has_errors(&validate(&[pack])));
+
+        // a user folder in an admin rule: the elevated run would act on whichever
+        // profile the administrator account has
+        let user = MINIMAL.replace("regenerates = true", "regenerates = true\nadmin = true");
+        let findings = validate(&[parse_pack(&user, None).expect("parse")]);
+        assert!(has_errors(&findings), "{findings:?}");
+
+        // two variables (the second one could be anything)
+        let two = admin.replace("${SYSTEMROOT}/Temp/**", "${SYSTEMROOT}/${TEMP}/**");
+        assert!(has_errors(&validate(&[
+            parse_pack(&two, None).expect("parse")
+        ])));
+
+        // an excluded user path counts too
+        let excl = admin.replace("admin = true", "admin = true\nexclude = [\"${HOME}/x/**\"]");
+        assert!(has_errors(&validate(&[
+            parse_pack(&excl, None).expect("parse")
+        ])));
+
+        // nothing to clean, nothing to elevate
+        let prot = admin.replace("level = \"safe\"", "level = \"protected\"");
+        assert!(has_errors(&validate(&[
+            parse_pack(&prot, None).expect("parse")
+        ])));
+
+        // Windows only
+        let mac = admin.replace(
+            "regenerates = true",
+            "regenerates = true\nplatform = [\"windows\", \"macos\"]",
+        );
+        assert!(has_errors(&validate(&[
+            parse_pack(&mac, None).expect("parse")
+        ])));
+
+        // a SYSTEMROOT rule without the flag is only a warning
+        let plain = MINIMAL.replace("${LOCALAPPDATA}/App/Cache/**", "${SYSTEMROOT}/Temp/**");
+        let findings = validate(&[parse_pack(&plain, None).expect("parse")]);
+        assert!(!has_errors(&findings));
+        assert!(findings.iter().any(|f| f.message.contains("admin = true")));
+    }
+
+    #[test]
+    fn tools_are_a_closed_list() {
+        let ok = MINIMAL
+            .replace("level = \"safe\"", "level = \"protected\"")
+            .replace("regenerates = true", "tool = \"disk-cleanup\"");
+        let pack = parse_pack(&ok, None).expect("parse");
+        assert_eq!(pack.rules[0].tool, Some(Tool::DiskCleanup));
+        assert!(!has_errors(&validate(&[pack])));
+        // anything else is refused by the loader, a command line above all
+        for bad in ["\"cmd.exe /c del C:\\\\\"", "\"dism\"", "1", "\"\""] {
+            let text = ok.replace("\"disk-cleanup\"", bad);
+            assert!(parse_pack(&text, None).is_err(), "{bad}");
+        }
+        let mac = ok.replace("tool = ", "platform = [\"macos\"]\ntool = ");
+        assert!(has_errors(&validate(&[
+            parse_pack(&mac, None).expect("parse")
+        ])));
+        for t in [
+            Tool::DiskCleanup,
+            Tool::StorageSettings,
+            Tool::SystemProtection,
+            Tool::PerformanceOptions,
+        ] {
+            match t.target() {
+                ToolTarget::Settings(uri) => assert!(uri.starts_with("ms-settings:")),
+                ToolTarget::System32(exe) => {
+                    assert!(exe.ends_with(".exe") && !exe.contains(['\\', '/', ' ']));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn shipped_admin_rules_and_tools() {
+        let packs = builtin_packs().expect("builtin");
+        let rules: Vec<&Rule> = packs.iter().flat_map(|p| &p.rules).collect();
+        let get = |id: &str| {
+            rules
+                .iter()
+                .find(|r| r.id == id)
+                .copied()
+                .unwrap_or_else(|| panic!("{id}"))
+        };
+        for id in [
+            "windows.temp.system",
+            "windows.crashdumps.kernel",
+            "windows.logs.cbs",
+            "windows.update.download-cache",
+        ] {
+            assert!(get(id).admin, "{id}");
+        }
+        assert!(!get("windows.temp.user").admin);
+        assert_eq!(get("windows.winsxs").tool, Some(Tool::DiskCleanup));
+        assert_eq!(get("windows.old").tool, Some(Tool::StorageSettings));
+        assert_eq!(
+            get("windows.restore-points").tool,
+            Some(Tool::SystemProtection)
+        );
+        assert_eq!(
+            get("windows.pagefile-hiberfil").tool,
+            Some(Tool::PerformanceOptions)
+        );
+        // a tool replaces deleting: never on a rule that cleans
+        for r in rules.iter().filter(|r| r.tool.is_some()) {
+            assert_eq!(r.level, RiskLevel::Protected, "{}", r.id);
+        }
     }
 
     #[test]

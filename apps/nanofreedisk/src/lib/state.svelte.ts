@@ -5,7 +5,7 @@ import { i18n, systemLocale, t, type Locale } from "./i18n.svelte";
 import { DEFAULT_THEME, type ThemeSettings } from "./theme";
 import type { AppInfo, Filter, Finished, OldLargeOptions, Progress, SearchRows, Summary, Volume } from "./types";
 
-export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "programs" | "settings";
+export type View = "home" | "analyze" | "oldlarge" | "tidy" | "clean" | "activity" | "hardware" | "devcache" | "duplicates" | "monitor" | "health" | "programs" | "startup" | "settings";
 export type Viz = "treemap" | "sunburst";
 /** Analyze → Explorer: the map (`viz`) or the folder list. */
 export type ExplorerLens = "map" | "folders";
@@ -45,7 +45,8 @@ export interface Settings {
   /** Projects without activity for N days are flagged stale. */
   staleDays: number;
   /** Duplicates: files smaller than this many MB are left out. */
-  dupeMinMb: number;
+  /** Smallest file the Duplicates search compares, in KiB. */
+  dupeMinKb: number;
   /** Duplicates: how the copy to keep is chosen (auto, oldest, newest, shortest). */
   dupeKeep: string;
   /** Monitor: notify when a process keeps writing faster than `monitorMbps` MB/s
@@ -78,7 +79,7 @@ export const DEFAULT_SETTINGS: Settings = {
   repoRoot: "",
   keepRecentDays: 7,
   staleDays: 90,
-  dupeMinMb: 1,
+  dupeMinKb: 100,
   dupeKeep: "auto",
   monitorAlerts: false,
   monitorMbps: 5,
@@ -206,6 +207,8 @@ export async function listenScanEvents(): Promise<void> {
     if (app.scanning && app.scanning.id !== -1 && f.scan !== app.scanning.id) return;
     if (!app.scanning && !f.ok) return;
     app.scanning = null;
+    const back = scanReturnView;
+    scanReturnView = null;
     if (f.ok) {
       app.snapshot = f.snapshot ?? null;
       if (f.historyError) toast(t("history-save-failed", { error: f.historyError }), "error");
@@ -215,7 +218,7 @@ export async function listenScanEvents(): Promise<void> {
       app.focus = app.current;
       app.search = null;
       app.version++;
-      app.view = "analyze";
+      app.view = back ?? "analyze";
     } else if (f.cancelled) {
       toast(t("scan-cancelled"));
     } else {
@@ -243,7 +246,11 @@ export async function loadSummary(): Promise<void> {
   }
 }
 
-export async function startScan(path: string): Promise<void> {
+/** The view a finished scan opens instead of Analyze (Tidy up's "Scan drive C:"). */
+let scanReturnView: View | null = null;
+
+export async function startScan(path: string, returnTo?: View): Promise<void> {
+  scanReturnView = returnTo ?? null;
   try {
     await listenScanEvents();
     app.lastScanPath = path;

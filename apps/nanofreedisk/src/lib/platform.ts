@@ -16,7 +16,9 @@ export type Feature =
   | "monitor"
   | "programs"
   | "sensors"
-  | "shell-menu";
+  | "shell-menu"
+  | "recycle-bin"
+  | "startup";
 
 const WINDOWS_ONLY: readonly Feature[] = [
   "clean",
@@ -26,6 +28,8 @@ const WINDOWS_ONLY: readonly Feature[] = [
   "programs",
   "sensors",
   "shell-menu",
+  "recycle-bin",
+  "startup",
 ];
 
 const VIEW_FEATURE: Partial<Record<View, Feature>> = {
@@ -34,6 +38,7 @@ const VIEW_FEATURE: Partial<Record<View, Feature>> = {
   hardware: "hardware",
   monitor: "monitor",
   programs: "programs",
+  startup: "startup",
 };
 
 /** The OS: `app_info`'s answer, else a guess from the user agent. */

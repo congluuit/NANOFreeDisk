@@ -6,6 +6,7 @@
 //! `Planner → SafetyGate → Executor → UndoJournal` ([`commands::clean`]).
 
 mod commands;
+mod elevated_clean;
 mod paths;
 mod session;
 mod tray;
@@ -73,6 +74,10 @@ pub fn run() {
     if args.iter().any(|a| a == nfd_apps::elevated::FLAG) {
         std::process::exit(nfd_apps::elevated::run(&args));
     }
+    // the Clean view's one elevated step (junk that needs administrator rights)
+    if args.iter().any(|a| a == elevated_clean::FLAG) {
+        std::process::exit(elevated_clean::run(&args));
+    }
     let cwd = std::env::current_dir()
         .map(|d| d.to_string_lossy().into_owned())
         .unwrap_or_default();
@@ -114,6 +119,7 @@ pub fn run() {
         .manage(commands::monitor::MonitorState::default())
         .manage(commands::diskhealth::HealthState::default())
         .manage(commands::programs::ProgramsState::default())
+        .manage(commands::startup::StartupState::default())
         .setup(|app| {
             // the main window comes from tauri.conf.json ("create": false) so
             // portable mode can keep the WebView2 profile next to the exe
@@ -140,6 +146,7 @@ pub fn run() {
             commands::search,
             commands::old_and_large,
             commands::empty_folders,
+            commands::zero_byte_files,
             commands::broken_shortcuts,
             commands::history_snapshots,
             commands::history_diff,
@@ -178,6 +185,9 @@ pub fn run() {
             commands::clean::quarantine_empty,
             commands::clean::quarantine_reveal,
             commands::clean::activity_forget,
+            commands::clean::clean_retry,
+            commands::clean::clean_elevated,
+            commands::clean::clean_open_tool,
             commands::devcache::devcache_scan,
             commands::devcache::devcache_items,
             commands::devcache::devcache_run,
@@ -257,6 +267,12 @@ pub fn run() {
             commands::programs::programs_junk_clean,
             commands::programs::programs_reveal,
             commands::programs::activity_restore_admin,
+            commands::recyclebin::recyclebin_status,
+            commands::recyclebin::recyclebin_empty,
+            commands::startup::startup_list,
+            commands::startup::startup_set,
+            commands::startup::startup_icons,
+            commands::startup::startup_open_task_manager,
         ])
         .build(tauri::generate_context!())
         .expect("error while running NANOFreeDisk")

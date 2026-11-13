@@ -54,6 +54,36 @@ clean-status-declined = đã từ chối
 clean-status-cancelled = chưa làm (đã dừng)
 clean-status-not-selected = không chọn
 
+## Những gì một lần dọn còn để lại, và vì sao
+clean-left-title = Những gì vẫn còn
+clean-left-in-use-title = Đang được { $apps } dùng
+clean-left-in-use-unknown = Đang được một chương trình hoặc Windows dùng
+clean-left-in-use-body = Một chương trình đang chạy mở các tệp này nên Windows không cho ai di chuyển chúng. Hãy lưu công việc, đóng chương trình đó rồi thử lại. NANOFreeDisk không bao giờ tự đóng chương trình của bạn.
+clean-left-retry = Tôi đã đóng, thử lại
+clean-left-admin-title = Cần quyền quản trị
+clean-left-admin-body = Windows chỉ cho quản trị viên xóa các tệp hệ thống này. NANOFreeDisk có thể xin Windows cấp quyền một lần và kiểm tra lại từng mục trước khi di chuyển bất cứ thứ gì.
+clean-left-admin-button = Dọn với quyền quản trị
+clean-left-other-title = Chưa xóa được vì lý do khác
+clean-left-other-body = Các mục này được bỏ qua để giữ an toàn hoặc không xóa được. Lý do ghi cạnh từng mục.
+clean-left-other-retry = Kiểm tra lại và thử lại
+clean-left-size = { $size } vẫn nằm trên ổ đĩa
+clean-left-more = và { $count } mục khác
+clean-admin-title = Dọn với quyền quản trị?
+clean-admin-body = Windows sẽ hỏi quyền quản trị một lần. Sau đó NANOFreeDisk tự nạp lại quy tắc của mình, kiểm tra lại từng mục và từ chối mọi thứ không có quy tắc nào bao gồm. Chỉ các mục sau được đụng tới:
+clean-admin-where = Các mục bị xóa sẽ vào Thùng rác. Bạn có thể khôi phục từ đó; khi khôi phục, Windows sẽ hỏi quyền quản trị lần nữa.
+clean-admin-where-permanent = Bạn đã chọn xóa vĩnh viễn: các mục thuộc quy tắc bộ nhớ đệm và tệp tạm thuần túy sẽ bị xóa hẳn và không khôi phục được. Mọi thứ khác vào Thùng rác.
+clean-admin-go = Tiếp tục, Windows sẽ hỏi
+clean-admin-declined = Bạn đã từ chối lời nhắc quyền quản trị. Không có gì thay đổi.
+clean-admin-disabled = Lời nhắc quyền quản trị bị tắt trong lần chạy thử này.
+clean-retry-nothing = Không còn gì để dọn: các mục đó đã tự biến mất.
+clean-rule-admin = Cần quyền quản trị
+clean-rule-admin-hint = Lần dọn bình thường bỏ qua những gì chỉ quản trị viên mới xóa được ở đây; bạn có thể dọn phần đó sau với một lời nhắc của Windows.
+clean-tool-disk-cleanup = Mở Disk Cleanup
+clean-tool-storage-settings = Mở cài đặt Lưu trữ
+clean-tool-system-protection = Mở System Protection
+clean-tool-performance-options = Mở Performance Options
+clean-tool-hint = Mở công cụ của Windows dành cho việc này. NANOFreeDisk không bao giờ tự xóa các mục này.
+
 ## Lý do một mục bị bỏ qua (mã của SafetyGate; mã của Phase 2 nằm trong app.ftl)
 reason-stream = Không bao giờ xóa luồng dữ liệu phụ (alternate data stream).
 reason-device = Đường dẫn thiết bị và tên dành riêng (NUL, COM1…) bị từ chối.
@@ -67,6 +97,14 @@ reason-nested = Đã được tính qua thư mục cha.
 reason-in-use = Có tệp đang được một chương trình sử dụng.
 reason-notfound = Mục này đã không còn.
 reason-permissiondenied = Bị từ chối truy cập (có thể cần quyền quản trị).
+reason-relative-path = Không phải đường dẫn đầy đủ thông thường; bị từ chối.
+reason-unknown-rule = Không có quy tắc nào của ứng dụng bao gồm mục này; bị từ chối.
+reason-not-admin-rule = Quy tắc của mục này không cho phép dọn bằng quyền quản trị.
+reason-expert-only = Mục Nâng cao cần chế độ Expert.
+reason-not-matched = Không có quy tắc nào bao gồm đường dẫn này; bị từ chối.
+reason-kept = Một quy tắc Giữ lại bảo vệ vị trí này.
+reason-not-found-now = Mục này không còn nữa, hoặc không quy tắc nào đề xuất nó nữa.
+reason-path-changed = Một liên kết hoặc tên khác giờ trỏ sang nơi khác; để nguyên.
 reason-unknown = Chưa xóa ({ $code }).
 
 ## Nhật ký hoạt động
@@ -76,6 +114,7 @@ activity-empty = Chưa dọn hay xóa gì.
 activity-kind-clean = Dọn dẹp
 activity-kind-manual = Chuyển vào Thùng rác
 activity-kind-tidy = Dọn gọn
+activity-kind-clean-admin = Dọn dẹp (quyền quản trị)
 activity-items = { $count } mục
 activity-freed = giải phóng { $size }
 activity-state-active = đang giữ

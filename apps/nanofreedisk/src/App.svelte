@@ -30,6 +30,7 @@
   import DevCache from "./lib/views/DevCache.svelte";
   import Duplicates from "./lib/views/Duplicates.svelte";
   import Programs from "./lib/views/Programs.svelte";
+  import Startup from "./lib/views/Startup.svelte";
   import Monitor from "./lib/views/Monitor.svelte";
   import { startMonitorSync } from "./lib/monitor/sync.svelte";
   import Health from "./lib/views/Health.svelte";
@@ -66,6 +67,7 @@
         { id: "health", icon: "health", label: "nav-health" },
         { id: "hardware", icon: "cpu", label: "nav-hardware" },
         { id: "monitor", icon: "monitor", label: "nav-monitor" },
+        { id: "startup", icon: "power", label: "nav-startup" },
       ],
     },
   ];
@@ -262,6 +264,8 @@
       <Duplicates />
     {:else if app.view === "programs"}
       <Programs />
+    {:else if app.view === "startup"}
+      <Startup />
     {:else if app.view === "monitor"}
       <Monitor />
     {:else if app.view === "health"}

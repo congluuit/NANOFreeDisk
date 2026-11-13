@@ -18,6 +18,9 @@ rayon = { workspace = true }
 serde = { workspace = true }
 thiserror = { workspace = true }
 
+[target.'cfg(windows)'.dependencies]
+windows-sys = { workspace = true, features = ["Win32_System_Com", "Win32_UI_Shell"] }
+
 [dev-dependencies]
 proptest = { workspace = true }
 serde_json = { workspace = true }

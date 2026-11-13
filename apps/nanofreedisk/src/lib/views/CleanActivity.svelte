@@ -15,6 +15,7 @@
   import ConfirmDialog from "../components/ConfirmDialog.svelte";
   import Icon from "../components/Icon.svelte";
   import StatCard from "../components/StatCard.svelte";
+  import RecycleBinCard from "../components/RecycleBinCard.svelte";
 
   const loc = $derived(intlLocale());
   let ops = $state<OperationRow[] | null>(null);
@@ -223,6 +224,8 @@
       {/if}
     </section>
   {/if}
+
+  <RecycleBinCard />
 
   {#if ops && !ops.length}
     <div class="panel none"><Icon name="check" size={22} /><span class="muted">{t("activity-empty")}</span></div>

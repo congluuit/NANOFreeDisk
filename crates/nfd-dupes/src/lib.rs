@@ -34,6 +34,7 @@ pub mod collect;
 pub mod folders;
 pub mod hash;
 pub mod keep;
+pub mod personal;
 pub mod plan;
 
 use std::collections::{BTreeMap, HashMap};
@@ -55,7 +56,9 @@ use crate::hash::{Ctx, Refused, SAMPLE, Source};
 
 /// JSON schema id of `nfd dupes --json`.
 pub const SCHEMA: &str = "nanofreedisk.dupes.v1";
-/// Files smaller than this are not considered by default (1 MiB).
+/// Files smaller than this are not considered by default (1 MiB): the default of
+/// `nfd dupes`, made for whole drives. The one-click search of the user's own
+/// folders goes lower ([`personal::PERSONAL_MIN_SIZE`]).
 pub const DEFAULT_MIN_SIZE: u64 = 1 << 20;
 /// Files hashed at once on an SSD / NVMe drive by default.
 pub const DEFAULT_THREADS: usize = 4;

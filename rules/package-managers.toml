@@ -519,6 +519,7 @@ requires_closed = ["choco.exe"]
 impact          = "Backups and failed installs Chocolatey left behind during upgrades (may need administrator rights; skipped otherwise)."
 impact_vi       = "Bản sao lưu và bản cài lỗi Chocolatey để lại khi nâng cấp (có thể cần quyền quản trị; nếu không sẽ bỏ qua)."
 verified_on     = 2026-10-16
+admin           = true
 
 [[rule]]
 id              = "microsoft.winget.logs"

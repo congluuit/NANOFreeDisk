@@ -8,7 +8,8 @@
   import { intlLocale, t } from "../i18n.svelte";
   import { app, expert, fail } from "../state.svelte";
   import { cleanApi } from "../clean/api";
-  import { bytesOf, clean, cleanable, impactText, levelOf, reasonText, runClean, scanJunk } from "../clean/state.svelte";
+  import { bytesOf, clean, cleanable, cleanAsAdmin, impactText, levelOf, reasonText, retryLeftovers, runClean, scanJunk } from "../clean/state.svelte";
+  import { ACTION_KEYS, leftoverAction, leftoverBody, leftoverGroups, leftoverTitle, toolKey, type LeftoverAction } from "../clean/leftovers";
   import type { Candidate, RuleSummary } from "../clean/types";
   import { needsAck, sanitize, summarize, toggle as toggleId, type SelItem } from "../selection";
   import BrowserSites from "../components/BrowserSites.svelte";
@@ -88,6 +89,30 @@
     await runClean(ids, expert(), perm);
   }
 
+  // what the last clean left behind, by cause, with one action each
+  const groups = $derived(leftoverGroups(clean.last));
+  const adminGroup = $derived(groups.find((g) => g.cause === "needs-admin") ?? null);
+  const SHOWN = 6;
+
+  function act(a: LeftoverAction) {
+    if (a === "retry") void retryLeftovers("in-use");
+    else if (a === "retry-other") void retryLeftovers("other");
+    else clean.adminConfirm = true;
+  }
+
+  async function goAdmin() {
+    clean.adminConfirm = false;
+    await cleanAsAdmin();
+  }
+
+  async function openTool(r: RuleSummary) {
+    try {
+      await cleanApi.openTool(r.ruleId);
+    } catch (e) {
+      fail(e);
+    }
+  }
+
   const levelLabel = (r: RuleSummary) => t(`clean-level-${levelOf(r)}`);
   const countOf = (level: string) => visible.filter((r) => r.level === level).length;
   const cliCommand = $derived(
@@ -147,6 +172,39 @@
             </ul>
           </details>
         {/if}
+        {#if groups.length}
+          <div class="left" data-testid="clean-leftovers">
+            <h3 class="small">{t("clean-left-title")}</h3>
+            {#each groups as g (g.cause)}
+              {@const title = leftoverTitle(g)}
+              {@const action = leftoverAction(g)}
+              <div class="left-group {g.cause}" data-left-cause={g.cause}>
+                <div class="row">
+                  <Icon name={g.cause === "in-use" ? "lock" : g.cause === "needs-admin" ? "shield" : "info"} size={16} />
+                  <strong class="grow">{t(title.key, title.args)}</strong>
+                  <span class="muted small num">{t("clean-left-size", { size: formatSize(g.bytes, loc) })}</span>
+                </div>
+                <p class="muted small">{t(leftoverBody(g))}</p>
+                <ul class="left-items">
+                  {#each g.items.slice(0, SHOWN) as i (i.path)}
+                    <li class="small">
+                      <span class="mono ellipsis" title={i.path}>{i.path}</span>
+                      <span class="muted">{i.programs.length ? i.programs.join(", ") : i.reason ? reasonText(i.reason) : ""}</span>
+                    </li>
+                  {/each}
+                </ul>
+                {#if g.items.length > SHOWN}
+                  <p class="muted small">{t("clean-left-more", { count: g.items.length - SHOWN })}</p>
+                {/if}
+                {#if action}
+                  <button class="btn small" class:primary={action === "admin"} data-left-action={action} onclick={() => act(action)}>
+                    <Icon name={action === "admin" ? "shield" : "refresh"} size={14} />{t(ACTION_KEYS[action])}
+                  </button>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
       </div>
       <button class="btn" onclick={() => (app.view = "activity")}><Icon name="undo" size={16} />{t("clean-undo")}</button>
       <button class="btn ghost icon" onclick={() => (clean.last = null)} aria-label={t("clean-dismiss")}><Icon name="x" size={16} /></button>
@@ -184,6 +242,9 @@
                 <div class="name">
                   <strong>{r.app}</strong><span class="muted small">{r.vendor}</span>
                   <span class="tag {levelOf(r)}">{levelLabel(r)}</span>
+                  {#if r.admin}
+                    <span class="tag accent admin" title={t("clean-rule-admin-hint")}><Icon name="shield" size={12} />{t("clean-rule-admin")}</span>
+                  {/if}
                 </div>
                 <p class="impact small"><span class="muted">{t("clean-if-deleted")}</span> {impactText(r)}</p>
                 {#if r.running.length}
@@ -240,7 +301,16 @@
                   <div class="name"><strong>{r.app}</strong><span class="muted small">{r.vendor}</span><span class="tag protected">{levelLabel(r)}</span></div>
                   <p class="impact small">{impactText(r)}</p>
                 </div>
-                <span></span>
+                {#if r.tool}
+                  {@const tool = r.tool}
+                  <div class="size">
+                    <button class="btn ghost small" data-open-tool={r.ruleId} title={t("clean-tool-hint")} onclick={() => openTool(r)}>
+                      <Icon name="open" size={14} />{t(toolKey(tool))}
+                    </button>
+                  </div>
+                {:else}
+                  <span></span>
+                {/if}
               </li>
             {/each}
           </ul>
@@ -290,6 +360,30 @@
         <button class="btn" onclick={() => (clean.confirm = null)}>{t("delete-cancel")}</button>
         <button class="btn danger" data-confirm-go onclick={go} disabled={(permanent && canPermanent && typed !== "DELETE") || (needsAck(confirmSummary) && !ack)} data-effect title={permanent && canPermanent ? t("clean-confirm-permanent-note") : t("clean-confirm-note")}>
           <Icon name="clean" size={16} />{permanent && canPermanent ? t("clean-confirm-permanent") : t("clean-confirm-go")}
+        </button>
+      </footer>
+    </div>
+  </div>
+{/if}
+
+{#if clean.adminConfirm && adminGroup}
+  <div class="backdrop" role="presentation" onclick={(e) => e.target === e.currentTarget && (clean.adminConfirm = false)} onkeydown={(e) => e.key === "Escape" && (clean.adminConfirm = false)}>
+    <div class="dialog card" role="alertdialog" aria-modal="true" aria-labelledby="clean-admin-title">
+      <h2 id="clean-admin-title"><Icon name="shield" size={20} />{t("clean-admin-title")}</h2>
+      <p>{t("clean-admin-body")}</p>
+      <ul class="confirm-list">
+        {#each adminGroup.items.slice(0, 8) as i (i.path)}
+          <li><Icon name={i.isDir ? "folder" : "file"} size={14} /><span class="mono ellipsis" title={i.path}>{i.path}</span><span class="num">{formatSize(i.bytes, loc)}</span></li>
+        {/each}
+      </ul>
+      {#if adminGroup.items.length > 8}
+        <p class="muted small">{t("clean-left-more", { count: adminGroup.items.length - 8 })}</p>
+      {/if}
+      <p class="muted small">{clean.lastPermanent ? t("clean-admin-where-permanent") : t("clean-admin-where")}</p>
+      <footer>
+        <button class="btn" onclick={() => (clean.adminConfirm = false)}>{t("delete-cancel")}</button>
+        <button class="btn primary" data-admin-go onclick={goAdmin}>
+          <Icon name="shield" size={16} />{t("clean-admin-go")}
         </button>
       </footer>
     </div>
@@ -356,6 +450,48 @@
     gap: 10px;
     align-items: center;
     color: var(--text-muted);
+  }
+  .left {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+  }
+  .left h3 {
+    margin: 0;
+    font-weight: 600;
+  }
+  .left-group {
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-2);
+    border-left: 3px solid var(--border);
+  }
+  .left-group.in-use {
+    border-left-color: var(--risk-caution);
+  }
+  .left-group.needs-admin {
+    border-left-color: var(--accent);
+  }
+  .left-group p {
+    margin: 4px 0;
+  }
+  .left-items {
+    margin: 4px 0 6px;
+    padding: 0;
+    list-style: none;
+    max-height: 140px;
+    overflow: auto;
+  }
+  .left-items li {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+  .tag.admin {
+    display: inline-flex;
+    gap: 3px;
+    align-items: center;
   }
   .pack h2 {
     display: flex;

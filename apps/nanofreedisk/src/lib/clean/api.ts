@@ -21,6 +21,12 @@ export const cleanApi = {
   run: (ruleIds: string[], expert: boolean, permanent: boolean) =>
     call<OperationResult>("clean_run", { ruleIds, expert, permanent }),
   cancel: () => call<void>("clean_cancel"),
+  /** Clean the last clean's leftovers of `cause` again (the backend re-plans them). */
+  retry: (cause: "in-use" | "other") => call<OperationResult>("clean_retry", { cause }),
+  /** Clean the last clean's "needs administrator rights" leftovers through one UAC prompt. */
+  elevated: () => call<OperationResult>("clean_elevated"),
+  /** Open the Windows tool of a guidance rule. */
+  openTool: (ruleId: string) => call<void>("clean_open_tool", { ruleId }),
   deleteEntries: (ids: number[], mode: DeleteMode, kind: "manual" | "tidy") =>
     call<DeleteOutcome[]>("delete_entries", { ids, mode, kind }),
   activity: (limit: number) => call<OperationRow[]>("activity_list", { limit }),

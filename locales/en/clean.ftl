@@ -54,6 +54,36 @@ clean-status-declined = declined
 clean-status-cancelled = not done (stopped)
 clean-status-not-selected = not selected
 
+## What a clean left behind, and why
+clean-left-title = What is still there
+clean-left-in-use-title = In use by { $apps }
+clean-left-in-use-unknown = In use by a program or by Windows
+clean-left-in-use-body = A running program has these files open, so Windows lets nobody move them. Save your work, close the program, then try again. NANOFreeDisk never closes programs for you.
+clean-left-retry = I closed it, try again
+clean-left-admin-title = Needs administrator rights
+clean-left-admin-body = Windows lets only administrators remove these system files. NANOFreeDisk can ask Windows for permission once, and checks every item again before anything moves.
+clean-left-admin-button = Clean with administrator rights
+clean-left-other-title = Not removed for other reasons
+clean-left-other-body = These were skipped to stay safe or could not be removed. The reason is next to each one.
+clean-left-other-retry = Look again and retry
+clean-left-size = { $size } still on the disk
+clean-left-more = and { $count } more
+clean-admin-title = Clean with administrator rights?
+clean-admin-body = Windows will ask once for administrator rights. NANOFreeDisk then loads its own rules again, checks every item once more and refuses anything a rule does not cover. Only these items are touched:
+clean-admin-where = Removed items go to the Recycle Bin. You can restore them from there; Windows asks for administrator rights again when you do.
+clean-admin-where-permanent = You chose to delete permanently: items of pure cache and temporary-file rules are deleted for good and cannot be restored. Everything else goes to the Recycle Bin.
+clean-admin-go = Continue, Windows will ask
+clean-admin-declined = The administrator prompt was declined. Nothing was changed.
+clean-admin-disabled = Administrator prompts are turned off in this test run.
+clean-retry-nothing = Nothing is left to clean: those items went away by themselves.
+clean-rule-admin = Needs administrator rights
+clean-rule-admin-hint = A normal clean skips what only administrators may remove here; you can clean that afterwards with one Windows prompt.
+clean-tool-disk-cleanup = Open Disk Cleanup
+clean-tool-storage-settings = Open Storage settings
+clean-tool-system-protection = Open System Protection
+clean-tool-performance-options = Open Performance Options
+clean-tool-hint = Opens the Windows tool made for this. NANOFreeDisk never deletes these itself.
+
 ## Why an item was skipped (SafetyGate codes; the Phase 2 ones live in app.ftl)
 reason-stream = Alternate data streams are never deleted.
 reason-device = Device paths and reserved names (NUL, COM1…) are refused.
@@ -67,6 +97,14 @@ reason-nested = Already included through its parent folder.
 reason-in-use = Some files are in use by a running program.
 reason-notfound = It is already gone.
 reason-permissiondenied = Access denied (it may need administrator rights).
+reason-relative-path = Not a plain full path; refused.
+reason-unknown-rule = No rule of this app covers it; refused.
+reason-not-admin-rule = Its rule does not allow cleaning with administrator rights.
+reason-expert-only = Advanced items need Expert mode.
+reason-not-matched = No rule covers this path; refused.
+reason-kept = A Keep rule protects this location.
+reason-not-found-now = It is no longer there, or no rule offers it any more.
+reason-path-changed = A link or another name now leads somewhere else; left alone.
 reason-unknown = Not deleted ({ $code }).
 
 ## Activity log
@@ -76,6 +114,7 @@ activity-empty = Nothing cleaned or deleted yet.
 activity-kind-clean = Clean
 activity-kind-manual = Moved to the Recycle Bin
 activity-kind-tidy = Tidy up
+activity-kind-clean-admin = Clean (administrator)
 activity-items = { $count } item(s)
 activity-freed = { $size } freed
 activity-state-active = kept

@@ -3,7 +3,7 @@
 // delete of hand-picked entries delegated to the main mock's `recycle`.
 
 import { HELD_MODES, heldItem, restorableItem } from "./quarantine.ts";
-import type { CleanScan, OperationItem, OperationRow, PurgeResult, QuarantineInfo, RuleSummary } from "./types";
+import type { CleanScan, LeftoverGroup, OperationItem, OperationResult, OperationRow, PurgeResult, QuarantineInfo, RuleSummary } from "./types";
 
 const MB = 2 ** 20;
 const GB = 2 ** 30;
@@ -49,10 +49,26 @@ function reset(): void {
       running: ["explorer.exe"],
     }),
     rule("windows.crashdumps.user", "windows-system", "Windows Error Reporting", "Microsoft", "safe", 276 * MB, 10),
-    rule("windows.update.download-cache", "windows-system", "Windows", "Microsoft", "advanced", 2.1 * GB, 410),
+    rule("windows.temp.system", "windows-system", "Windows", "Microsoft", "safe", 640 * MB, 1800, {
+      admin: true,
+      impact: "System-wide temporary files (requires administrator). Locked files are skipped.",
+      impactVi: "Tệp tạm của toàn hệ thống (cần quyền quản trị). Tệp đang bị khóa được bỏ qua.",
+    }),
+    rule("windows.update.download-cache", "windows-system", "Windows", "Microsoft", "advanced", 2.1 * GB, 410, { admin: true }),
     rule("windows.winsxs", "windows-system", "Windows", "Microsoft", "protected", 0, 0, {
+      tool: "disk-cleanup",
       impact: "Component store. Reclaim space with DISM /Online /Cleanup-Image /StartComponentCleanup.",
       impactVi: "Kho thành phần. Thu hồi dung lượng bằng DISM /Online /Cleanup-Image /StartComponentCleanup.",
+    }),
+    rule("windows.old", "windows-system", "Windows Setup", "Microsoft", "protected", 0, 0, {
+      tool: "storage-settings",
+      impact: "Previous Windows installation. Remove it with Settings, System, Storage, Temporary files.",
+      impactVi: "Bản cài Windows trước. Xóa trong Settings, System, Storage, Temporary files.",
+    }),
+    rule("windows.restore-points", "windows-system", "System Restore / VSS", "Microsoft", "protected", 0, 0, {
+      tool: "system-protection",
+      impact: "Restore points and shadow copies. Manage them in System Protection.",
+      impactVi: "Điểm khôi phục và shadow copy. Quản lý trong System Protection.",
     }),
     rule("browser.chrome.cache", "browsers", "Chrome", "Google", "safe", 734 * MB, 21942, {
       requiresClosed: ["chrome.exe"],
@@ -178,6 +194,48 @@ function purgeOp(o: MockOp, only?: number[] | null): PurgeResult {
   return out;
 }
 
+const mockPath = (r: RuleSummary): string =>
+  r.admin ? `C:\\Windows\\Temp\\${r.ruleId.split(".").pop()}` : `C:\\Users\\nano\\AppData\\Local\\${r.app.replace(/\W+/g, "")}\\Cache`;
+
+/** Friendly names Restart Manager would report for the running exe names. */
+const FRIENDLY: Record<string, string> = { "explorer.exe": "Windows Explorer", "msedge.exe": "Microsoft Edge", "chrome.exe": "Google Chrome" };
+
+/** What the last mock clean left behind (what retry and the elevated run work on). */
+let lastLeft: LeftoverGroup[] = [];
+
+/** The command result of a mock operation, with its leftovers grouped like
+ *  `nfd_core::exec::group_leftovers` does. */
+function result(row: OperationRow, items: OperationItem[], carry: LeftoverGroup[] = []): OperationResult {
+  const left = items.filter((i) => i.status === "partial" || i.status === "failed");
+  const groups: LeftoverGroup[] = carry.map((g) => ({ ...g, items: [...g.items] }));
+  for (const i of left) {
+    const r = rules.find((x) => x.ruleId === i.ruleId);
+    const programs = (r?.running ?? []).map((exe) => FRIENDLY[exe] ?? exe);
+    const cause = i.reason === "in-use" || programs.length ? "in-use" : i.reason === "permissiondenied" && r?.admin ? "needs-admin" : "other";
+    let g = groups.find((x) => x.cause === cause);
+    if (!g) groups.push((g = { cause, programs: [], bytes: 0, items: [] }));
+    const bytes = i.bytes - i.freed;
+    g.items.push({ n: i.n, path: i.path, ruleId: i.ruleId, isDir: i.isDir, bytes, status: i.status, reason: i.reason, programs });
+    g.bytes += bytes;
+    g.programs = [...new Set([...g.programs, ...programs])].sort();
+  }
+  const order = { "in-use": 0, "needs-admin": 1, other: 2 };
+  groups.sort((a, b) => order[a.cause] - order[b.cause]);
+  lastLeft = groups;
+  return {
+    id: row.id,
+    freed: row.freed,
+    done: items.filter((i) => i.status === "done").length,
+    partial: items.filter((i) => i.status === "partial").length,
+    skipped: items.filter((i) => i.status === "skipped").length,
+    failed: items.filter((i) => i.status === "failed").length,
+    cancelled: false,
+    problems: left.map((i) => ({ path: i.path, status: i.status as "partial" | "failed", reason: i.reason })),
+    journalError: null,
+    leftovers: groups.length ? groups : undefined,
+  };
+}
+
 export function mockDeleted(kind: string, items: { path: string; bytes: number; isDir: boolean }[], mode: OperationItem["mode"]): void {
   record(
     kind,
@@ -201,40 +259,94 @@ export const cleanHandlers: Record<string, (a: Record<string, any>) => unknown> 
   },
   clean_run: ({ ruleIds }) => {
     const picked = rules.filter((r) => ruleIds.includes(r.ruleId) && r.level !== "protected");
-    const items: OperationItem[] = picked.map((r, n) => ({
+    // a running app keeps some files open; an admin rule's files are denied
+    const items: OperationItem[] = picked.map((r, n) => {
+      const busy = r.running.length > 0;
+      const denied = !busy && !!r.admin;
+      return {
+        n,
+        path: mockPath(r),
+        ruleId: r.ruleId,
+        mode: "quarantine",
+        isDir: true,
+        bytes: r.bytes,
+        files: r.files,
+        freed: busy ? Math.round(r.bytes * 0.8) : denied ? Math.round(r.bytes * 0.1) : r.bytes,
+        status: busy || denied ? "partial" : "done",
+        reason: busy ? "in-use" : denied ? "permissiondenied" : null,
+        stored: `${QUARANTINE_ROOT}\\new\\${n}\\Cache`,
+        restored: false,
+        message: null,
+        purged: false,
+      };
+    });
+    const row = record("clean", items);
+    for (const r of picked) {
+      r.bytes = r.running.length || r.admin ? Math.round(r.bytes * 0.2) : 0;
+      r.files = r.bytes ? Math.round(r.files * 0.2) : 0;
+      r.candidates = r.bytes ? 1 : 0;
+    }
+    return result(row, items);
+  },
+  clean_retry: ({ cause }) => {
+    const want = cause === "other" ? "other" : "in-use";
+    const left = lastLeft.filter((g) => g.cause === want).flatMap((g) => g.items);
+    if (!left.length) throw { code: "nothing-to-clean", message: "nothing is left to clean" };
+    // the user closed the apps: everything goes this time
+    const items: OperationItem[] = left.map((l, n) => ({
       n,
-      path: `C:\\Users\\nano\\AppData\\Local\\${r.app.replace(/\W+/g, "")}\\Cache`,
-      ruleId: r.ruleId,
+      path: l.path,
+      ruleId: l.ruleId,
       mode: "quarantine",
-      isDir: true,
-      bytes: r.bytes,
-      files: r.files,
-      freed: r.running.length ? Math.round(r.bytes * 0.8) : r.bytes,
-      status: r.running.length ? "partial" : "done",
-      reason: r.running.length ? "in-use" : null,
-      stored: `${QUARANTINE_ROOT}\\new\\${n}\\Cache`,
+      isDir: l.isDir,
+      bytes: l.bytes,
+      files: 1,
+      freed: l.bytes,
+      status: "done",
+      reason: null,
+      stored: `${QUARANTINE_ROOT}\\retry\\${n}\\Cache`,
       restored: false,
       message: null,
       purged: false,
     }));
-    const row = record("clean", items);
-    for (const r of picked) {
-      r.bytes = r.running.length ? Math.round(r.bytes * 0.2) : 0;
-      r.files = r.bytes ? Math.round(r.files * 0.2) : 0;
-      r.candidates = r.bytes ? 1 : 0;
+    for (const r of rules.filter((x) => items.some((i) => i.ruleId === x.ruleId))) {
+      r.running = [];
+      r.bytes = 0;
+      r.files = 0;
+      r.candidates = 0;
     }
-    const partial = items.filter((i) => i.status === "partial");
-    return {
-      id: row.id,
-      freed: row.freed,
-      done: items.length - partial.length,
-      partial: partial.length,
-      skipped: 0,
-      failed: 0,
-      cancelled: false,
-      problems: partial.map((i) => ({ path: i.path, status: "partial", reason: "in-use" })),
-      journalError: null,
-    };
+    const carry = lastLeft.filter((g) => g.cause !== want);
+    return result(record("clean", items), items, carry);
+  },
+  clean_elevated: () => {
+    const left = lastLeft.filter((g) => g.cause === "needs-admin").flatMap((g) => g.items);
+    if (!left.length) throw { code: "nothing-to-clean", message: "nothing is left to clean" };
+    const items: OperationItem[] = left.map((l, n) => ({
+      n,
+      path: l.path,
+      ruleId: l.ruleId,
+      mode: "recycle-bin",
+      isDir: l.isDir,
+      bytes: l.bytes,
+      files: 1,
+      freed: l.bytes,
+      status: "done",
+      reason: null,
+      stored: null,
+      restored: false,
+      message: null,
+      purged: false,
+    }));
+    for (const r of rules.filter((x) => items.some((i) => i.ruleId === x.ruleId))) {
+      r.bytes = 0;
+      r.files = 0;
+      r.candidates = 0;
+    }
+    const carry = lastLeft.filter((g) => g.cause !== "needs-admin");
+    return result(record("clean-admin", items), items, carry);
+  },
+  clean_open_tool: ({ ruleId }) => {
+    if (!rules.some((r) => r.ruleId === ruleId && r.tool)) throw { code: "not-found", message: ruleId };
   },
   clean_cancel: () => undefined,
   activity_list: ({ limit }) =>

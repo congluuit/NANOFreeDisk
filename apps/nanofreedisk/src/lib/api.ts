@@ -85,6 +85,8 @@ export const api = {
   oldAndLarge: (id: number, options: OldLargeOptions) =>
     call<OldLargeRows>("old_and_large", { id, options }),
   emptyFolders: (id: number, limit: number) => call<EmptyRows>("empty_folders", { id, limit }),
+  zeroByteFiles: (id: number, limit: number) =>
+    call<import("./types").ZeroRows>("zero_byte_files", { id, limit }),
   brokenShortcuts: (id: number, limit: number) =>
     call<ShortcutRows>("broken_shortcuts", { id, limit }),
   historySnapshots: (root: string) => call<Snapshot[]>("history_snapshots", { root }),

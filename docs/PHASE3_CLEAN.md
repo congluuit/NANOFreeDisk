@@ -62,7 +62,7 @@
 
 ## 5. Ngoài phạm vi Phase 3
 
-DevCache UI (Phase 4), Duplicates (Phase 5), System Restore Point tự động (cần helper elevated — làm cùng helper của Hardware Monitor), dọn system junk cần admin.
+DevCache UI (Phase 4), Duplicates (Phase 5), System Restore Point tự động (cần helper elevated, làm cùng helper của Hardware Monitor). Dọn system junk cần admin: làm sau, xem mục 8.
 
 ## 6. Rủi ro
 
@@ -80,3 +80,26 @@ DevCache UI (Phase 4), Duplicates (Phase 5), System Restore Point tự động (
 | `apps/nfd-cli/src/clean.rs` | `apps/nfd-cli/src/hw.rs` |
 
 File dùng chung (chỉ thêm dòng đăng ký, merge tay khi gộp): `Cargo.toml` workspace members, `src-tauri/src/lib.rs` (`invoke_handler`), `App.svelte` / sidebar, loader i18n + `scripts/check-locales.mjs` (hỗ trợ nhiều tệp `.ftl` — phase nào làm trước thì làm), `CHANGELOG.md`, `README.md`, `docs/PLAN.md`. Mỗi bên làm trên nhánh / worktree riêng, bắt đầu **sau khi** session Phase 2 commit xong.
+
+## 8. Những gì còn lại sau khi dọn, và lần dọn với quyền quản trị (2026-11)
+
+Người dùng báo một số rác "không bao giờ hết": tệp đang bị chương trình giữ, và tệp chỉ quản trị viên mới xóa được (`%SystemRoot%\Temp`, nhật ký CBS, dump của kernel, bộ đệm tải về của Windows Update).
+
+**Kết quả "còn gì và vì sao".** Executor phân biệt lý do: lỗi chia sẻ / khóa (32, 33) thành `in-use`, bị từ chối truy cập thành `permissiondenied` (cả khi di chuyển từng tệp của một thư mục; thư mục con không đọc được không còn làm hỏng cả mục mà chỉ được để lại). `exec::group_leftovers` gom các mục còn lại theo nguyên nhân: **đang được dùng** (tên chương trình từ Restart Manager, hỏi lại sau khi dọn), **cần quyền quản trị** (bị từ chối và quy tắc có `admin = true`), **khác** (SafetyGate chặn, đã đổi từ lúc quét, lỗi khác). Mỗi nhóm có lời giải thích và một hành động trong view Dọn dẹp.
+
+**"Đóng rồi thử lại"** (`clean_retry`). Backend giữ lần dọn cuối; nút chỉ gửi nguyên nhân, không gửi đường dẫn. Các quy tắc liên quan được quét lại, chỉ ứng viên mới nằm tại hoặc bên dưới một mục còn lại (cùng quy tắc) được đưa vào Planner, rồi SafetyGate và Executor như mọi lần dọn. Ứng dụng không bao giờ tự đóng chương trình.
+
+**Lần dọn với quyền quản trị** (`nanofreedisk.exe --elevated-clean <request.json> <response.json>`, theo mẫu `--elevated-leftovers`). Chỉ chạy sau khi người dùng bấm nút ghi rõ cần quyền quản trị và xác nhận trong dialog; một lời nhắc UAC cho cả lô; không có tiến trình elevated thường trú; `NFD_NO_AUTO_ELEVATE` tắt hẳn. Ranh giới tin cậy:
+
+- Tệp request nằm trong thư mục dữ liệu của app, chương trình nào của người dùng cũng ghi được, nên là **dữ liệu không tin cậy**: nó chỉ có thể thu hẹp những gì tiến trình elevated tự quyết dọn, không bao giờ mở rộng. Dòng lệnh phải đúng dạng `[exe, cờ, req, resp]`, hai tệp `.json` tuyệt đối cùng thư mục; request tối đa 8 MiB, không qua link, trường lạ bị từ chối (`deny_unknown_fields`), mã thao tác đúng dạng `YYYYMMDD-HHMMSS-xxxx`.
+- Tiến trình elevated bật **Redirection Guard** (`ProcessRedirectionTrustPolicy`: không đi theo junction do người không phải quản trị tạo), tự nạp **gói quy tắc nhúng trong binary** và lấy các thư mục máy (`SYSTEMROOT`, `SYSTEMDRIVE`, `PROGRAMDATA`, `PROGRAMFILES*`) từ `SHGetKnownFolderPath`, không từ biến môi trường (biến người dùng như `SystemRoot` trong `HKCU\Environment` là đường vòng UAC kinh điển).
+- Mỗi mục bị từ chối nếu: không phải đường dẫn ổ đĩa tuyệt đối thông thường (`relative-path`: tương đối, `.`/`..`, `\\?\`, UNC, thiết bị, tên kết thúc bằng dấu chấm/khoảng trắng); quy tắc không có (`unknown-rule`), không có `admin = true` (`not-admin-rule`), là Được bảo vệ (`protected-level`) hoặc Nâng cao khi không ở Expert (`expert-only`); quy tắc đó không khớp đường dẫn (`not-matched`); một quy tắc Giữ lại bao gồm nó (`kept`); SafetyGate từ vựng chặn.
+- Các quy tắc được chấp nhận được **quét lại ngay trong tiến trình elevated**; chỉ ứng viên mới tại hoặc dưới một mục được yêu cầu mới được dọn (`not-found-now` cho phần còn lại). Bản quét không bao giờ đi theo hay đề xuất link; kích thước, thời gian lấy từ bản quét này, không từ request.
+- Executor kiểm tra lại từng mục ngay trước khi làm (SafetyGate trên đĩa: còn đó, không phải link, đường dẫn cuối được phép, cùng volume, không phải tệp SYSTEM, không phải tệp chương trình dưới `%SystemRoot%`, không đổi), cộng thêm: đường dẫn cuối phải **chính là** đường dẫn đó (`path-changed` nếu link hay tên ngắn ở thư mục cha dẫn đi nơi khác).
+- Quy tắc `admin` chỉ được dùng biến máy (`nfd rules validate` báo lỗi nếu có `${HOME}`, `${TEMP}`…): với tài khoản quản trị khác (người dùng chuẩn nhập mật khẩu admin), tiến trình elevated không bao giờ đụng hồ sơ của ai.
+
+**Mục bị xóa đi đâu.** Vào **Thùng rác** (khôi phục bằng Explorer, Windows hỏi quyền quản trị). Không dùng khu cách ly: nó nằm trong hồ sơ người dùng mà chương trình của người dùng ghi được, nên một tiến trình quản trị chuyển tệp vào đó có thể bị chuyển hướng, và app không elevated cũng không dọn được những tệp đó khi hết hạn. Xóa vĩnh viễn chỉ khi lần dọn gốc chọn xóa vĩnh viễn (Expert) và quy tắc là An toàn có `regenerates` (bộ đệm, tệp tạm thuần túy); dialog xác nhận nói rõ điều này. Kết quả ghi vào nhật ký hoàn tác và Hoạt động với kind `clean-admin`; mục bị từ chối hiện là "bỏ qua" kèm mã.
+
+**"Xóa khi khởi động lại" (`MoveFileExW` + `MOVEFILE_DELAY_UNTIL_REBOOT`): không làm.** Đường dẫn được ghi vào `PendingFileRenameOperations` và Session Manager xóa nó lúc khởi động với quyền SYSTEM, theo đường dẫn lúc đó, không kiểm tra gì. Tệp còn lại nằm trong thư mục người dùng (hoặc `C:\Windows\Temp`, nơi Users được tạo thư mục) có thể bị đổi thư mục cha thành junction trước khi khởi động lại, biến lệnh xóa thành "xóa tệp tùy ý với quyền SYSTEM", một lỗ hổng leo thang quyền đã biết (cùng họ với CVE-2025-21420 của Disk Cleanup). Không có cách kiểm tra lại lúc khởi động, nên phương án an toàn là: đóng chương trình rồi thử lại, hoặc khởi động lại máy rồi dọn.
+
+**Kho của Windows** (WinSxS, Windows.old, điểm khôi phục, pagefile/hiberfil, Delivery Optimization) vẫn là mục Được bảo vệ, chỉ hướng dẫn: không bao giờ chiếm quyền sở hữu hay xóa trực tiếp. Trường `tool` của quy tắc (danh sách đóng, loader từ chối giá trị lạ, không bao giờ là dòng lệnh) cho nút "Mở công cụ của Windows": `disk-cleanup` (`cleanmgr.exe`, "Clean up system files" có Windows Update Cleanup cho kho thành phần, với tiến trình riêng của nó), `storage-settings` (`ms-settings:storagesense`), `system-protection` (`SystemPropertiesProtection.exe`), `performance-options` (`SystemPropertiesPerformance.exe`). Chương trình lấy từ `System32` của thư mục Windows mà Windows báo, không qua `PATH`. Chưa chạy `Dism /StartComponentCleanup` từ app: Disk Cleanup làm cùng việc và tự hiện tiến trình.

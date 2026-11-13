@@ -1,9 +1,11 @@
 <script lang="ts">
-  // Duplicates (PHASE5_DUPLICATES §2.6): byte-identical files in the Analyze scan or
-  // in folders picked here, largest waste first. One copy per group always stays —
-  // the planner refuses anything else — and each removed copy and its keeper are
-  // hashed again right before the move (Recycle Bin, or the quarantine in Expert
-  // mode; Activity log → Restore).
+  // Duplicates (PHASE5_DUPLICATES §2.6): byte-identical files in the user's personal
+  // folders, the Analyze scan or folders picked here, largest waste first. Simple
+  // mode opens on one button (the personal folders) with the full form under
+  // "Options"; Expert mode shows the form. One copy per group always stays, the
+  // planner refuses anything else, and each removed copy and its keeper are hashed
+  // again right before the move (Recycle Bin, or the quarantine in Expert mode;
+  // Activity log, Restore).
   import { inTauri, pickFolder, pickSaveFile } from "../api";
   import { formatCount, formatDate, formatSize } from "../format";
   import { intlLocale, t } from "../i18n.svelte";
@@ -17,20 +19,26 @@
     dupes,
     filePickIds,
     findDupes,
+    findPersonal,
     folderPickIds,
     folderTotals,
     linkPlan,
     loadThumb,
+    minBytes,
     risky,
     runDupes,
+    searchAgain,
     selectedTotals,
     setFilePicks,
     setFolderKeep,
     setFolderPicks,
     setKeep,
+    setMinBytes,
     toggleFolderRemove,
     toggleRemove,
   } from "../dupes/state.svelte";
+  import { splitSize, toBytes, type SizeUnit } from "../dupes/size";
+  import { skipLines, type SkipAction } from "../dupes/skipped";
   import type { DupeAction, DupeGroup, FileCopy, FileKind, FolderCopy, KeepStrategy } from "../dupes/types";
   import { summarize, type SelItem } from "../selection";
   import CliHint from "../components/CliHint.svelte";
@@ -45,16 +53,53 @@
   const STRATEGIES: KeepStrategy[] = ["auto", "oldest", "newest", "shortest"];
   const IMAGE = /\.(jpe?g|png|gif|webp|bmp)$/i;
 
+  // before the first search the form offers the scan in Analyze when there is one
+  // (the one-click button always searches the personal folders)
+  if (!dupes.report && !dupes.searching && !dupes.lastScope && dupes.scope === "personal" && app.summary) dupes.scope = "current";
   $effect(() => {
-    // the first visit follows the saved keep strategy and the scan in Analyze
+    // the first visit follows the saved keep strategy
     if (!dupes.report && !dupes.searching) {
       dupes.strategy = (app.settings.dupeKeep as KeepStrategy) ?? "auto";
-      if (!app.summary && dupes.scope === "current") dupes.scope = "folders";
+      if (!app.summary && dupes.scope === "current") dupes.scope = "personal";
     }
   });
 
+  // the size limit: a number in KB or MB, saved as bytes
+  let unit = $state<SizeUnit>(splitSize(minBytes()).unit);
+  const sizeValue = $derived(Math.round((minBytes() / (unit === "MB" ? 2 ** 20 : 1024)) * 100) / 100);
+  function onSize(e: Event) {
+    const v = Number((e.currentTarget as HTMLInputElement).value);
+    if (v > 0) setMinBytes(toBytes(v, unit));
+  }
+  function onUnit(e: Event) {
+    const u = (e.currentTarget as HTMLSelectElement).value as SizeUnit;
+    setMinBytes(toBytes(sizeValue, u));
+    unit = u;
+  }
+  function chooseFolders() {
+    dupes.scope = "folders";
+    dupes.optionsOpen = true;
+  }
+  function skipAction(a: SkipAction) {
+    if (a.kind === "lower") {
+      unit = splitSize(a.bytes).unit;
+      void searchAgain(() => setMinBytes(a.bytes));
+    } else if (a.kind === "app-dirs") void searchAgain(() => (dupes.includeAppDirs = true));
+    else if (a.kind === "all-types") void searchAgain(() => (dupes.kind = "all"));
+    else void searchAgain();
+  }
+  function actionLabel(a: SkipAction): string {
+    if (a.kind === "lower") return t("dupes-skip-act-lower", { size: formatSize(a.bytes, loc) });
+    return t(`dupes-skip-act-${a.kind}`);
+  }
+
   const report = $derived(dupes.report);
   const groups = $derived(report?.groups.slice(0, dupes.shown) ?? []);
+  const skips = $derived(report ? skipLines(report) : []);
+  const skipTotal = $derived(skips.reduce((sum, l) => sum + l.count, 0));
+  /** Copies beyond the first of every group (what removing the extras means). */
+  const extraCopies = $derived((report?.groups ?? []).reduce((sum, g) => sum + g.copies.length - 1, 0));
+  const rootNames = $derived((report?.roots ?? []).map((r) => nameOf(r.replace(/[\\/]+$/, "")) || r).join(", "));
   const totals = $derived.by(() => {
     void dupes.picks;
     return selectedTotals();
@@ -161,7 +206,7 @@
   }
 </script>
 
-<section class="page dupes" bind:this={page}>
+<section class="page dupes" bind:this={page} data-mode={expert() ? "expert" : "simple"}>
   <header class="page-head">
     <div>
       <h1>{t("dupes-title")}</h1>
@@ -174,9 +219,12 @@
     </div>
   </header>
 
-  <div class="panel scope">
-    <h2 class="panel-title">{t("dupes-scope")}</h2>
-    <div class="row" role="radiogroup" aria-label={t("dupes-scope")}>
+  {#snippet searchForm()}
+    <div class="row wrap" role="radiogroup" aria-label={t("dupes-scope")}>
+      <label class="radio" title={t("dupes-scope-personal-hint")}>
+        <input type="radio" name="dupes-scope" value="personal" bind:group={dupes.scope} disabled={!!dupes.searching} />
+        {t("dupes-scope-personal")}
+      </label>
       <label class="radio" title={app.summary ? app.summary.root : t("dupes-scope-current-none")}>
         <input type="radio" name="dupes-scope" value="current" bind:group={dupes.scope} disabled={!app.summary || !!dupes.searching} />
         {t("dupes-scope-current")}
@@ -201,8 +249,11 @@
     <div class="row wrap">
       <label class="field">
         {t("dupes-min-size")}
-        <input type="number" min="0.01" step="0.5" bind:value={app.settings.dupeMinMb} disabled={!!dupes.searching} data-effect title={t("dupes-min-size-hint")} />
-        <span class="muted">MB</span>
+        <input type="number" min="0.01" step="any" value={sizeValue} onchange={onSize} disabled={!!dupes.searching} data-effect data-min-size title={t("dupes-min-size-hint")} />
+        <select value={unit} onchange={onUnit} disabled={!!dupes.searching} data-effect aria-label={t("dupes-min-size-unit")} title={t("dupes-min-size-hint")}>
+          <option value="KB">KB</option>
+          <option value="MB">MB</option>
+        </select>
       </label>
       <label class="field">
         {t("dupes-kind")}
@@ -211,8 +262,8 @@
         </select>
       </label>
       <label class="field" title={t("dupes-folders-hint")}><input type="checkbox" bind:checked={dupes.findFolders} disabled={!!dupes.searching} data-effect title={t("dupes-folders-hint")} />{t("dupes-folders")}</label>
+      <label class="field" title={t("dupes-app-dirs-hint")}><input type="checkbox" bind:checked={dupes.includeAppDirs} disabled={!!dupes.searching} />{t("dupes-app-dirs")}</label>
       {#if expert()}
-        <label class="field" title={t("dupes-app-dirs-hint")}><input type="checkbox" bind:checked={dupes.includeAppDirs} disabled={!!dupes.searching} />{t("dupes-app-dirs")}</label>
         <label class="field" title={t("dupes-paranoid-hint")}><input type="checkbox" bind:checked={dupes.paranoid} disabled={!!dupes.searching} />{t("dupes-paranoid")}</label>
       {/if}
       <span class="grow"></span>
@@ -229,7 +280,37 @@
         ><Icon name="search" size={16} />{t("dupes-find")}</button>
       {/if}
     </div>
-  </div>
+  {/snippet}
+
+  {#if expert()}
+    <div class="panel scope">
+      <h2 class="panel-title">{t("dupes-scope")}</h2>
+      {@render searchForm()}
+    </div>
+  {:else}
+    <div class="panel scope start" data-dupes-start>
+      {#if !report && !dupes.searching}
+        <div>
+          <h2 class="start-title">{t("dupes-start-title")}</h2>
+          <p class="muted">{t("dupes-start-body")}</p>
+        </div>
+      {/if}
+      <div class="row wrap">
+        {#if dupes.searching}
+          <button class="btn" onclick={() => dupesApi.cancel().catch(fail)}>{t("clean-cancel")}</button>
+        {:else}
+          <button class="btn primary big" data-find-personal onclick={() => void findPersonal()} data-effect title={t("dupes-find-mine-hint")}>
+            <Icon name="search" size={18} />{report ? t("dupes-find-mine-again") : t("dupes-find-mine")}
+          </button>
+          <button class="btn" data-choose-folders onclick={chooseFolders} data-effect title={t("dupes-choose-hint")}><Icon name="folder" size={16} />{t("dupes-choose")}</button>
+        {/if}
+      </div>
+      <details class="options" bind:open={dupes.optionsOpen}>
+        <summary>{t("dupes-options")}</summary>
+        <div class="options-body">{@render searchForm()}</div>
+      </details>
+    </div>
+  {/if}
 
   {#if dupes.searching}
     <div class="card running" aria-live="polite">
@@ -270,21 +351,28 @@
   {/if}
 
   {#if report && !dupes.searching}
-    <div class="stats" data-dupes-summary>
-      <StatCard label={t("stat-wasted")} tone="caution" value={formatSize(report.wastedBytes, loc)} unit={t("stat-in-groups", { count: report.totalGroups })} />
-      <StatCard label={t("stat-compared")} value={formatCount(report.scannedFiles, loc)} unit={t("stat-compared-unit", { seconds: (report.elapsedMs / 1000).toFixed(1) })} />
-    </div>
+    {#if expert()}
+      <div class="stats" data-dupes-summary>
+        <StatCard label={t("stat-wasted")} tone="caution" value={formatSize(report.wastedBytes, loc)} unit={t("stat-in-groups", { count: report.totalGroups })} />
+        <StatCard label={t("stat-compared")} value={formatCount(report.scannedFiles, loc)} unit={t("stat-compared-unit", { seconds: (report.elapsedMs / 1000).toFixed(1) })} />
+      </div>
+    {:else}
+      <div class="card headline" data-dupes-summary>
+        {#if report.totalGroups}
+          <h2>{t("dupes-headline", { size: formatSize(report.wastedBytes, loc), count: extraCopies })}</h2>
+          <p>{t(`dupes-preselect-${dupes.strategy}`)}</p>
+        {:else}
+          <h2>{t("dupes-headline-none")}</h2>
+        {/if}
+        {#if rootNames}<p class="muted small ellipsis" title={report.roots.join("\n")}>{t("dupes-searched-in", { folders: rootNames })}</p>{/if}
+      </div>
+    {/if}
     <div class="summary">
       <div class="grow">
         <p class="muted small">
           {t("dupes-stats", { files: formatCount(report.scannedFiles, loc), read: formatSize(report.hashedBytes, loc), cached: formatCount(report.cacheHits, loc), seconds: (report.elapsedMs / 1000).toFixed(1) })}
           {#if report.totalGroups > report.groups.length}· {t("dupes-capped", { count: formatCount(report.groups.length, loc) })}{/if}
         </p>
-        {#if Object.keys(report.skipped).some((k) => k !== "small" && k !== "empty")}
-          <p class="muted small">{t("dupes-skipped")}
-            {#each Object.entries(report.skipped).filter(([k]) => k !== "small" && k !== "empty") as [k, n] (k)}<span class="tag">{t(`dupes-skip-${k}`)} {formatCount(n ?? 0, loc)}</span>{/each}
-          </p>
-        {/if}
       </div>
       <label class="field" title={t("dupes-keep-hint")}>
         {t("dupes-keep")}
@@ -297,6 +385,26 @@
         <button class="btn ghost" onclick={() => exportAs("json")} disabled={!inTauri} data-effect title={t("hint-export")}><Icon name="export" size={16} />JSON</button>
       {/if}
     </div>
+
+    {#if skips.length}
+      <details class="card skipped" data-not-compared>
+        <summary><Icon name="info" size={16} />{t("dupes-not-compared", { count: formatCount(skipTotal, loc) })}</summary>
+        <ul>
+          {#each skips as l (l.reason)}
+            <li data-skip={l.reason}>
+              <div class="why">
+                <div><strong>{t(`dupes-skip-${l.reason}`)}</strong> <span class="muted">{formatCount(l.count, loc)}</span></div>
+                <p class="muted small">{t(`dupes-skip-${l.reason}-why`, { size: formatSize(report.minSize, loc) })}</p>
+                {#each l.samples as p (p)}<span class="mono small muted ellipsis sample" title={p}>{p}</span>{/each}
+              </div>
+              {#if l.action}
+                <button class="btn small" onclick={() => l.action && skipAction(l.action)} data-effect title={t(`dupes-skip-act-${l.action.kind}-hint`)}>{actionLabel(l.action)}</button>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      </details>
+    {/if}
 
     {#if dupes.findFolders || report.folderGroups?.length}
       <div class="tabrow" role="tablist">
@@ -368,8 +476,9 @@
         <GroupCheck items={fileItems} group={String(g.id)} picked={filePicked} onchange={setFilePicks} expert name={nameOf(g.copies[0]?.path ?? "")} busy={!!dupes.running} />
         <button class="head" onclick={() => toggle(g)} aria-expanded={open}>
           <Icon name="chevron" size={14} />
-          <span class="name ellipsis" title={g.copies[0]?.path}>{nameOf(g.copies[0]?.path ?? "")}</span>
-          <span class="muted small">{t("dupes-copies", { count: g.copies.length, size: formatSize(g.size, loc) })}</span>
+          <span class="name ellipsis" title={pick?.keep ?? g.copies[0]?.path}>{nameOf(pick?.keep ?? g.copies[0]?.path ?? "")}</span>
+          <span class="muted small nowrap">{t("dupes-copies", { count: g.copies.length, size: formatSize(g.size, loc) })}</span>
+          {#if !open && pick?.keep}<span class="muted small ellipsis keeps" title={pick.keep}>{t("dupes-keeps", { folder: folderOf(pick.keep) })}</span>{/if}
           <span class="grow"></span>
           {#if pick?.remove.length}<span class="tag sel">{t("dupes-group-selected", { count: pick.remove.length })}</span>{/if}
           <b class="num">{formatSize(g.wasted, loc)}</b>
@@ -413,8 +522,8 @@
 
     <CliHint command={cliCommand()} />
     <SelectionBar items={fileItems} picked={filePicked} onchange={setFilePicks} expert busy={!!dupes.running} scope={page} primary>
-      <button class="btn" data-link disabled={!totals.files || !!dupes.running} onclick={() => ask("link")} data-effect title={t("dupes-link-hint")}><Icon name="link" size={16} />{t("dupes-link")}</button>
       {#if expert()}
+        <button class="btn" data-link disabled={!totals.files || !!dupes.running} onclick={() => ask("link")} data-effect title={t("dupes-link-hint")}><Icon name="link" size={16} />{t("dupes-link")}</button>
         <button class="btn" disabled={!totals.files || !!dupes.running} onclick={() => ask("quarantine")} data-effect title={t("dupes-quarantine-hint")}><Icon name="shield" size={16} />{t("dupes-quarantine")}</button>
       {/if}
       <button class="btn danger" data-recycle disabled={!totals.files || !!dupes.running} onclick={() => ask("recycle")} data-effect title={t("dupes-recycle-hint")}>
@@ -422,7 +531,7 @@
       </button>
     </SelectionBar>
     {/if}
-  {:else if !dupes.searching}
+  {:else if !dupes.searching && expert()}
     <div class="card empty"><Icon name="duplicates" size={22} /><span>{t("dupes-start")}</span></div>
   {/if}
 </section>
@@ -508,6 +617,78 @@
     flex-direction: column;
     gap: 12px;
   }
+  .start-title {
+    margin: 0 0 4px;
+    font-size: 1.15em;
+  }
+  .start p {
+    margin: 0;
+  }
+  .btn.big {
+    padding: 10px 18px;
+    font-size: 1.05em;
+  }
+  .options > summary {
+    cursor: pointer;
+    color: var(--text-muted);
+  }
+  .options-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .headline {
+    padding: 14px 16px;
+    border-left: 4px solid var(--risk-caution);
+  }
+  .headline h2 {
+    margin: 0 0 4px;
+    font-size: 1.2em;
+  }
+  .headline p {
+    margin: 2px 0 0;
+  }
+  .skipped {
+    padding: 10px 16px;
+  }
+  .skipped > summary {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    cursor: pointer;
+  }
+  .skipped ul {
+    list-style: none;
+    margin: 8px 0 0;
+    padding: 0;
+  }
+  .skipped li {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    padding: 8px 0;
+    border-top: 1px solid var(--border);
+  }
+  .skipped .why {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+  }
+  .skipped .why p {
+    margin: 2px 0;
+  }
+  .sample {
+    display: block;
+  }
+  .nowrap {
+    white-space: nowrap;
+  }
+  .head .keeps {
+    min-width: 0;
+    max-width: 40%;
+  }
   .row {
     display: flex;
     gap: 12px;
@@ -531,7 +712,7 @@
     max-width: 380px;
   }
   .field input[type="number"] {
-    width: 80px;
+    width: 90px;
   }
   .field input[type="number"],
   .field select {

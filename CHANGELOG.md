@@ -6,6 +6,9 @@ Entries are generated from Conventional Commits with `git-cliff`; edit by hand o
 
 ## [Unreleased]
 
+### Added
+- **Tidy up, more thorough and easier**: a folder that only holds files Windows or macOS make on their own (`desktop.ini`, `Thumbs.db`, `.DS_Store`) now counts as empty, and its row says how many such files go with it (they come back with it on restore; customized folders such as Contacts keep theirs). A new **Empty files** list shows files of 0 bytes outside program folders, leaving out hidden files and marker files programs keep empty on purpose (`__init__.py`, `.gitkeep`, lock files); nothing in it is ticked for you. Every row of Tidy up and Old & large has its own tick box, broken junctions are shown in Expert mode only, and without a scan Tidy up offers to scan the system drive and comes back when it is done.
+
 ## [0.3.0] - 2026-10-21
 
 One-click updates for every copy, program icons, a livelier uninstall and a quarantine you can see and empty.

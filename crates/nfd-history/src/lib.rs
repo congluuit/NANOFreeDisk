@@ -39,6 +39,7 @@ pub mod audit;
 pub mod hashes;
 pub mod journal;
 pub mod monitor;
+pub mod recycle_bin;
 pub mod uninstall;
 
 pub use hashes::{HashKey, HashRow};

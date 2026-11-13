@@ -13,7 +13,7 @@ use nfd_core::insights::{self, OldLargeOptions};
 use nfd_core::model::{ChildIndex, Entry, EntryId, EntryKind, subtree_ends};
 use nfd_core::plan::{DeleteMode, PlanItem};
 use nfd_core::query::{self, Filter, SearchResult};
-use nfd_core::safety::{self, Blocked};
+use nfd_core::safety::{self, Blocked, Origin, SafetyGate};
 use nfd_core::scanner::ScanTree;
 use nfd_core::shortcut::{self, Status, Target};
 use serde::Serialize;
@@ -137,6 +137,9 @@ pub struct EmptyRow {
     pub located: Located,
     /// Empty sub-folders inside it.
     pub nested: u64,
+    /// Files the system made on its own (`desktop.ini`, `Thumbs.db`…) inside it;
+    /// they go with the folder (and are in its size and file count).
+    pub clutter: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -145,6 +148,14 @@ pub struct EmptyRows {
     pub rows: Vec<EmptyRow>,
     pub matched: u64,
     pub total_dirs: u64,
+}
+
+/// Files of size 0 (A3), see [`Session::zero_byte_files`].
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ZeroRows {
+    pub rows: Vec<Located>,
+    pub matched: u64,
 }
 
 /// A shortcut whose target is gone (A3).
@@ -476,10 +487,80 @@ impl Session {
                 .map(|f| EmptyRow {
                     located: self.located(self.tree.entry(f.id)),
                     nested: f.nested,
+                    clutter: f.clutter,
                 })
                 .collect(),
             matched: r.matched,
             total_dirs: r.total_dirs,
+        })
+    }
+
+    /// Files of size 0 below `id` (A3), never inside a program's folder: the
+    /// application folders the Duplicates finder leaves out
+    /// ([`nfd_dupes::collect::APP_DIR_NAMES`] by name,
+    /// [`nfd_dupes::collect::default_app_dirs`] by location) plus all of `AppData`
+    /// (`%APPDATA%`, `%LOCALAPPDATA%`), where programs keep empty files as markers.
+    /// Folders the SafetyGate refuses as a whole and files it refuses are left out;
+    /// see [`insights::zero_byte_files`] for the marker names.
+    #[must_use]
+    pub fn zero_byte_files(
+        &self,
+        id: u32,
+        limit: usize,
+        resolve: &impl Fn(&str) -> Option<String>,
+    ) -> Option<ZeroRows> {
+        self.get(id)?;
+        let gate = SafetyGate::new(resolve);
+        // lower-case `/` form without a `\\?\` prefix, as the Duplicates finder compares
+        let key = |p: &Path| {
+            let s = safety::normalize(&p.to_string_lossy());
+            s.strip_prefix("//?/").map(str::to_owned).unwrap_or(s)
+        };
+        let mut prefixes: Vec<String> = nfd_dupes::collect::default_app_dirs(resolve)
+            .iter()
+            .map(|p| key(p))
+            .collect();
+        prefixes.extend(
+            ["APPDATA", "LOCALAPPDATA"]
+                .iter()
+                .filter_map(|v| resolve(v))
+                .filter(|base| !base.trim().is_empty())
+                .map(|base| key(Path::new(&base))),
+        );
+        let under = |k: &str| {
+            prefixes.iter().any(|p| {
+                k == p
+                    || (k.len() > p.len()
+                        && k.starts_with(p.as_str())
+                        && k.as_bytes()[p.len()] == b'/')
+            })
+        };
+        let program_dir = |dir: EntryId| {
+            let e = self.tree.entry(dir);
+            let path = self.tree.path(dir);
+            nfd_dupes::collect::APP_DIR_NAMES.contains(&e.name.to_lowercase().as_str())
+                || under(&key(&path))
+                || gate
+                    .check_path(&path, Origin::Manual)
+                    .err()
+                    .is_some_and(|b| blocks_subtree(&b))
+        };
+        let keep_out = |e: EntryId| gate.check_path(&self.tree.path(e), Origin::Manual).is_err();
+        let r = insights::zero_byte_files(
+            &self.tree,
+            &self.ends,
+            EntryId(id),
+            limit,
+            &program_dir,
+            &keep_out,
+        );
+        Some(ZeroRows {
+            rows: r
+                .files
+                .iter()
+                .map(|&f| self.located(self.tree.entry(f)))
+                .collect(),
+            matched: r.matched,
         })
     }
 
@@ -807,6 +888,15 @@ pub fn check_links(
         .collect()
 }
 
+/// `true` when the gate's answer for a *folder* covers everything inside it (not
+/// "it contains a protected place", which still allows what is beside that place).
+fn blocks_subtree(b: &Blocked) -> bool {
+    !matches!(
+        b,
+        Blocked::ContainsProtected { .. } | Blocked::VolumeRoot | Blocked::ContainsMountPoint
+    )
+}
+
 fn kind_code(kind: EntryKind) -> u8 {
     match kind {
         EntryKind::File | EntryKind::Other => 0,
@@ -1038,6 +1128,106 @@ mod tests {
             assert_eq!(rows.rows[0].status, Status::Missing);
             assert!(rows.rows[0].target.ends_with("gone.exe"));
         }
+    }
+
+    #[test]
+    fn clutter_folders_and_zero_byte_files() {
+        use nfd_core::exec::{self, ExecOptions, ItemStatus, QuarantineRoots, RestoreStatus};
+        use nfd_core::plan::CleanPlan;
+
+        let dir = tempfile::tempdir().expect("tempdir");
+        let root = dir.path();
+        let base = root.to_string_lossy().into_owned();
+        // only these variables resolve: the temp folder plays the user's home
+        let resolve = move |v: &str| match v {
+            "HOME" => Some(base.clone()),
+            "APPDATA" => Some(format!("{base}/AppData/Roaming")),
+            "LOCALAPPDATA" => Some(format!("{base}/AppData/Local")),
+            _ => None,
+        };
+        let w = |rel: &str, bytes: &[u8]| {
+            let p = root.join(rel);
+            fs::create_dir_all(p.parent().expect("parent")).expect("mkdir");
+            fs::write(p, bytes).expect("write");
+        };
+        // a protected place holding only its desktop.ini is never offered
+        w("Pictures/desktop.ini", b"[.ShellClassInfo]\r\n");
+        // an old folder with nothing but view settings and a thumbnail cache
+        w("Documents/Old/desktop.ini", b"[ViewState]\r\n");
+        w("Documents/Old/inner/Thumbs.db", &[7u8; 1000]);
+        w("Documents/New Text Document.txt", b"");
+        w("Documents/__init__.py", b"");
+        w("proj/empty.log", b"");
+        w("proj/.git/FETCH_HEAD", b"");
+        w("proj/node_modules/x/index.js", b"");
+        w("AppData/Roaming/App/First Run", b"");
+        let tree = scan(root, &ScanOptions::default(), None).expect("scan");
+        let mut s = Session::new(tree, 0, 0);
+
+        let empty = s.empty_folders(0, 10, &resolve).expect("empty");
+        let got: Vec<(&str, u64, u64)> = empty
+            .rows
+            .iter()
+            .map(|r| (r.located.node.name.as_str(), r.nested, r.clutter))
+            .collect();
+        assert_eq!(got, [("Old", 1, 2)]);
+        // only the SafetyGate keeps Pictures out
+        let all = insights::empty_folders(&s.tree, &s.ends, EntryId(0), 10, &|_| false);
+        assert!(
+            all.folders
+                .iter()
+                .any(|f| &*s.tree.entry(f.id).name == "Pictures")
+        );
+
+        // the plan shows what really goes: the clutter files and their bytes
+        let old = id_of(&s, "Old");
+        let plan = s.plan_delete(&[old], &resolve);
+        assert!(plan.items[0].allowed, "{:?}", plan.items[0]);
+        assert_eq!(plan.files, 2);
+        assert_eq!(plan.on_disk, s.tree.entry(EntryId(old)).on_disk);
+        assert!(plan.on_disk > 0);
+
+        // quarantined as one folder, the clutter files travel with it and come back
+        let item = s.plan_item(old, DeleteMode::Quarantine).expect("item");
+        assert_eq!((item.files, item.bytes), (2, plan.on_disk));
+        let opts = ExecOptions {
+            op_id: "20261113-000000-abcd".into(),
+            kind: "tidy".into(),
+            owner: 0,
+            roots: QuarantineRoots {
+                system: Some(root.join("q")),
+                other_volumes: false,
+            },
+            now: exec::unix_now(),
+        };
+        let op = exec::execute(
+            &CleanPlan { items: vec![item] },
+            &safety::SafetyGate::new(&resolve),
+            &safety::LiveProbe,
+            &opts,
+            &mut |_, _, _| true,
+        );
+        assert_eq!(op.count(ItemStatus::Done), 1, "{op:#?}");
+        assert!(!root.join("Documents/Old").exists());
+        let r = &op.items[0];
+        let (status, msg) = exec::restore(&r.path, r.stored.as_deref(), r.mode, op.started_at);
+        assert_eq!(status, RestoreStatus::Restored, "{msg:?}");
+        assert!(root.join("Documents/Old/desktop.ini").is_file());
+        assert_eq!(
+            fs::read(root.join("Documents/Old/inner/Thumbs.db")).expect("read"),
+            [7u8; 1000]
+        );
+
+        let zero = s.zero_byte_files(0, 10, &resolve).expect("zero");
+        let mut names: Vec<&str> = zero.rows.iter().map(|r| r.node.name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, ["New Text Document.txt", "empty.log"]);
+        assert_eq!(zero.matched, 2);
+        let file = zero.rows[0].node.id;
+        let plan = s.plan_delete(&[file], &resolve);
+        assert!(plan.items[0].allowed, "{:?}", plan.items[0]);
+        s.mark_removed(file);
+        assert_eq!(s.zero_byte_files(0, 10, &resolve).expect("zero").matched, 1);
     }
 
     #[test]

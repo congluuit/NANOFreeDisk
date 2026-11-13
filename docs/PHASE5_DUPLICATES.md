@@ -21,7 +21,7 @@ Phụ thuộc `nfd-core` (scanner, `ScanTree`, plan), `nfd-platform`, `nfd-histo
 **Pipeline** (mỗi bước thu hẹp tập ứng viên, có `Progress { phase, done, total, bytes }` + cờ hủy):
 
 1. **Tập tệp**: dùng `ScanTree` có sẵn (từ Analyze hoặc quét mới bằng scanner — không follow link, không vượt volume). Loại ngay:
-   - tệp < ngưỡng (mặc định 1 MB, Expert chỉnh được; tệp rỗng không bao giờ là "trùng");
+   - tệp < ngưỡng (CLI `nfd dupes` mặc định 1 MiB, `DEFAULT_MIN_SIZE`, hợp với cả ổ; GUI mặc định 100 KiB, `personal::PERSONAL_MIN_SIZE`, xem §2.7; tệp rỗng không bao giờ là "trùng");
    - reparse point, **cloud placeholder** (`OFFLINE`, `RECALL_ON_OPEN`, `RECALL_ON_DATA_ACCESS`), tệp có thuộc tính SYSTEM;
    - đường dẫn bị `SafetyGate` coi là Protected (Windows, Program Files, `$Recycle.Bin`, credential…), kể cả thư mục lưu hội thoại của các AI agent (§5.1);
    - mặc định bỏ qua **thư mục ứng dụng** (vì app cần đủ tệp của nó): `AppData\Local\Programs`, `node_modules`, `.git`, `.venv`, `site-packages`, thư viện game (Steam `steamapps`, Epic, GOG…), `WindowsApps`, `.nfd-quarantine`. Có công tắc Expert "Gồm cả thư mục ứng dụng" — khi bật, mục trong đó chỉ được *xem*, không chọn sẵn.
@@ -74,6 +74,14 @@ JSON schema `nanofreedisk.dupes.v1` (`docs/schema/dupes-v1.schema.json`). Không
 - Thanh hành động: Recycle Bin / Thay bằng hardlink / (Expert) Quarantine; dialog xác nhận có tổng GB, số tệp, cảnh báo §2.2; xuất CSV/JSON.
 - Từ Analyze: menu chuột phải *Tìm tệp trùng ở đây*; Explorer: thêm verb **"Find duplicates here"** vào `nfd-platform::shell_menu` (HKCU, gỡ sạch như verb hiện có).
 - Expert hiện lệnh `nfd dupes …` tương đương. Health Score: mục thông tin "≈ X GB trùng lặp" (chỉ khi đã quét).
+
+### 2.7 Cho người mới (2026-11)
+
+- **Một chạm**: ở chế độ Simple, màn hình đầu chỉ có nút chính "Tìm tệp trùng trong các tệp của tôi" (thư mục cá nhân: Documents, Downloads, Pictures, Videos/Movies, Music, Desktop) và nút phụ "Chọn thư mục hoặc ổ đĩa"; form đầy đủ nằm trong "Tùy chọn". Expert hiện form ngay, phạm vi có thêm lựa chọn "Thư mục cá nhân". Không cần quét Analyze trước.
+- **Thư mục cá nhân** (`nfd_dupes::personal::personal_folders`): Windows hỏi `SHGetKnownFolderPath` (đúng cả khi Documents đã chuyển sang OneDrive hay ổ khác), macOS lấy các thư mục cố định trong home, Linux đọc `~/.config/user-dirs.dirs`. Thư mục không tồn tại bị bỏ, thư mục nằm trong thư mục khác của danh sách chỉ tìm một lần (`outermost`, áp dụng cho mọi danh sách thư mục của `dupes_find`). Lệnh: `dupes_find` với `options.personal = true`.
+- **Ngưỡng mặc định 100 KiB** trong GUI: ảnh điện thoại / chat, ảnh chụp màn hình, bản scan và tài liệu văn phòng phần lớn nằm trong 100 KiB đến vài MiB, nên 1 MiB bỏ sót nhiều. Dưới 100 KiB là icon, thumbnail, tệp text nhỏ: nhiều về số lượng nhưng ít dung lượng, và mỗi ứng viên tốn một lần mở tệp; cache hash làm lần sau rẻ. Ô kích thước nhận KB hoặc MB. Thiết lập cũ `dupeMinMb = 1` (mặc định trước đây) được đọc là "chưa chọn" và chuyển sang 100 KiB. CLI giữ 1 MiB.
+- **Không so sánh**: thay cho các chip, một mục mở ra liệt kê từng lý do (quá nhỏ, thư mục ứng dụng, loại tệp khác, đám mây chỉ trực tuyến, được bảo vệ, thay đổi trong lúc đọc, không đọc được, tệp hệ thống, liên kết, bản sao APFS, rỗng) với số tệp, một câu giải thích, vài ví dụ, và hành động khi có thể: "Gồm cả tệp từ N KB" (bậc 1 MiB, 100 KiB, 10 KiB), "Hiện thư mục ứng dụng" (chỉ để xem, không bao giờ tích sẵn), "Tìm mọi loại tệp", "Tìm lại".
+- **Kết quả ở Simple**: tiêu đề "Bạn có thể giải phóng X bằng cách xóa N bản thừa", một câu giải thích bản nào được giữ theo chiến lược đang chọn, mỗi nhóm thu gọn thành một dòng có tên bản được giữ, bấm để mở. "Thay bằng liên kết" chỉ có ở Expert. Nơi chuyển tệp (Thùng rác / cách ly) không đổi.
 
 ## 3. Kiểm thử
 

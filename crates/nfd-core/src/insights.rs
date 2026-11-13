@@ -4,17 +4,19 @@
 //! * [`old_and_large`] — very large files, large files nobody touched for a long
 //!   time, and old installers / disk images left in `Downloads` folders.
 //! * [`empty_folders`] — folders that contain nothing but (possibly nested) empty
-//!   folders.
+//!   folders and files the system creates on its own ([`CLUTTER_FILES`]).
+//! * [`zero_byte_files`] — files of size 0, minus markers that mean something while
+//!   empty and anything inside program-owned folders.
 //! * [`age_matrix`] — bytes by last-modified age, per child folder (A9 heatmap).
 //!
-//! Both only *list*; anything the user then removes still goes through
+//! They only *list*; anything the user then removes still goes through
 //! [`crate::safety`].
 
 use std::collections::HashSet;
 
 use serde::{Deserialize, Serialize};
 
-use crate::model::{EntryId, EntryKind};
+use crate::model::{Attrs, EntryId, EntryKind};
 use crate::query::{Filter, KindFilter, Ranked, SearchResult};
 use crate::scanner::ScanTree;
 
@@ -181,12 +183,33 @@ fn downloads_mask(tree: &ScanTree) -> Vec<bool> {
     mask
 }
 
+/// Files Windows and macOS create in folders on their own, which hold nothing of the
+/// user's (compared case-insensitively): folder view settings and thumbnail caches.
+/// A folder holding only these (and empty folders) is empty in practice. Kept short
+/// on purpose: anything else counts as content.
+pub const CLUTTER_FILES: &[&str] = &[
+    "desktop.ini",
+    "thumbs.db",
+    "ehthumbs.db",
+    "ehthumbs_vista.db",
+    ".ds_store",
+    "._.ds_store",
+];
+
+/// `true` when `name` is one of [`CLUTTER_FILES`].
+#[must_use]
+pub fn is_clutter_file(name: &str) -> bool {
+    CLUTTER_FILES.iter().any(|c| name.eq_ignore_ascii_case(c))
+}
+
 /// One empty folder tree found by [`empty_folders`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct EmptyFolder {
     pub id: EntryId,
     /// Empty sub-folders inside it (0 = the folder itself is empty).
     pub nested: u64,
+    /// [`CLUTTER_FILES`] inside it (they go with the folder).
+    pub clutter: u64,
 }
 
 /// Matches of [`empty_folders`].
@@ -200,10 +223,19 @@ pub struct EmptyFolders {
     pub total_dirs: u64,
 }
 
-/// Folders strictly below `under` that hold nothing but empty folders. Only the
-/// outermost one of a nested empty tree is listed. Folders the scanner could not
-/// read (see [`ScanTree::issues`]) are never reported as empty, nor are their
-/// parents. Removed entries are ignored.
+/// `true` for a folder Windows customized through its `desktop.ini` (custom icon,
+/// localized name): Explorer only reads that file when the folder carries the
+/// READONLY or SYSTEM attribute, so there it is part of what the folder is.
+fn customized(dir: &crate::model::Entry) -> bool {
+    dir.attrs.contains(Attrs::READONLY) || dir.attrs.contains(Attrs::SYSTEM)
+}
+
+/// Folders strictly below `under` that hold nothing but empty folders and
+/// [`CLUTTER_FILES`] (counted in [`EmptyFolder::clutter`]; they go with the folder).
+/// Only the outermost one of a nested empty tree is listed. Folders the scanner
+/// could not read (see [`ScanTree::issues`]) are never reported as empty, nor are
+/// their parents. Removed entries are ignored; links are content, never followed.
+/// In a [`customized`] folder the clutter names count as content.
 ///
 /// `keep_out` is asked about every empty folder (normally "would
 /// [`crate::safety`] refuse to delete it?"): such a folder is not listed and counts
@@ -225,16 +257,23 @@ pub fn empty_folders(
             && unreadable.contains(&tree.path(id).to_string_lossy().to_lowercase())
     };
     // Bottom-up over the scope (reverse pre-order: children before parents).
-    // has_content: the subtree holds something other than listable empty folders.
+    // has_content: the subtree holds something other than listable empty folders
+    // and clutter files.
     let mut has_content = vec![false; entries.len()];
     let mut kept_out = vec![false; entries.len()];
     let mut dirs_below = vec![0u64; entries.len()];
+    let mut clutter = vec![0u64; entries.len()];
     for e in entries.iter().rev() {
         if e.removed {
             continue;
         }
         let i = e.id.index() - base;
-        if e.kind != EntryKind::Dir || (!has_content[i] && is_unreadable(e.id)) {
+        let is_clutter = e.kind == EntryKind::File
+            && is_clutter_file(&e.name)
+            && e.parent.is_some_and(|p| !customized(tree.entry(p)));
+        if is_clutter {
+            // neither content nor a folder: it only travels with its folder
+        } else if e.kind != EntryKind::Dir || (!has_content[i] && is_unreadable(e.id)) {
             has_content[i] = true;
         } else if !has_content[i] && keep_out(e.id) {
             kept_out[i] = true;
@@ -244,8 +283,11 @@ pub fn empty_folders(
         };
         let p = p.index() - base;
         has_content[p] |= has_content[i] || kept_out[i];
-        if e.kind == EntryKind::Dir && !kept_out[i] {
+        if is_clutter {
+            clutter[p] += 1;
+        } else if e.kind == EntryKind::Dir && !kept_out[i] {
             dirs_below[p] += dirs_below[i] + 1;
+            clutter[p] += clutter[i];
         }
     }
     let mut out = EmptyFolders::default();
@@ -269,7 +311,130 @@ pub fn empty_folders(
             out.folders.push(EmptyFolder {
                 id: e.id,
                 nested: dirs_below[i],
+                clutter: clutter[i],
             });
+        }
+    }
+    out
+}
+
+/// File names (compared case-insensitively) that mean something while empty and are
+/// never listed by [`zero_byte_files`]: Python package and typing markers, lock
+/// files. Every name starting with `.` (`.gitkeep`, `.keep`, `.nojekyll`,
+/// `.nomedia`, `.gitignore`…) is left out as well.
+pub const ZERO_BYTE_KEEP_NAMES: &[&str] = &[
+    "__init__.py",
+    "__init__.pyi",
+    "py.typed",
+    "lock",
+    "lockfile",
+];
+
+/// Extensions (lower case) of marker files that are empty on purpose: locks,
+/// process ids, build stamps, "done" and "ready" flags.
+pub const ZERO_BYTE_KEEP_EXTS: &[&str] = &[
+    "lock",
+    "lck",
+    "pid",
+    "stamp",
+    "timestamp",
+    "marker",
+    "flag",
+    "keep",
+    "sentinel",
+    "done",
+    "ready",
+];
+
+/// `true` when an empty file called `name` is a marker [`zero_byte_files`] leaves
+/// alone ([`ZERO_BYTE_KEEP_NAMES`], [`ZERO_BYTE_KEEP_EXTS`], dot files).
+#[must_use]
+pub fn is_zero_byte_marker(name: &str) -> bool {
+    if name.starts_with('.')
+        || ZERO_BYTE_KEEP_NAMES
+            .iter()
+            .any(|n| name.eq_ignore_ascii_case(n))
+    {
+        return true;
+    }
+    name.rsplit_once('.').is_some_and(|(stem, ext)| {
+        !stem.is_empty()
+            && ZERO_BYTE_KEEP_EXTS
+                .iter()
+                .any(|x| ext.eq_ignore_ascii_case(x))
+    })
+}
+
+/// Matches of [`zero_byte_files`].
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ZeroByteFiles {
+    /// In path order, at most the requested number.
+    pub files: Vec<EntryId>,
+    /// Every match (may exceed `files.len()`).
+    pub matched: u64,
+}
+
+/// Files of size 0 strictly below `under`, leaving out:
+///
+/// * markers that mean something while empty ([`is_zero_byte_marker`]);
+/// * files with the SYSTEM, HIDDEN, OFFLINE (cloud placeholder) or REPARSE
+///   attribute, hard links with other names, removed entries;
+/// * anything inside a folder whose name starts with `.` (`.git`, `.venv`,
+///   `.cargo`, `.vscode`: owned by a tool), or inside a folder `program_dir` says
+///   belongs to a program or is refused as a whole by the SafetyGate (asked once
+///   per folder, ancestors of `under` included);
+/// * files `keep_out` refuses (normally "would [`crate::safety`] refuse to delete
+///   it?").
+#[must_use]
+pub fn zero_byte_files(
+    tree: &ScanTree,
+    ends: &[u32],
+    under: EntryId,
+    limit: usize,
+    program_dir: &impl Fn(EntryId) -> bool,
+    keep_out: &impl Fn(EntryId) -> bool,
+) -> ZeroByteFiles {
+    const SKIP_ATTRS: [Attrs; 4] = [Attrs::SYSTEM, Attrs::HIDDEN, Attrs::OFFLINE, Attrs::REPARSE];
+    // per folder: 0 = not asked yet, 1 = fine, 2 = left out with everything below
+    let mut verdict = vec![0u8; tree.entries.len()];
+    let mut chain: Vec<EntryId> = Vec::new();
+    let mut folder_out = |dir: EntryId| -> bool {
+        chain.clear();
+        let mut cur = Some(dir);
+        while let Some(c) = cur {
+            if verdict[c.index()] != 0 {
+                break;
+            }
+            chain.push(c);
+            cur = tree.entry(c).parent;
+        }
+        let mut out = cur.is_some_and(|c| verdict[c.index()] == 2);
+        for &c in chain.iter().rev() {
+            let e = tree.entry(c);
+            out = out || (e.parent.is_some() && e.name.starts_with('.')) || program_dir(c);
+            verdict[c.index()] = if out { 2 } else { 1 };
+        }
+        out
+    };
+    let mut out = ZeroByteFiles::default();
+    for e in scope(tree, ends, under) {
+        if e.removed
+            || e.kind != EntryKind::File
+            || e.logical != 0
+            || e.hardlink_dup
+            || e.hardlink_count > 1
+            || SKIP_ATTRS.iter().any(|a| e.attrs.contains(*a))
+            || is_zero_byte_marker(&e.name)
+        {
+            continue;
+        }
+        let Some(parent) = e.parent else { continue };
+        if folder_out(parent) || keep_out(e.id) {
+            continue;
+        }
+        out.matched += 1;
+        if out.files.len() < limit {
+            out.files.push(e.id);
         }
     }
     out
@@ -450,7 +615,7 @@ mod tests {
             .collect()
     }
 
-    use EntryKind::{Dir, File, Junction};
+    use EntryKind::{Dir, File, Junction, Symlink};
 
     #[test]
     fn old_large_and_installers() {
@@ -600,7 +765,8 @@ mod tests {
             r.folders,
             [EmptyFolder {
                 id: EntryId(3),
-                nested: 1
+                nested: 1,
+                clutter: 0
             }]
         );
 
@@ -617,5 +783,147 @@ mod tests {
             .collect();
         assert_eq!(got, [("empty", 0), ("a", 1), ("x", 0), ("gone", 0)]);
         assert_eq!(r.total_dirs, 5);
+    }
+
+    fn with_attrs(mut t: ScanTree, id: u32, attrs: Attrs) -> ScanTree {
+        t.entries[id as usize].attrs = attrs;
+        t
+    }
+
+    #[test]
+    fn clutter_files_do_not_make_a_folder_full() {
+        let t = tree(&[
+            (None, "scan", Dir, 0, 0),
+            (Some(0), "old", Dir, 0, 0), // 1 listed, 3 clutter files
+            (Some(1), "desktop.ini", File, 282, 0), // 2
+            (Some(1), "THUMBS.DB", File, 9000, 0), // 3
+            (Some(1), "sub", Dir, 0, 0), // 4
+            (Some(4), ".DS_Store", File, 6148, 0), // 5
+            (Some(0), "real", Dir, 0, 0), // 6 a real file: not empty
+            (Some(6), "desktop.ini", File, 100, 0), // 7
+            (Some(6), "notes.txt", File, 0, 0), // 8
+            (Some(0), "Contacts", Dir, 0, 0), // 9 customized: desktop.ini matters
+            (Some(9), "desktop.ini", File, 400, 0), // 10
+            (Some(0), "linked", Dir, 0, 0), // 11 a link named like clutter
+            (Some(11), "Thumbs.db", Symlink, 0, 0), // 12
+            (Some(0), "Protected", Dir, 0, 0), // 13 refused by the gate
+            (Some(13), "desktop.ini", File, 300, 0), // 14
+            (Some(0), "deep", Dir, 0, 0), // 15 listed, nested 1, clutter 1
+            (Some(15), "inner", Dir, 0, 0), // 16
+            (Some(16), "Thumbs.db", File, 50, 0), // 17
+        ]);
+        let t = with_attrs(t, 9, Attrs::READONLY);
+        let ends = subtree_ends(&t.entries);
+        let r = empty_folders(&t, &ends, EntryId(0), 100, &|id| id == EntryId(13));
+        let got: Vec<(&str, u64, u64)> = r
+            .folders
+            .iter()
+            .map(|f| (&*t.entry(f.id).name, f.nested, f.clutter))
+            .collect();
+        assert_eq!(got, [("old", 1, 3), ("deep", 1, 1)]);
+        assert_eq!(r.total_dirs, 4);
+        // the folder's size and file count include its clutter, so the user is shown
+        // (and the plan moves) exactly what goes
+        assert_eq!(t.entries[1].on_disk, 282 + 9000 + 6148);
+        assert_eq!(t.file_counts[1], 3);
+
+        // a SYSTEM folder is customized as well
+        let t = with_attrs(t, 1, Attrs::SYSTEM);
+        let r = empty_folders(&t, &ends, EntryId(0), 100, &|id| id == EntryId(13));
+        let got: Vec<(&str, u64, u64)> = r
+            .folders
+            .iter()
+            .map(|f| (&*t.entry(f.id).name, f.nested, f.clutter))
+            .collect();
+        // "old" keeps its own desktop.ini and Thumbs.db; its sub-folder is listed
+        assert_eq!(got, [("sub", 0, 1), ("deep", 1, 1)]);
+    }
+
+    #[test]
+    fn clutter_names() {
+        assert!(is_clutter_file("Desktop.ini"));
+        assert!(is_clutter_file("thumbs.db"));
+        assert!(!is_clutter_file("thumbs.db.bak"));
+        assert!(!is_clutter_file("notes.ini"));
+    }
+
+    #[test]
+    fn zero_byte_markers() {
+        for keep in [
+            "__init__.py",
+            "py.typed",
+            ".gitkeep",
+            ".keep",
+            ".nojekyll",
+            ".nomedia",
+            "LOCK",
+            "build.stamp",
+            "invoked.timestamp",
+            "app.PID",
+            "x.lock",
+        ] {
+            assert!(is_zero_byte_marker(keep), "{keep}");
+        }
+        for list in [
+            "New Text Document.txt",
+            "untitled",
+            "report.docx",
+            "lock.txt",
+        ] {
+            assert!(!is_zero_byte_marker(list), "{list}");
+        }
+    }
+
+    #[test]
+    fn zero_byte_files_skip_markers_and_program_folders() {
+        let mut t = tree(&[
+            (None, "scan", Dir, 0, 0),
+            (Some(0), "New Text Document.txt", File, 0, 0), // 1 listed
+            (Some(0), "full.txt", File, 10, 0),             // 2 not empty
+            (Some(0), "__init__.py", File, 0, 0),           // 3 marker
+            (Some(0), ".gitkeep", File, 0, 0),              // 4 marker
+            (Some(0), "proj", Dir, 0, 0),                   // 5
+            (Some(5), ".git", Dir, 0, 0),                   // 6 tool folder
+            (Some(6), "FETCH_HEAD", File, 0, 0),            // 7
+            (Some(5), "empty.log", File, 0, 0),             // 8 listed
+            (Some(0), "Program Files", Dir, 0, 0),          // 9 program folder
+            (Some(9), "app", Dir, 0, 0),                    // 10
+            (Some(10), "installed", File, 0, 0),            // 11
+            (Some(0), "hidden.dat", File, 0, 0),            // 12 HIDDEN
+            (Some(0), "refused.txt", File, 0, 0),           // 13 keep_out
+            (Some(0), "gone.txt", File, 0, 0),              // 14 removed
+            (Some(0), "link", Symlink, 0, 0),               // 15 not a file
+        ]);
+        t.entries[12].attrs = Attrs::HIDDEN;
+        let ends = subtree_ends(&t.entries);
+        t.remove(EntryId(14), &ends);
+        let asked = std::cell::RefCell::new(Vec::new());
+        let program = |id: EntryId| {
+            asked.borrow_mut().push(id.0);
+            id == EntryId(9)
+        };
+        let r = zero_byte_files(&t, &ends, EntryId(0), 100, &program, &|id| {
+            id == EntryId(13)
+        });
+        let names: Vec<&str> = r.files.iter().map(|&id| &*t.entry(id).name).collect();
+        assert_eq!(names, ["New Text Document.txt", "empty.log"]);
+        assert_eq!(r.matched, 2);
+        // every folder is asked at most once (.git is left out by its name first)
+        let mut seen = asked.borrow().clone();
+        seen.sort_unstable();
+        let n = seen.len();
+        seen.dedup();
+        assert_eq!(seen.len(), n, "{seen:?}");
+        assert!(!seen.contains(&6));
+
+        let r = zero_byte_files(&t, &ends, EntryId(0), 1, &|_| false, &|_| false);
+        assert_eq!(r.files.len(), 1);
+        // nothing is a program folder or refused: 1, 8, 11, 13 (the .git one stays out)
+        assert_eq!(r.matched, 4);
+        // scoped inside a program folder: its ancestors are asked too
+        let r = zero_byte_files(&t, &ends, EntryId(10), 100, &|id| id == EntryId(9), &|_| {
+            false
+        });
+        assert_eq!(r.matched, 0);
     }
 }

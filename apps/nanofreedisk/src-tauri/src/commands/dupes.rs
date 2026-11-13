@@ -126,6 +126,10 @@ pub struct FindOptions {
     /// Also find duplicate folders.
     #[serde(default)]
     folders: bool,
+    /// Search the user's personal folders (Documents, Downloads, Pictures, Videos,
+    /// Music, Desktop) instead of `paths`: no Analyze scan needed.
+    #[serde(default)]
+    personal: bool,
 }
 
 const fn yes() -> bool {
@@ -209,9 +213,10 @@ fn scan(app: &AppHandle, path: &Path, cancel: &Arc<AtomicBool>) -> CmdResult<Sca
     }
 }
 
-/// Find duplicates in `paths` (folders or drives), or in the current Analyze scan
-/// when `paths` is empty. Progress streams as `dupes-progress`; [`dupes_cancel`]
-/// stops the search.
+/// Find duplicates in `paths` (folders or drives), in the user's personal folders
+/// with `options.personal`, or in the current Analyze scan when `paths` is empty.
+/// A folder inside another one of the list is searched once. Progress streams as
+/// `dupes-progress`; [`dupes_cancel`] stops the search.
 #[tauri::command]
 pub async fn dupes_find(
     app: AppHandle,
@@ -220,6 +225,21 @@ pub async fn dupes_find(
     paths: Vec<String>,
     options: FindOptions,
 ) -> CmdResult<DupeView> {
+    let paths: Vec<String> = if options.personal {
+        let found = nfd_dupes::personal::personal_folders();
+        if found.is_empty() {
+            return Err(err("not-found", "no personal folders"));
+        }
+        found
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
+    } else {
+        nfd_dupes::personal::outermost(paths.into_iter().map(PathBuf::from).collect())
+            .iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect()
+    };
     let current = if paths.is_empty() {
         let guard = state.session.read().map_err(|e| err("internal", e))?;
         Some(
@@ -589,6 +609,17 @@ mod tests {
         assert_eq!(r.groups.len(), 1);
         assert_eq!(r.groups[0].copies.len(), 2);
         assert_eq!(r.wasted_bytes, 10);
+    }
+
+    #[test]
+    fn find_options_default_to_the_given_paths() {
+        let plain: FindOptions = serde_json::from_str(r#"{"minSize":1048576}"#).expect("json");
+        assert!(!plain.personal && plain.use_cache && !plain.folders);
+        let mine: FindOptions =
+            serde_json::from_str(r#"{"minSize":102400,"personal":true,"useCache":false}"#)
+                .expect("json");
+        assert!(mine.personal && !mine.use_cache);
+        assert_eq!(mine.min_size, 102_400);
     }
 
     #[test]

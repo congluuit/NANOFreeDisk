@@ -65,7 +65,8 @@ export type SkipReason =
   | "protected"
   | "app-dir"
   | "unreadable"
-  | "changed";
+  | "changed"
+  | "clone";
 
 export interface DupeReport {
   roots: string[];
@@ -105,6 +106,8 @@ export interface FindOptions {
   extensions: string[];
   useCache: boolean;
   folders: boolean;
+  /** Search the user's personal folders (Documents, Downloads, Pictures…) instead of `paths`. */
+  personal?: boolean;
 }
 
 /** What to do with one group (`nfd_dupes::keep::Selection`). */
@@ -116,6 +119,6 @@ export interface Selection {
 
 export type KeepStrategy = "auto" | "oldest" | "newest" | "shortest";
 export type DupeAction = "recycle" | "quarantine" | "link";
-/** Which folders to search: the Analyze scan, or folders picked here. */
-export type Scope = "current" | "folders";
+/** Which folders to search: the user's personal folders, the Analyze scan, or folders picked here. */
+export type Scope = "personal" | "current" | "folders";
 export type FileKind = "all" | "images" | "videos" | "music" | "documents" | "archives";

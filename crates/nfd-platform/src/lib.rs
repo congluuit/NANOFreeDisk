@@ -13,6 +13,7 @@
 //! "dataless" files to the same modules.
 
 pub mod appearance;
+pub mod elevation;
 pub mod fsinfo;
 pub mod io;
 pub mod link;
@@ -20,7 +21,9 @@ pub mod locks;
 pub mod owner;
 pub mod privacy;
 pub mod private_dir;
+pub mod recycle_bin;
 pub mod registry;
+pub mod registry_write;
 pub mod shell_menu;
 pub mod trash;
 pub mod volumes;

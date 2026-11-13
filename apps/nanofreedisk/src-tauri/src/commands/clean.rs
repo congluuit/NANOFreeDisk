@@ -6,14 +6,18 @@
 //! journal (history database) and the audit log, and can be undone from the
 //! Activity log while its quarantine or Recycle Bin copy exists.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use nfd_core::RiskLevel;
-use nfd_core::exec::{self, ExecOptions, ItemStatus, Operation, QuarantineRoots};
+use nfd_core::exec::{
+    self, ExecOptions, ItemResult, ItemStatus, LeftoverCause, LeftoverGroup, Operation,
+    QuarantineRoots,
+};
 use nfd_core::plan::{self, CleanPlan, DeleteMode, PlanOptions};
-use nfd_core::safety::{LiveProbe, SafetyGate};
+use nfd_core::safety::{LiveProbe, Probe, SafetyGate};
 use nfd_history::{ItemRow, OperationRow, PurgeResult, QuarantineSummary, RestoreResult};
 use nfd_platform::Platform;
 use nfd_rules::matcher::{MatchOptions, MatchReport, Matcher, RuleSummary};
@@ -22,17 +26,36 @@ use tauri::{AppHandle, Emitter, State, WebviewWindow};
 
 use super::{AppState, CmdResult, err, owner_handle, with_history, with_session};
 
-/// The last rule scan and the running clean, if any.
+/// The last rule scan, the running clean and the last clean's result, if any.
 #[derive(Debug, Default)]
 pub struct CleanState {
     report: Mutex<Option<Cached>>,
     cancel: Mutex<Option<Arc<AtomicBool>>>,
+    /// The last clean: what it left behind is what "Try again" and "Clean with
+    /// administrator rights" work on (never paths sent back by the UI).
+    last: Mutex<Option<LastRun>>,
 }
 
 #[derive(Debug, Clone)]
 struct Cached {
     report: MatchReport,
     at: i64,
+    /// The packs the scan used (`None` = built-in; tests point at a folder).
+    rules_dir: Option<String>,
+}
+
+/// The last clean of the Clean view and how it was asked for.
+#[derive(Debug, Clone)]
+struct LastRun {
+    op: Operation,
+    groups: Vec<LeftoverGroup>,
+    expert: bool,
+    permanent: bool,
+    rules_dir: Option<String>,
+    /// Rules marked as needing administrator rights.
+    admin_rules: BTreeSet<String>,
+    /// It was the elevated run (access denied there is not an "ask for rights" case).
+    elevated: bool,
 }
 
 impl CleanState {
@@ -149,6 +172,7 @@ pub async fn clean_scan(
     let _ = with_history(&app, &state, |h| {
         h.purge_expired(&roots(&app), exec::unix_now(), None)
     });
+    let rules_dir_used = rules_dir.clone();
     let packs = load_packs(rules_dir)?;
     let packs2 = packs.clone();
     let report = tauri::async_runtime::spawn_blocking(move || {
@@ -162,6 +186,7 @@ pub async fn clean_scan(
     let cached = Cached {
         report,
         at: exec::unix_now(),
+        rules_dir: rules_dir_used,
     };
     let dto = scan_dto(&cached, &packs);
     *clean.report.lock().map_err(|e| err("internal", e))? = Some(cached);
@@ -241,6 +266,9 @@ pub struct OperationDto {
     /// First problems (skipped, partial, failed), for the result message.
     problems: Vec<ProblemDto>,
     pub(super) journal_error: Option<String>,
+    /// Clean view: what stayed, grouped by why ([`exec::group_leftovers`]).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    leftovers: Vec<LeftoverGroup>,
 }
 
 pub(super) fn op_dto(op: &Operation, journal_error: Option<String>) -> OperationDto {
@@ -269,6 +297,7 @@ pub(super) fn op_dto(op: &Operation, journal_error: Option<String>) -> Operation
             })
             .collect(),
         journal_error,
+        leftovers: Vec::new(),
     }
 }
 
@@ -384,20 +413,353 @@ pub async fn clean_run(
     expert: bool,
     permanent: bool,
 ) -> CmdResult<OperationDto> {
-    let plan = {
+    let (plan, admin_rules, rules_dir) = {
         let guard = clean.report.lock().map_err(|e| err("internal", e))?;
         let cached = guard
             .as_ref()
             .ok_or_else(|| err("no-clean-scan", "no rule scan yet"))?;
-        rules_plan(&cached.report, &rule_ids, expert, permanent)
+        let admin: BTreeSet<String> = cached
+            .report
+            .rules
+            .iter()
+            .filter(|r| r.admin)
+            .map(|r| r.rule_id.clone())
+            .collect();
+        (
+            rules_plan(&cached.report, &rule_ids, expert, permanent),
+            admin,
+            cached.rules_dir.clone(),
+        )
     };
-    let cancel = Arc::new(AtomicBool::new(false));
-    *clean.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
-    let result = execute_plan(&app, &window, &state, plan, "clean", cancel).await;
-    *clean.cancel.lock().map_err(|e| err("internal", e))? = None;
+    let result = run_rules_plan(&app, &window, &state, &clean, plan).await;
     // the candidates are stale now: the next visit rescans
     *clean.report.lock().map_err(|e| err("internal", e))? = None;
+    let (dto, op) = result?;
+    remember(
+        &clean,
+        dto,
+        LastRun {
+            op,
+            groups: Vec::new(),
+            expert,
+            permanent,
+            rules_dir,
+            admin_rules,
+            elevated: false,
+        },
+        Vec::new(),
+    )
+    .await
+}
+
+/// Execute a plan of the Clean view (kind `clean`), cancellable with
+/// [`clean_cancel`].
+async fn run_rules_plan(
+    app: &AppHandle,
+    window: &WebviewWindow,
+    state: &State<'_, AppState>,
+    clean: &State<'_, CleanState>,
+    plan: CleanPlan,
+) -> CmdResult<(OperationDto, Operation)> {
+    let cancel = Arc::new(AtomicBool::new(false));
+    *clean.cancel.lock().map_err(|e| err("internal", e))? = Some(cancel.clone());
+    let result = execute_plan_returning(
+        app,
+        window,
+        state,
+        plan,
+        "clean",
+        cancel,
+        Box::new(|_| Ok(())),
+    )
+    .await;
+    *clean.cancel.lock().map_err(|e| err("internal", e))? = None;
     result
+}
+
+/// Group what `run.op` left behind (Restart Manager is asked again on a worker
+/// thread), add the earlier groups `carry` (causes this run did not work on), keep it
+/// as the last run and add it to `dto`.
+async fn remember(
+    clean: &State<'_, CleanState>,
+    mut dto: OperationDto,
+    mut run: LastRun,
+    carry: Vec<LeftoverGroup>,
+) -> CmdResult<OperationDto> {
+    let (op, admin, elevated) = (run.op.clone(), run.admin_rules.clone(), run.elevated);
+    let mut groups = tauri::async_runtime::spawn_blocking(move || {
+        exec::group_leftovers(
+            &op,
+            // after the elevated run, a denial is not something more rights can fix
+            &|rule| !elevated && admin.contains(rule),
+            &mut |path, is_dir| LiveProbe.lockers(path, is_dir),
+        )
+    })
+    .await
+    .map_err(|e| err("internal", e))?;
+    for old in carry {
+        match groups.iter_mut().find(|g| g.cause == old.cause) {
+            Some(g) => {
+                for item in old.items {
+                    if !g.items.iter().any(|i| exec::same_path(&i.path, &item.path)) {
+                        g.bytes += item.bytes;
+                        g.items.push(item);
+                    }
+                }
+                g.programs.extend(old.programs);
+                g.programs.sort();
+                g.programs.dedup();
+            }
+            None => groups.push(old),
+        }
+    }
+    groups.sort_by_key(|g| match g.cause {
+        LeftoverCause::InUse => 0,
+        LeftoverCause::NeedsAdmin => 1,
+        LeftoverCause::Other => 2,
+    });
+    dto.leftovers.clone_from(&groups);
+    run.groups = groups;
+    *clean.last.lock().map_err(|e| err("internal", e))? = Some(run);
+    Ok(dto)
+}
+
+/// The leftovers of the last clean with one of `causes`, as (rule id, path).
+fn last_targets(
+    clean: &State<'_, CleanState>,
+    causes: &[LeftoverCause],
+) -> CmdResult<(LastRun, Vec<nfd_rules::elevated::Target>)> {
+    let last = clean
+        .last
+        .lock()
+        .map_err(|e| err("internal", e))?
+        .clone()
+        .ok_or_else(|| err("no-clean-run", "nothing was cleaned yet"))?;
+    let targets: Vec<nfd_rules::elevated::Target> = last
+        .groups
+        .iter()
+        .filter(|g| causes.contains(&g.cause))
+        .flat_map(|g| &g.items)
+        .filter_map(|i| {
+            Some(nfd_rules::elevated::Target {
+                rule_id: i.rule_id.clone()?,
+                path: i.path.clone(),
+            })
+        })
+        .collect();
+    if targets.is_empty() {
+        return Err(err("nothing-to-clean", "nothing is left to clean"));
+    }
+    Ok((last, targets))
+}
+
+/// "Close it and try again": clean what the last clean left behind (in use, or
+/// changed since the scan) once more. The rules are matched again and only fresh
+/// candidates at or below a leftover are planned, through the same Planner,
+/// SafetyGate and executor as any clean. `cause` = `in-use` (default) or `other`.
+/// The app never closes a program itself.
+#[tauri::command]
+pub async fn clean_retry(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    clean: State<'_, CleanState>,
+    cause: Option<String>,
+) -> CmdResult<OperationDto> {
+    let causes = match cause.as_deref() {
+        None | Some("in-use") => vec![LeftoverCause::InUse],
+        Some("other") => vec![LeftoverCause::Other],
+        Some(other) => return Err(err("bad-cause", other)),
+    };
+    let (last, targets) = last_targets(&clean, &causes)?;
+    let packs = load_packs(last.rules_dir.clone())?;
+    let (expert, permanent) = (last.expert, last.permanent);
+    let plan = tauri::async_runtime::spawn_blocking(move || {
+        let resolve = nfd_platform::Native.resolver();
+        let matcher = Matcher::new(&packs, &resolve, std::env::consts::OS);
+        let ids: BTreeSet<&str> = targets.iter().map(|t| t.rule_id.as_str()).collect();
+        let running = nfd_platform::locks::running_processes().unwrap_or_default();
+        let report = matcher.scan(
+            &|r, _| ids.contains(r.id.as_str()),
+            &MatchOptions::default(),
+            &running,
+        );
+        let refs: Vec<&nfd_rules::elevated::Target> = targets.iter().collect();
+        let (found, _) = nfd_rules::elevated::select(&report, &refs);
+        let fresh = MatchReport {
+            candidates: found,
+            rules: report.rules,
+        };
+        let ids: Vec<String> = ids.into_iter().map(str::to_owned).collect();
+        rules_plan(&fresh, &ids, expert, permanent)
+    })
+    .await
+    .map_err(|e| err("internal", e))?;
+    let carry: Vec<LeftoverGroup> = last
+        .groups
+        .iter()
+        .filter(|g| !causes.contains(&g.cause))
+        .cloned()
+        .collect();
+    if plan.selected().next().is_none() {
+        // none of it is still there: those leftovers went away by themselves
+        if let Some(l) = clean.last.lock().map_err(|e| err("internal", e))?.as_mut() {
+            l.groups.clone_from(&carry);
+        }
+        return Err(err("nothing-to-clean", "nothing is left to clean"));
+    }
+    let result = run_rules_plan(&app, &window, &state, &clean, plan).await;
+    *clean.report.lock().map_err(|e| err("internal", e))? = None;
+    let (dto, op) = result?;
+    remember(
+        &clean,
+        dto,
+        LastRun {
+            op,
+            groups: Vec::new(),
+            elevated: false,
+            ..last
+        },
+        carry,
+    )
+    .await
+}
+
+/// Clean what the last clean could not remove for lack of administrator rights,
+/// through **one** UAC prompt (`--elevated-clean`, [`crate::elevated_clean`]). Only
+/// called from the button that says administrator rights are needed. The elevated
+/// process loads the rule packs itself and re-checks every item; items go to the
+/// Recycle Bin (or are deleted for good when the clean asked for that and the rule
+/// is a pure cache). Journaled as kind `clean-admin`.
+#[tauri::command]
+pub async fn clean_elevated(
+    app: AppHandle,
+    window: WebviewWindow,
+    state: State<'_, AppState>,
+    clean: State<'_, CleanState>,
+) -> CmdResult<OperationDto> {
+    if std::env::var_os("NFD_NO_AUTO_ELEVATE").is_some() {
+        return Err(err(
+            "elevation-disabled",
+            "NFD_NO_AUTO_ELEVATE is set: no administrator prompt",
+        ));
+    }
+    let (last, targets) = last_targets(&clean, &[LeftoverCause::NeedsAdmin])?;
+    let local = app_local(&app).ok_or_else(|| err("os", "no data folder"))?;
+    let now = exec::unix_now();
+    let op_id = exec::new_op_id(now);
+    let mut req = nfd_rules::elevated::Request::new(&op_id);
+    req.expert = last.expert;
+    req.permanent = last.permanent;
+    req.targets = targets;
+    let owner = owner_handle(&window);
+    let resp = tauri::async_runtime::spawn_blocking(move || {
+        std::env::current_exe().and_then(|exe| {
+            crate::elevated_clean::run_elevated(&exe, &req, &local.join("elevated"), owner)
+        })
+    })
+    .await
+    .map_err(|e| err("internal", e))?
+    .map_err(|e| {
+        if e.kind() == std::io::ErrorKind::Interrupted {
+            err("uac-declined", e)
+        } else {
+            err("elevation-failed", e)
+        }
+    })?;
+    if let Some(e) = resp.error {
+        return Err(err("elevation-failed", e));
+    }
+    let mut items = resp.items;
+    let base = items.len();
+    // what the elevated step refused stays visible in the result and the journal
+    for (i, r) in resp.refused.into_iter().enumerate() {
+        items.push(ItemResult {
+            n: base + i,
+            path: r.path,
+            rule_id: Some(r.rule_id),
+            mode: DeleteMode::RecycleBin,
+            is_dir: false,
+            bytes: 0,
+            files: 0,
+            freed: 0,
+            status: ItemStatus::Skipped,
+            reason: Some(r.code),
+            message: None,
+            stored: None,
+            warnings: Vec::new(),
+        });
+    }
+    let op = Operation {
+        id: op_id,
+        kind: nfd_rules::elevated::KIND.into(),
+        started_at: now,
+        finished_at: exec::unix_now(),
+        items,
+        cancelled: false,
+    };
+    let journal_error = journal(&app, &state, &op);
+    *clean.report.lock().map_err(|e| err("internal", e))? = None;
+    let dto = op_dto(&op, journal_error);
+    let carry: Vec<LeftoverGroup> = last
+        .groups
+        .iter()
+        .filter(|g| g.cause != LeftoverCause::NeedsAdmin)
+        .cloned()
+        .collect();
+    remember(
+        &clean,
+        dto,
+        LastRun {
+            op,
+            groups: Vec::new(),
+            elevated: true,
+            ..last
+        },
+        carry,
+    )
+    .await
+}
+
+/// Open the Windows tool a guidance (Protected) rule points to (Disk Cleanup, Storage
+/// settings, System Protection, Performance Options). The rule's `tool` is a closed
+/// list in the pack; nothing the UI sends is run.
+#[tauri::command]
+pub fn clean_open_tool(app: AppHandle, window: WebviewWindow, rule_id: String) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let packs = nfd_rules::builtin_packs().map_err(|e| err("rules", e))?;
+    let tool = packs
+        .iter()
+        .flat_map(|p| &p.rules)
+        .find(|r| r.id == rule_id)
+        .and_then(|r| r.tool)
+        .ok_or_else(|| err("not-found", &rule_id))?;
+    match tool.target() {
+        nfd_rules::ToolTarget::Settings(uri) => app
+            .opener()
+            .open_url(uri, None::<&str>)
+            .map_err(|e| err("os", e)),
+        nfd_rules::ToolTarget::System32(exe) => {
+            // the Windows folder as Windows knows it, never `PATH` or the environment
+            let path = nfd_platform::elevation::machine_folder("SYSTEMROOT")
+                .ok_or_else(|| err("os", "no Windows folder"))?
+                .join("System32")
+                .join(exe);
+            if !path.is_file() {
+                return Err(err("not-found", path.display()));
+            }
+            // through the shell: some of these ask for administrator rights themselves
+            nfd_apps::runner::shell_start(&path, "", None, owner_handle(&window))
+                .map(drop)
+                .map_err(|e| {
+                    if e.kind() == std::io::ErrorKind::Interrupted {
+                        err("uac-declined", e)
+                    } else {
+                        err("os", e)
+                    }
+                })
+        }
+    }
 }
 
 /// Stop a running clean after the current item.

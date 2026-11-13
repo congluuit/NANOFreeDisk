@@ -54,18 +54,39 @@ function resetFolders(): void {
   ];
 }
 
+/** What the one-click search looks through (`nfd_dupes::personal::personal_folders`). */
+const PERSONAL = ["Documents", "Downloads", "Pictures", "Videos", "Music", "Desktop"].map((n) => `${HOME}\\${n}`);
+
+let minSize = 100 * 1024;
+let appDirs = false;
+
 function report(roots: string[], folders = false): DupeReport & { totalGroups: number } {
   return {
     roots,
-    minSize: MB,
+    minSize,
     groups,
     wastedBytes: groups.reduce((s, g) => s + g.wasted, 0),
     scannedFiles: 48_210,
     candidates: 1_204,
     hashedBytes: 9.1 * 2 ** 30,
     cacheHits: 0,
-    skipped: { small: 41_002, empty: 310, cloud: 12, protected: 4 },
-    skippedSamples: [],
+    skipped: {
+      small: minSize > 10 * 1024 ? 41_002 : 3_870,
+      empty: 310,
+      cloud: 12,
+      protected: 4,
+      ...(appDirs ? {} : { "app-dir": 2_315 }),
+      unreadable: 2,
+      changed: 1,
+    },
+    skippedSamples: [
+      { path: `${HOME}\\OneDrive\\Pictures\\Album 2018\\IMG_2231.jpg`, reason: "cloud" },
+      { path: `${HOME}\\OneDrive\\Documents\\Thesis.docx`, reason: "cloud" },
+      { path: `${HOME}\\AppData\\Roaming\\Claude\\conversations.db`, reason: "protected" },
+      { path: `${HOME}\\Documents\\site\\node_modules\\react\\index.js`, reason: "app-dir" },
+      { path: `${HOME}\\Downloads\\locked.pst`, reason: "unreadable" },
+      { path: `${HOME}\\Documents\\notes.xlsx`, reason: "changed" },
+    ],
     elapsedMs: 8_400,
     paranoid: false,
     totalGroups: groups.length,
@@ -104,7 +125,9 @@ export const dupeHandlers: Record<string, (a: Record<string, any>) => unknown> =
     reset();
     resetFolders();
     withFolders = !!options?.folders;
-    roots = paths?.length ? paths : ["C:\\"];
+    minSize = options?.minSize ?? 100 * 1024;
+    appDirs = !!options?.includeAppDirs;
+    roots = options?.personal ? PERSONAL : paths?.length ? paths : ["C:\\"];
     return report(roots, withFolders);
   },
   dupes_cancel: () => undefined,

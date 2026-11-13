@@ -2,6 +2,9 @@
 # Everything here is deliberately conservative. Locations such as WinSxS, Installer,
 # pagefile/hiberfil, Windows.old and restore points are *protected* — the app explains the
 # proper Microsoft tool instead of deleting them.
+# `admin = true`: cleaning needs administrator rights; what the normal run leaves can go
+# through the one elevated run (docs/PHASE3_CLEAN.md §8). `tool`: the Windows tool the
+# Clean view opens for a protected rule (a closed list, see nfd_rules::Tool).
 
 [pack]
 id          = "windows-system"
@@ -36,6 +39,7 @@ min_age_days    = 1
 impact          = "System-wide temporary files (requires administrator). Locked files are skipped."
 impact_vi       = "Tệp tạm của toàn hệ thống (cần quyền quản trị). Tệp đang bị khóa được bỏ qua."
 verified_on     = 2026-10-16
+admin           = true
 
 [[rule]]
 id              = "windows.explorer.thumbcache"
@@ -89,6 +93,7 @@ regenerates     = true
 impact          = "Blue-screen memory dumps (requires administrator). Keep them if you still want to analyse a recent BSOD."
 impact_vi       = "Tệp dump bộ nhớ khi màn hình xanh (cần quyền quản trị). Giữ lại nếu bạn còn muốn phân tích lỗi BSOD gần đây."
 verified_on     = 2026-10-16
+admin           = true
 
 [[rule]]
 id              = "windows.logs.cbs"
@@ -103,6 +108,7 @@ min_age_days    = 7
 impact          = "Component-servicing logs; they can grow to many GB. Current-day logs are kept for troubleshooting."
 impact_vi       = "Nhật ký Component Servicing; có thể phình tới nhiều GB. Nhật ký trong ngày được giữ lại để xử lý sự cố."
 verified_on     = 2026-10-16
+admin           = true
 
 [[rule]]
 id              = "windows.update.download-cache"
@@ -117,6 +123,7 @@ requires_closed = ["wuauserv"]
 impact          = "Downloaded update packages. Windows Update service must be stopped first; pending updates are downloaded again. Use only when updates are stuck or the folder is huge."
 impact_vi       = "Gói cập nhật đã tải. Phải dừng dịch vụ Windows Update trước; bản cập nhật đang chờ sẽ được tải lại. Chỉ dùng khi cập nhật bị kẹt hoặc thư mục quá lớn."
 verified_on     = 2026-10-16
+admin           = true
 
 [[rule]]
 id              = "windows.delivery-optimization.cache"
@@ -129,6 +136,7 @@ level           = "protected"
 impact          = "Peer-to-peer update cache. Clear it through Settings → System → Storage → Temporary files → Delivery Optimization Files, which stops the service correctly."
 impact_vi       = "Bộ đệm cập nhật ngang hàng. Hãy xóa trong Settings → System → Storage → Temporary files → Delivery Optimization Files để dịch vụ được dừng đúng cách."
 verified_on     = 2026-10-16
+tool            = "storage-settings"
 
 [[rule]]
 id              = "windows.defender.scan-history"
@@ -166,6 +174,7 @@ impact          = "Component store and installer database. Never delete directly
 impact_vi       = "Kho thành phần và cơ sở dữ liệu trình cài. Không bao giờ xóa trực tiếp. Thu hồi dung lượng bằng: DISM /Online /Cleanup-Image /StartComponentCleanup /ResetBase"
 docs            = "https://learn.microsoft.com/windows-hardware/manufacture/desktop/clean-up-the-winsxs-folder"
 verified_on     = 2026-10-16
+tool            = "disk-cleanup"
 
 [[rule]]
 id              = "windows.pagefile-hiberfil"
@@ -178,6 +187,7 @@ level           = "protected"
 impact          = "Virtual memory and hibernation files. Disable hibernation with `powercfg /h off` (frees hiberfil.sys) or resize the page file in System → Advanced → Performance."
 impact_vi       = "Tệp bộ nhớ ảo và ngủ đông. Tắt ngủ đông bằng `powercfg /h off` (giải phóng hiberfil.sys) hoặc đổi kích thước page file trong System → Advanced → Performance."
 verified_on     = 2026-10-16
+tool            = "performance-options"
 
 [[rule]]
 id              = "windows.old"
@@ -190,6 +200,7 @@ level           = "protected"
 impact          = "Previous Windows installation (needed to roll back an upgrade for 10 days). Remove it with Settings → System → Storage → Temporary files → Previous Windows installation(s)."
 impact_vi       = "Bản cài Windows trước (cần để quay lại trong 10 ngày sau khi nâng cấp). Xóa trong Settings → System → Storage → Temporary files → Previous Windows installation(s)."
 verified_on     = 2026-10-16
+tool            = "storage-settings"
 
 [[rule]]
 id              = "windows.restore-points"
@@ -202,6 +213,7 @@ level           = "protected"
 impact          = "Restore points and shadow copies. Manage them in System Protection or with `vssadmin list shadows`."
 impact_vi       = "Điểm khôi phục và shadow copy. Quản lý trong System Protection hoặc bằng `vssadmin list shadows`."
 verified_on     = 2026-10-16
+tool            = "system-protection"
 
 [[rule]]
 id              = "windows.prefetch"

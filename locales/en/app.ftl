@@ -334,6 +334,22 @@ tidy-status-ok = Works
 tidy-status-missing = Target missing
 tidy-status-drive_missing = Drive not connected
 tidy-status-unchecked = Not checked
+tidy-clutter = { $count ->
+    [one] 1 system file
+   *[other] { $count } system files
+}
+tidy-empty-clutter-hint = Folders that only hold files Windows or macOS make on their own (desktop.ini, Thumbs.db, .DS_Store) count as empty. Those files go with the folder and come back with it if you restore it.
+tidy-zero-title = Empty files
+tidy-zero-summary = { $count ->
+    [one] 1 file of 0 bytes
+   *[other] { $count } files of 0 bytes
+} outside program folders.
+tidy-zero-hint = Some programs use empty files as markers. Only pick the ones you recognize. Program folders, hidden files and well-known marker files are never listed.
+tidy-zero-none = No empty files.
+tidy-scan-title = Nothing to tidy up yet
+tidy-scan-text = Tidy up works from a scan of your drive. Scan the system drive now and you come back here when it is done.
+tidy-scan-system = Scan drive { $drive }
+tidy-scan-other = Choose another drive or folder
 
 ## HTML report
 

@@ -132,6 +132,77 @@ fn identical_files_group_and_near_misses_do_not() {
 }
 
 #[test]
+fn the_personal_threshold_finds_photo_sized_copies() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let r = dir.path();
+    // a chat photo saved twice, a thumbnail saved twice, and two empty files
+    let photo = pattern(180 * 1024, 3);
+    let thumb = pattern(40 * 1024, 4);
+    fs::create_dir_all(r.join("Pictures")).expect("mkdir");
+    fs::create_dir_all(r.join("Downloads")).expect("mkdir");
+    fs::write(r.join("Pictures/IMG_1.jpg"), &photo).expect("w");
+    fs::write(r.join("Downloads/IMG_1.jpg"), &photo).expect("w");
+    fs::write(r.join("Pictures/t.jpg"), &thumb).expect("w");
+    fs::write(r.join("Downloads/t.jpg"), &thumb).expect("w");
+    fs::write(r.join("e1"), b"").expect("w");
+    fs::write(r.join("e2"), b"").expect("w");
+
+    // the drive-wide default leaves the photo out
+    let drive = run_with(
+        r,
+        &no_gate(),
+        &DupeOptions::default(),
+        None,
+        &Spy::default(),
+    );
+    assert!(drive.groups.is_empty());
+    assert_eq!(drive.skipped.get(&SkipReason::Small), Some(&4));
+
+    let mine = run_with(
+        r,
+        &no_gate(),
+        &opts(personal::PERSONAL_MIN_SIZE),
+        None,
+        &Spy::default(),
+    );
+    assert_eq!(
+        names(&mine, r),
+        [vec!["Downloads/IMG_1.jpg", "Pictures/IMG_1.jpg"]]
+    );
+    assert_eq!(mine.min_size, personal::PERSONAL_MIN_SIZE);
+    assert_eq!(mine.skipped.get(&SkipReason::Small), Some(&2));
+    // empty files never count, whatever the threshold
+    assert_eq!(mine.skipped.get(&SkipReason::Empty), Some(&2));
+}
+
+#[test]
+fn several_scans_are_searched_together() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let r = dir.path();
+    let doc = pattern(120 * 1024, 5);
+    fs::create_dir_all(r.join("Documents")).expect("mkdir");
+    fs::create_dir_all(r.join("Desktop")).expect("mkdir");
+    fs::write(r.join("Documents/report.pdf"), &doc).expect("w");
+    fs::write(r.join("Desktop/report.pdf"), &doc).expect("w");
+    let a = tree(&r.join("Documents"));
+    let b = tree(&r.join("Desktop"));
+    let rep = find(
+        &[&a, &b],
+        &no_gate(),
+        &opts(personal::PERSONAL_MIN_SIZE),
+        None,
+        &Spy::default(),
+        &|_| {},
+    )
+    .expect("find");
+    assert_eq!(rep.roots.len(), 2);
+    assert_eq!(
+        names(&rep, r),
+        [vec!["Desktop/report.pdf", "Documents/report.pdf"]]
+    );
+}
+
+#[test]
 fn hard_links_are_one_copy() {
     let dir = tempfile::tempdir().expect("tmp");
     let r = dir.path();

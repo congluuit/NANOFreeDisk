@@ -109,6 +109,39 @@ fn volume_key(path: &Path) -> Option<String> {
     }
 }
 
+/// `inner` is `outer` or lies below it, compared the way the SafetyGate compares
+/// paths (case, separators, `\\?\` prefixes, `.` / `..`, trailing dots and spaces).
+/// `false` when either path is relative.
+#[must_use]
+pub fn path_within(inner: &Path, outer: &Path) -> bool {
+    match (comparable(inner), comparable(outer)) {
+        (Some(i), Some(o)) => is_within(&i, &o),
+        _ => false,
+    }
+}
+
+/// The comparable form [`path_within`] uses (`None` for a relative path), to
+/// compare many paths without normalizing them again each time.
+#[must_use]
+pub fn path_key(path: &Path) -> Option<String> {
+    comparable(path)
+}
+
+/// [`path_within`] on two [`path_key`]s.
+#[must_use]
+pub fn key_within(inner: &str, outer: &str) -> bool {
+    is_within(inner, outer)
+}
+
+/// `a` and `b` name the same path (see [`path_within`]).
+#[must_use]
+pub fn same_path(a: &Path, b: &Path) -> bool {
+    match (comparable(a), comparable(b)) {
+        (Some(x), Some(y)) => x == y,
+        _ => false,
+    }
+}
+
 /// Current time in Unix seconds.
 #[must_use]
 pub fn unix_now() -> i64 {
@@ -379,7 +412,7 @@ fn act(
 ) {
     let fail = |result: &mut ItemResult, e: &io::Error| {
         result.status = ItemStatus::Failed;
-        result.reason = Some(format!("{:?}", e.kind()).to_lowercase());
+        result.reason = Some(io_reason(e));
         result.message = Some(e.to_string());
     };
     match item.mode {
@@ -450,18 +483,18 @@ fn act(
                 return;
             };
             match quarantine(item, result.n, &root, opts, op_dirs) {
-                Ok((stored, moved, complete)) => {
-                    result.stored = Some(stored);
-                    if complete {
+                Ok(q) => {
+                    result.stored = Some(q.stored);
+                    if q.complete {
                         result.status = ItemStatus::Done;
                         result.freed = item.bytes;
-                    } else if moved > 0 {
+                    } else if q.moved > 0 {
                         result.status = ItemStatus::Partial;
-                        result.freed = moved.min(item.bytes);
-                        result.reason = Some("in-use".into());
+                        result.freed = q.moved.min(item.bytes);
+                        result.reason = Some(q.why.into());
                     } else {
                         result.status = ItemStatus::Failed;
-                        result.reason = Some("in-use".into());
+                        result.reason = Some(q.why.into());
                         result.stored = None;
                     }
                 }
@@ -470,6 +503,18 @@ fn act(
             }
         }
     }
+}
+
+/// Stable reason code of an I/O error for the journal and the UI: `in-use` for a
+/// sharing or lock violation (another program has the file open), else the error
+/// kind in lower case (`permissiondenied`, `notfound`, ...).
+#[must_use]
+pub fn io_reason(e: &io::Error) -> String {
+    // ERROR_SHARING_VIOLATION (32), ERROR_LOCK_VIOLATION (33)
+    if cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33)) {
+        return "in-use".into();
+    }
+    format!("{:?}", e.kind()).to_lowercase()
 }
 
 fn is_cross_device(e: &io::Error) -> bool {
@@ -489,21 +534,31 @@ fn recycle(item: &PlanItem, result: &mut ItemResult, opts: &ExecOptions) {
         Ok((nfd_platform::trash::Recycled::Declined, _)) => result.status = ItemStatus::Declined,
         Err(e) => {
             result.status = ItemStatus::Failed;
-            result.reason = Some(format!("{:?}", e.kind()).to_lowercase());
+            result.reason = Some(io_reason(&e));
             result.message = Some(e.to_string());
         }
     }
 }
 
-/// Move `item` into `<root>/<op>/<n>/<name>`. Returns (stored path, bytes moved,
-/// everything moved).
+/// Where a quarantined item went and how much of it.
+struct Quarantined {
+    stored: PathBuf,
+    /// Bytes moved.
+    moved: u64,
+    /// Everything moved.
+    complete: bool,
+    /// Why something stayed (`in-use` or `permissiondenied`).
+    why: &'static str,
+}
+
+/// Move `item` into `<root>/<op>/<n>/<name>`.
 fn quarantine(
     item: &PlanItem,
     n: usize,
     root: &Path,
     opts: &ExecOptions,
     op_dirs: &mut Vec<(PathBuf, fs::File)>,
-) -> io::Result<(PathBuf, u64, bool)> {
+) -> io::Result<Quarantined> {
     let op_dir = root.join(&opts.op_id);
     let manifest = match op_dirs.iter_mut().find(|(d, _)| *d == op_dir) {
         Some((_, f)) => f,
@@ -529,16 +584,17 @@ fn quarantine(
         .file_name()
         .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "no file name"))?;
     let stored = slot.join(name);
-    let (moved, complete) = match fs::rename(&item.path, &stored) {
-        Ok(()) => (item.bytes, true),
+    let (moved, complete, why) = match fs::rename(&item.path, &stored) {
+        Ok(()) => (item.bytes, true, "in-use"),
         Err(e) if is_cross_device(&e) => {
             let _ = fs::remove_dir(&slot);
             return Err(e);
         }
         Err(e) if item.is_dir => {
-            // something inside is busy: move what can be moved
+            // something inside is busy (or not ours to move): move what can be moved
             let _ = e;
-            move_tree(&item.path, &stored)?
+            let m = move_tree_detailed(&item.path, &stored)?;
+            (m.bytes, m.complete, m.why())
         }
         Err(e) => {
             let _ = fs::remove_dir(&slot);
@@ -562,7 +618,12 @@ fn quarantine(
     } else {
         let _ = fs::remove_dir_all(&slot);
     }
-    Ok((stored, moved, complete))
+    Ok(Quarantined {
+        stored,
+        moved,
+        complete,
+        why,
+    })
 }
 
 /// Replace the file `item` by a link to `keeper` (see the module documentation):
@@ -597,10 +658,10 @@ fn replace_with_link(
     tmp_name.push(format!(".nfd-{}-{n}.tmp", opts.op_id));
     let tmp = parent.join(tmp_name);
     make(keeper, &tmp)?;
-    let (stored, _, complete) = match quarantine(item, n, root, opts, op_dirs) {
-        Ok(r) if r.2 => r,
+    let stored = match quarantine(item, n, root, opts, op_dirs) {
+        Ok(r) if r.complete => r.stored,
         Ok(r) => {
-            let _ = fs::rename(&r.0, &item.path);
+            let _ = fs::rename(&r.stored, &item.path);
             let _ = fs::remove_file(&tmp);
             return Err(io::Error::other("the duplicate could not be moved"));
         }
@@ -609,7 +670,6 @@ fn replace_with_link(
             return Err(e);
         }
     };
-    debug_assert!(complete);
     if let Err(e) = finish(&tmp, &item.path) {
         // put the original back where it was; the link was only a second name
         if fs::rename(&stored, &item.path).is_ok() {
@@ -620,39 +680,108 @@ fn replace_with_link(
     Ok(stored)
 }
 
+/// What [`move_tree_detailed`] managed to move.
+#[derive(Debug, Clone, Copy, Default)]
+struct Moved {
+    bytes: u64,
+    complete: bool,
+    /// Something stayed because another program has it open.
+    busy: bool,
+    /// Something stayed because access was denied (not ours, or it needs
+    /// administrator rights).
+    denied: bool,
+}
+
+impl Moved {
+    /// Reason code of what stayed: a program holding files wins (closing it may be
+    /// enough); unknown causes keep the historical `in-use`.
+    const fn why(self) -> &'static str {
+        if self.denied && !self.busy {
+            "permissiondenied"
+        } else {
+            "in-use"
+        }
+    }
+
+    fn note(&mut self, e: &io::Error) {
+        self.complete = false;
+        if e.kind() == io::ErrorKind::PermissionDenied {
+            self.denied = true;
+        } else if io_reason(e) == "in-use" {
+            self.busy = true;
+        }
+    }
+}
+
 /// Move the contents of directory `src` into `dst` one entry at a time (links are
 /// moved as links, never followed), then remove `src` if it ended up empty. Returns
 /// (bytes moved, everything moved).
 fn move_tree(src: &Path, dst: &Path) -> io::Result<(u64, bool)> {
+    move_tree_detailed(src, dst).map(|m| (m.bytes, m.complete))
+}
+
+/// [`move_tree`], also saying why something stayed. Only a failure to start (the
+/// destination cannot be made, `src` cannot be listed) is an error: what cannot be
+/// read or moved further down stays where it is, so the bytes already moved are
+/// always reported (and journaled) by the caller.
+fn move_tree_detailed(src: &Path, dst: &Path) -> io::Result<Moved> {
     match fs::create_dir(dst) {
         Ok(()) => {}
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists && dst.is_dir() => {}
         Err(e) => return Err(e),
     }
-    let mut moved = 0;
-    let mut complete = true;
+    let mut out = Moved {
+        complete: true,
+        ..Moved::default()
+    };
     for entry in fs::read_dir(src)? {
-        let entry = entry?;
+        let entry = match entry {
+            Ok(e) => e,
+            Err(e) => {
+                out.note(&e);
+                continue;
+            }
+        };
         let from = entry.path();
         let to = dst.join(entry.file_name());
-        let meta = fs::symlink_metadata(&from)?;
+        let meta = match fs::symlink_metadata(&from) {
+            Ok(m) => m,
+            Err(e) => {
+                out.note(&e);
+                continue;
+            }
+        };
         let size = if meta.is_file() { meta.len() } else { 0 };
-        if to.symlink_metadata().is_err() && fs::rename(&from, &to).is_ok() {
-            moved += if meta.is_dir() { dir_size(&to) } else { size };
-            continue;
-        }
-        if meta.is_dir() && !meta.file_type().is_symlink() {
-            let (m, c) = move_tree(&from, &to)?;
-            moved += m;
-            complete &= c;
+        let renamed = if to.symlink_metadata().is_err() {
+            fs::rename(&from, &to)
         } else {
-            complete = false;
+            Err(io::Error::from(io::ErrorKind::AlreadyExists))
+        };
+        let err = match renamed {
+            Ok(()) => {
+                out.bytes += if meta.is_dir() { dir_size(&to) } else { size };
+                continue;
+            }
+            Err(e) => e,
+        };
+        if meta.is_dir() && !meta.file_type().is_symlink() {
+            match move_tree_detailed(&from, &to) {
+                Ok(m) => {
+                    out.bytes += m.bytes;
+                    out.complete &= m.complete;
+                    out.busy |= m.busy;
+                    out.denied |= m.denied;
+                }
+                Err(e) => out.note(&e),
+            }
+        } else {
+            out.note(&err);
         }
     }
-    if complete {
-        complete = fs::remove_dir(src).is_ok();
+    if out.complete {
+        out.complete = fs::remove_dir(src).is_ok();
     }
-    Ok((moved, complete))
+    Ok(out)
 }
 
 fn dir_size(dir: &Path) -> u64 {
@@ -849,11 +978,277 @@ pub fn read_manifest(op_dir: &Path) -> Vec<ManifestLine> {
         .collect()
 }
 
+/// Why something a clean was asked to remove is still on the disk.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LeftoverCause {
+    /// A running program (or Windows) has files open: close it, then try again.
+    InUse,
+    /// Access was denied and the rule says cleaning there needs administrator
+    /// rights: the elevated run can take it.
+    NeedsAdmin,
+    /// Anything else (refused by the SafetyGate, changed since the scan, an error).
+    Other,
+}
+
+/// One item that stayed (fully or partly).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Leftover {
+    /// Item number in the operation.
+    pub n: usize,
+    pub path: PathBuf,
+    pub rule_id: Option<String>,
+    pub is_dir: bool,
+    /// Bytes still on the disk (planned minus freed).
+    pub bytes: u64,
+    pub status: ItemStatus,
+    pub reason: Option<String>,
+    /// Programs holding it open (Restart Manager names), when known.
+    pub programs: Vec<String>,
+}
+
+/// Leftovers of one cause.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LeftoverGroup {
+    pub cause: LeftoverCause,
+    /// Every program named by the items, sorted.
+    pub programs: Vec<String>,
+    pub bytes: u64,
+    pub items: Vec<Leftover>,
+}
+
+/// At most this many leftovers are asked about again through Restart Manager (the
+/// rest keep the names the SafetyGate found before acting).
+pub const LEFTOVER_LOCK_PROBES: usize = 64;
+
+/// What `op` left behind, grouped by cause (in-use first, then administrator rights,
+/// then the rest; empty groups left out). `admin_rule(rule_id)` = the rule is marked
+/// as needing administrator rights; `lockers(path, is_dir)` names the processes
+/// holding the item open now (Restart Manager).
+///
+/// Not leftovers: what was done, not selected, stopped, declined by the user,
+/// already gone (`notfound`, or `not-found-now` in the elevated run) or covered by
+/// its parent folder (`nested`).
+pub fn group_leftovers(
+    op: &Operation,
+    admin_rule: &dyn Fn(&str) -> bool,
+    lockers: &mut dyn FnMut(&Path, bool) -> Vec<String>,
+) -> Vec<LeftoverGroup> {
+    let mut groups: Vec<LeftoverGroup> = Vec::new();
+    let mut probed = 0;
+    for item in &op.items {
+        let reason = item.reason.as_deref();
+        let left = match item.status {
+            ItemStatus::Partial | ItemStatus::Failed => !matches!(reason, Some("notfound")),
+            // `not-found-now`: the elevated run no longer found it (gone, or no rule
+            // offers it any more)
+            ItemStatus::Skipped => !matches!(reason, Some("nested" | "notfound" | "not-found-now")),
+            _ => false,
+        };
+        if !left {
+            continue;
+        }
+        let mut programs: Vec<String> = item
+            .warnings
+            .iter()
+            .filter_map(|w| match w {
+                Warning::InUse(names) => Some(names.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        if item.status != ItemStatus::Skipped && probed < LEFTOVER_LOCK_PROBES {
+            probed += 1;
+            programs.extend(lockers(&item.path, item.is_dir));
+        }
+        programs.sort();
+        programs.dedup();
+        let admin = item.rule_id.as_deref().is_some_and(admin_rule);
+        let cause = if item.status == ItemStatus::Skipped {
+            LeftoverCause::Other
+        } else if !programs.is_empty() || reason == Some("in-use") {
+            LeftoverCause::InUse
+        } else if reason == Some("permissiondenied") && admin {
+            LeftoverCause::NeedsAdmin
+        } else {
+            LeftoverCause::Other
+        };
+        let leftover = Leftover {
+            n: item.n,
+            path: item.path.clone(),
+            rule_id: item.rule_id.clone(),
+            is_dir: item.is_dir,
+            bytes: item.bytes.saturating_sub(item.freed),
+            status: item.status,
+            reason: item.reason.clone(),
+            programs,
+        };
+        let group = match groups.iter_mut().position(|g| g.cause == cause) {
+            Some(i) => &mut groups[i],
+            None => {
+                groups.push(LeftoverGroup {
+                    cause,
+                    programs: Vec::new(),
+                    bytes: 0,
+                    items: Vec::new(),
+                });
+                groups.last_mut().expect("just pushed")
+            }
+        };
+        group.bytes += leftover.bytes;
+        group.programs.extend(leftover.programs.iter().cloned());
+        group.items.push(leftover);
+    }
+    for g in &mut groups {
+        g.programs.sort();
+        g.programs.dedup();
+    }
+    groups.sort_by_key(|g| match g.cause {
+        LeftoverCause::InUse => 0,
+        LeftoverCause::NeedsAdmin => 1,
+        LeftoverCause::Other => 2,
+    });
+    groups
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::RiskLevel;
     use crate::safety::gate::{LiveProbe, Origin};
+
+    fn result(n: usize, rule: &str, status: ItemStatus, reason: Option<&str>) -> ItemResult {
+        ItemResult {
+            n,
+            path: PathBuf::from(format!("/x/{n}")),
+            rule_id: Some(rule.into()),
+            mode: DeleteMode::Quarantine,
+            is_dir: true,
+            bytes: 100,
+            files: 2,
+            freed: if status == ItemStatus::Partial { 40 } else { 0 },
+            status,
+            reason: reason.map(str::to_owned),
+            message: None,
+            stored: None,
+            warnings: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn leftovers_are_grouped_by_cause() {
+        let mut busy = result(0, "browser.cache", ItemStatus::Partial, Some("in-use"));
+        busy.warnings = vec![Warning::InUse(vec!["Google Chrome".into()])];
+        let items = vec![
+            busy,
+            // denied in an admin rule: the elevated run can take it
+            result(
+                1,
+                "windows.temp.system",
+                ItemStatus::Failed,
+                Some("permissiondenied"),
+            ),
+            // denied elsewhere: nothing the app can do
+            result(
+                2,
+                "user.cache",
+                ItemStatus::Failed,
+                Some("permissiondenied"),
+            ),
+            // a lock found only now (asked again after the run)
+            result(
+                3,
+                "windows.temp.system",
+                ItemStatus::Failed,
+                Some("permissiondenied"),
+            ),
+            result(4, "user.cache", ItemStatus::Skipped, Some("changed")),
+            // not leftovers
+            result(5, "user.cache", ItemStatus::Done, None),
+            result(6, "user.cache", ItemStatus::Skipped, Some("nested")),
+            result(7, "user.cache", ItemStatus::Failed, Some("notfound")),
+            result(8, "user.cache", ItemStatus::Declined, None),
+            result(9, "user.cache", ItemStatus::Cancelled, None),
+            result(10, "user.cache", ItemStatus::NotSelected, None),
+            result(
+                11,
+                "windows.temp.system",
+                ItemStatus::Skipped,
+                Some("not-found-now"),
+            ),
+        ];
+        let op = Operation {
+            id: "op".into(),
+            kind: "clean".into(),
+            started_at: 0,
+            finished_at: 0,
+            items,
+            cancelled: false,
+        };
+        let mut asked = Vec::new();
+        let groups = group_leftovers(
+            &op,
+            &|rule| rule == "windows.temp.system",
+            &mut |path, _| {
+                asked.push(path.to_path_buf());
+                if path.ends_with("3") {
+                    vec!["Windows Update".into()]
+                } else {
+                    Vec::new()
+                }
+            },
+        );
+        let causes: Vec<LeftoverCause> = groups.iter().map(|g| g.cause).collect();
+        assert_eq!(
+            causes,
+            [
+                LeftoverCause::InUse,
+                LeftoverCause::NeedsAdmin,
+                LeftoverCause::Other
+            ]
+        );
+        let ns = |g: &LeftoverGroup| g.items.iter().map(|i| i.n).collect::<Vec<_>>();
+        assert_eq!(ns(&groups[0]), [0, 3]);
+        assert_eq!(groups[0].programs, ["Google Chrome", "Windows Update"]);
+        assert_eq!(groups[0].bytes, 60 + 100, "what is still on the disk");
+        assert_eq!(ns(&groups[1]), [1]);
+        assert_eq!(ns(&groups[2]), [2, 4]);
+        // skipped items are never probed for locks
+        assert!(!asked.iter().any(|p| p.ends_with("4")));
+        assert!(
+            group_leftovers(
+                &Operation {
+                    items: Vec::new(),
+                    ..op
+                },
+                &|_| true,
+                &mut |_, _| Vec::new()
+            )
+            .is_empty()
+        );
+    }
+
+    #[test]
+    fn io_reasons_name_locks_and_denials() {
+        assert_eq!(
+            io_reason(&io::Error::from(io::ErrorKind::PermissionDenied)),
+            "permissiondenied"
+        );
+        assert_eq!(
+            io_reason(&io::Error::from(io::ErrorKind::NotFound)),
+            "notfound"
+        );
+        if cfg!(windows) {
+            assert_eq!(io_reason(&io::Error::from_raw_os_error(32)), "in-use");
+            assert_eq!(io_reason(&io::Error::from_raw_os_error(33)), "in-use");
+            assert_eq!(
+                io_reason(&io::Error::from_raw_os_error(5)),
+                "permissiondenied"
+            );
+        }
+    }
 
     #[test]
     fn civil_dates() {

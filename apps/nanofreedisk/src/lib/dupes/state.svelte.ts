@@ -5,8 +5,9 @@ import { on } from "../api";
 import type { CleanProgress, OperationResult } from "../clean/types";
 import { formatSize } from "../format";
 import { intlLocale, t } from "../i18n.svelte";
-import { app, fail, toast } from "../state.svelte";
+import { app, expert, fail, toast } from "../state.svelte";
 import { dupesApi } from "./api";
+import { cliSize, minBytesFromSetting, settingFromBytes } from "./size";
 import type { DupeAction, DupeGroup, DupeProgress, DupeReport, FileCopy, FileKind, FolderCopy, FolderGroup, KeepStrategy, LinkKind, Scope, Selection } from "./types";
 
 /** Extensions of each file-kind filter (lower case, no dot). */
@@ -76,7 +77,11 @@ export interface Pick {
 }
 
 export const dupes = $state({
-  scope: "current" as Scope,
+  scope: "personal" as Scope,
+  /** Simple mode: the full search form is open under "Options". */
+  optionsOpen: false,
+  /** Where the last search looked (what "search again" repeats). */
+  lastScope: null as null | { scope: Scope; folders: string[] },
   folders: [] as string[],
   kind: "all" as FileKind,
   /** Expert: also list application folders (never pre-selected). */
@@ -263,31 +268,43 @@ export function extensions(): string[] {
   return dupes.kind === "all" ? [] : KINDS[dupes.kind];
 }
 
+/** Smallest file compared, in bytes (saved in the settings as KiB). */
+export function minBytes(): number {
+  return minBytesFromSetting(app.settings.dupeMinKb);
+}
+
+export function setMinBytes(bytes: number): void {
+  app.settings.dupeMinKb = settingFromBytes(Math.max(1, Math.round(bytes)));
+}
+
 /** Test hook: the GUI smoke test keeps its fixture out of the hash cache. */
 const useCache = (): boolean => !(globalThis as { __nfdNoDupeCache?: boolean }).__nfdNoDupeCache;
 
 /** Search the chosen scope. */
 export async function findDupes(): Promise<void> {
   if (dupes.searching) return;
-  const paths = dupes.scope === "current" ? [] : [...dupes.folders];
+  const paths = dupes.scope === "folders" ? [...dupes.folders] : [];
   if (dupes.scope === "folders" && !paths.length) return;
   dupes.searching = { phase: dupes.scope === "current" ? "collect" : "scan", done: 0, total: 0, bytes: 0, totalBytes: 0, path: paths[0] ?? "" };
+  dupes.lastScope = { scope: dupes.scope, folders: paths };
   dupes.last = null;
   try {
     progressOff ??= await on<DupeProgress>("dupes-progress", (p) => {
       if (dupes.searching) dupes.searching = p;
     });
     const report = await dupesApi.find(paths, {
-      minSize: Math.max(1, Math.round(app.settings.dupeMinMb * 2 ** 20)),
+      minSize: minBytes(),
       includeAppDirs: dupes.includeAppDirs,
       paranoid: dupes.paranoid,
       extensions: extensions(),
       useCache: useCache(),
       folders: dupes.findFolders,
+      personal: dupes.scope === "personal",
     });
     dupes.report = report;
     dupes.shown = 60;
-    dupes.expanded = report.groups.slice(0, 3).map((g) => g.id);
+    // Simple mode: one line per group until opened
+    dupes.expanded = expert() ? report.groups.slice(0, 3).map((g) => g.id) : [];
     dupes.thumbs = {};
     dupes.picks = toPicks(await dupesApi.select(dupes.strategy), report.groups);
     dupes.folderPicks = toFolderPicks(await dupesApi.select(dupes.strategy, true), report.folderGroups ?? []);
@@ -299,6 +316,23 @@ export async function findDupes(): Promise<void> {
   } finally {
     dupes.searching = null;
   }
+}
+
+/** The one-click search of Simple mode: the user's personal folders. */
+export function findPersonal(): Promise<void> {
+  dupes.scope = "personal";
+  return findDupes();
+}
+
+/** The last search again, after `change` (a lower size limit, application folders
+ * shown, every file type…). */
+export function searchAgain(change?: () => void): Promise<void> {
+  change?.();
+  if (dupes.lastScope) {
+    dupes.scope = dupes.lastScope.scope;
+    if (dupes.lastScope.scope === "folders") dupes.folders = [...dupes.lastScope.folders];
+  }
+  return findDupes();
 }
 
 /** "Find duplicates here" from Analyze or Explorer. */
@@ -368,8 +402,8 @@ export async function loadThumb(path: string): Promise<void> {
 
 /** The equivalent `nfd dupes` command (Expert mode). */
 export function cliCommand(action?: DupeAction): string {
-  const paths = dupes.scope === "current" ? dupes.report?.roots ?? [] : dupes.folders;
-  const parts = ["nfd dupes", ...paths.map((p) => `"${p}"`), `--min-size ${app.settings.dupeMinMb}MB`];
+  const paths = dupes.scope === "folders" ? dupes.folders : dupes.report?.roots ?? [];
+  const parts = ["nfd dupes", ...paths.map((p) => `"${p}"`), `--min-size ${cliSize(minBytes())}`];
   const ext = extensions();
   if (ext.length) parts.push(`--ext ${ext.join(",")}`);
   if (dupes.includeAppDirs) parts.push("--include-app-dirs");

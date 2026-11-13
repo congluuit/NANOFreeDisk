@@ -13,6 +13,8 @@ import { REST_ID } from "./types";
 import { hwHandlers } from "./hw/mock";
 import { monitorHandlers } from "./monitor/mock";
 import { programsHandlers, setProgramsEmit } from "./programs/mock";
+import { recycleBinHandlers } from "./recyclebin/mock";
+import { startupHandlers } from "./startup/mock";
 
 interface E {
   id: number;
@@ -117,6 +119,20 @@ function build(): void {
   add(root, "pagefile.sys", "file", 17_179_869_184, 3);
   add(root, "hiberfil.sys", "file", 6_871_947_673, 3);
   add(named(root, ["Users", "nano"]), "AppData-link", "junction");
+  // Tidy up: a folder holding only what Windows made on its own (empty in practice),
+  // a customized one whose desktop.ini matters (READONLY), and empty files (two
+  // listed, the markers and the AppData one not)
+  const scans = named(docs, ["Scans 2018"]);
+  add(scans, "desktop.ini", "file", 282, 3);
+  add(named(scans, ["page 1"]), "Thumbs.db", "file", 24_576, 3);
+  const contacts = named(root, ["Users", "nano", "Contacts"]);
+  entries[contacts].attrs = 1 << 6;
+  add(contacts, "desktop.ini", "file", 412, 3);
+  for (const n of ["New Text Document.txt", "notes (1).txt"]) add(docs, n, "file", 0);
+  const tool = named(root, ["Projects", "nfd-tool"]);
+  for (const n of ["__init__.py", ".gitkeep", "build.stamp"]) add(tool, n, "file", 0);
+  add(tool, "TODO.md", "file", 0);
+  add(named(root, ["Users", "nano", "AppData", "Roaming", "SomeApp"]), "First Run", "file", 0);
   rollUp();
   units = [];
 }
@@ -303,12 +319,30 @@ function emptyTrees(): (id: number) => boolean {
       v =
         entries[id].kind === "dir" &&
         !check(id).reason &&
-        kids[id].filter((k) => !entries[k].removed).every(isEmpty);
+        kids[id].filter((k) => !entries[k].removed).every((k) => isClutter(k) || isEmpty(k));
       memo.set(id, v);
     }
     return v;
   };
   return isEmpty;
+}
+
+/** `insights::CLUTTER_FILES`: files the system makes on its own; they do not make a
+ * folder full unless the folder is customized (READONLY or SYSTEM). */
+const CLUTTER = ["desktop.ini", "thumbs.db", "ehthumbs.db", "ehthumbs_vista.db", ".ds_store", "._.ds_store"];
+function isClutter(id: number): boolean {
+  const e = entries[id];
+  return e.kind === "file" && CLUTTER.includes(e.name.toLowerCase()) && !(entries[e.parent].attrs & ((1 << 6) | 1));
+}
+
+/** `insights::is_zero_byte_marker`. */
+const ZERO_KEEP_NAMES = ["__init__.py", "__init__.pyi", "py.typed", "lock", "lockfile"];
+const ZERO_KEEP_EXTS = ["lock", "lck", "pid", "stamp", "timestamp", "marker", "flag", "keep", "sentinel", "done", "ready"];
+function zeroMarker(name: string): boolean {
+  const n = name.toLowerCase();
+  if (n.startsWith(".") || ZERO_KEEP_NAMES.includes(n)) return true;
+  const dot = n.lastIndexOf(".");
+  return dot > 0 && ZERO_KEEP_EXTS.includes(n.slice(dot + 1));
 }
 
 // Scan history (A1/F1): three snapshots of C:\ a week apart; the diff is derived
@@ -571,6 +605,8 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
   ...dupeHandlers,
   ...healthHandlers,
   ...programsHandlers,
+  ...recycleBinHandlers,
+  ...startupHandlers,
   app_info: () => ({ version: "0.1.0-mock", os: "browser", accent: "#0078d4" }),
   list_volumes: () => [
     { root: "C:\\", label: "Windows", fs: "NTFS", kind: "fixed", total: 4e12, available: 1.45e12, free: 1.45e12, ready: true, system: true },
@@ -669,10 +705,29 @@ const handlers: Record<string, (a: Record<string, any>) => unknown> = {
     const outer = empty.filter((i) => entries[i].parent === id || !isEmpty(entries[i].parent));
     outer.sort((a, b) => path(a).localeCompare(path(b)));
     return {
-      rows: outer.slice(0, limit).map((i) => ({ ...located(i), nested: descendants(i).length })),
+      rows: outer.slice(0, limit).map((i) => ({
+        ...located(i),
+        nested: descendants(i).filter((d) => entries[d].kind === "dir").length,
+        clutter: descendants(i).filter(isClutter).length,
+      })),
       matched: outer.length,
       totalDirs: empty.length,
     };
+  },
+  zero_byte_files: ({ id, limit }) => {
+    // program folders (AppData, Program Files…) and tool folders (".git"…) are left out
+    const programDir = /\\(appdata|program files( \(x86\))?|programdata|windows|node_modules)\\|\\\.[^\\]*\\/;
+    const hits = descendants(id).filter(
+      (i) =>
+        entries[i].kind === "file" &&
+        entries[i].size === 0 &&
+        !(entries[i].attrs & 3) &&
+        !zeroMarker(entries[i].name) &&
+        !programDir.test(path(i).toLowerCase()) &&
+        !check(i).reason,
+    );
+    hits.sort((a, b) => path(a).localeCompare(path(b)));
+    return { rows: hits.slice(0, limit).map(located), matched: hits.length };
   },
   broken_shortcuts: ({ id, limit }) => {
     const lnks = descendants(id).filter((i) => entries[i].name.toLowerCase().endsWith(".lnk"));

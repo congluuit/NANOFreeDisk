@@ -128,6 +128,10 @@ pub struct RuleSummary {
     pub skipped: u64,
     pub refused: u64,
     pub truncated: bool,
+    /// Cleaning needs administrator rights ([`Rule::admin`]).
+    pub admin: bool,
+    /// The Windows tool for this space ([`Rule::tool`]), for guidance rules.
+    pub tool: Option<crate::Tool>,
 }
 
 /// Everything the matcher found.
@@ -367,6 +371,8 @@ impl Matcher {
                 .filter(|exe| nfd_platform::locks::is_running(running, exe))
                 .cloned()
                 .collect(),
+            admin: rule.admin,
+            tool: rule.tool,
             ..RuleSummary::default()
         };
         if rule.level == RiskLevel::Protected {
@@ -458,6 +464,22 @@ impl Matcher {
             })
             .map(|r| (&r.rule, r.pack.as_str()))
             .collect()
+    }
+
+    /// The rule `id` (for this platform) and its pack id.
+    #[must_use]
+    pub fn rule_by_id(&self, id: &str) -> Option<(&Rule, &str)> {
+        self.rules
+            .iter()
+            .find(|r| r.rule.id == id)
+            .map(|r| (&r.rule, r.pack.as_str()))
+    }
+
+    /// `path` lies in what a Protected ("Keep") rule keeps: no rule may clean it.
+    #[must_use]
+    pub fn is_kept(&self, path: &Path) -> bool {
+        let text = slash(path);
+        self.keep.iter().any(|k| k.is_match(&text))
     }
 
     /// The SafetyGate the matcher checks candidates with.

@@ -319,6 +319,16 @@ tidy-status-ok = Hoạt động
 tidy-status-missing = Mất tệp đích
 tidy-status-drive_missing = Ổ đĩa không kết nối
 tidy-status-unchecked = Chưa kiểm tra
+tidy-clutter = { $count } tệp hệ thống
+tidy-empty-clutter-hint = Thư mục chỉ chứa những tệp do Windows hoặc macOS tự tạo ra (desktop.ini, Thumbs.db, .DS_Store) cũng được coi là rỗng. Các tệp đó đi cùng thư mục, và quay về cùng thư mục nếu bạn khôi phục.
+tidy-zero-title = Tệp rỗng
+tidy-zero-summary = { $count } tệp dung lượng 0 byte nằm ngoài thư mục chương trình.
+tidy-zero-hint = Một số chương trình dùng tệp rỗng để đánh dấu trạng thái. Chỉ chọn những tệp bạn nhận ra. Thư mục chương trình, tệp ẩn và các tệp đánh dấu quen thuộc không bao giờ được liệt kê.
+tidy-zero-none = Không có tệp rỗng nào.
+tidy-scan-title = Chưa có gì để dọn
+tidy-scan-text = Dọn gọn làm việc dựa trên một lần quét ổ đĩa. Hãy quét ổ hệ thống ngay, quét xong bạn sẽ được đưa về lại đây.
+tidy-scan-system = Quét ổ { $drive }
+tidy-scan-other = Chọn ổ hoặc thư mục khác
 
 ## Báo cáo HTML
 

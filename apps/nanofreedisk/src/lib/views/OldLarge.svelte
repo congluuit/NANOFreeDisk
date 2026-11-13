@@ -126,7 +126,7 @@
       <header class="panel-head">
         <div>
           <h2>{t(`ol-${list}-title`)}</h2>
-          <p>{t(`ol-${list}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })} · {list === "stale" ? t("ol-stale-note") : t("action-select-hint")}</p>
+          <p>{t(`ol-${list}-hint`, { size: fmtGb(app.settings.largeGb), age: fmtYears(app.settings.staleYears), days: app.settings.installerDays })} · {list === "stale" ? t("ol-stale-note") : expert() ? t("action-select-hint") : t("sel-tick-hint")}</p>
         </div>
       </header>
     <div class="controls">
@@ -166,6 +166,7 @@
             oncontext={context}
             ondelete={askDelete}
             onreveal={(id) => api.reveal(id).catch(fail)}
+            checks
           />
           {#if rows.matched > rows.rows.length}
             <p class="muted small more">{t("ol-more", { shown: rows.rows.length, count: rows.matched })}</p>

@@ -28,6 +28,7 @@ pub mod names;
 pub mod registry;
 pub mod remove;
 pub mod runner;
+pub mod startup;
 
 use serde::{Deserialize, Serialize};
 
