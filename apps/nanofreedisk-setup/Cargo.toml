@@ -29,7 +29,7 @@ png = "0.17"
 # DirectX 12 (WARP on machines without a GPU) with OpenGL as a fallback
 wgpu = { version = "25", default-features = false, features = ["dx12", "gles", "wgsl"] }
 winreg = "0.56"
-windows = { version = "0.61", features = [
+windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_Globalization",
   "Win32_Security",
