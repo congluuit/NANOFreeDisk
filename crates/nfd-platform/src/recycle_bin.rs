@@ -226,6 +226,8 @@ mod tests {
         assert_eq!(drive_of("C:"), None);
     }
 
+    // Windows paths: `\` only separates components there
+    #[cfg(windows)]
     #[test]
     fn records_match_by_name_and_time() {
         let records = vec![RecordedItem {

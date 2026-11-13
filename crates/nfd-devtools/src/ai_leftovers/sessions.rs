@@ -645,7 +645,9 @@ mod tests {
         );
         let r = strongest(index.within(&wt), 1_792_100_000 + 86_400, 7).expect("ref");
         assert!(r.open && r.recent);
-        let r = strongest(index.within(&wt), 1_792_100_000 + 30 * 86_400, 7).expect("ref");
+        // far in the future: a session without its own timestamps takes the file's
+        // last write (today), so a fixed date near the fixture would turn recent again
+        let r = strongest(index.within(&wt), 4_102_444_800, 7).expect("ref");
         assert!(!r.recent);
     }
 }
