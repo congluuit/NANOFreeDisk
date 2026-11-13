@@ -34,6 +34,7 @@ use crate::schedule::{self as pure, Config, Due, Frequency, Status};
 /// Journal kind of an automatic (or "Run now") clean.
 pub const KIND: &str = "clean-scheduled";
 /// Name of the `Run` value and of the startup entry the Startup view lists.
+#[cfg(windows)]
 pub const AUTOSTART_NAME: &str = "NANOFreeDisk";
 
 /// First check after the app starts (a missed run waits this long), then every
