@@ -25,7 +25,7 @@ zstd = { version = "0.13", default-features = false }
 [target.'cfg(windows)'.dependencies]
 eframe = { version = "0.32", default-features = false, features = ["accesskit", "wgpu"] }
 nfd-platform = { workspace = true }
-png = "0.17"
+png = "0.18"
 # DirectX 12 (WARP on machines without a GPU) with OpenGL as a fallback
 wgpu = { version = "25", default-features = false, features = ["dx12", "gles", "wgsl"] }
 winreg = "0.56"
